@@ -263,7 +263,7 @@ using Vectorcd = Vector<std::complex<double>, Dynamic>;
   using Name##f = Name<float>;                             \
   using Name##d = Name<double>;                            \
   using Name##cf = Name<std::complex<float>>;              \
-  using Name##cd = Name<std::complex<float>>;              \
+  using Name##cd = Name<std::complex<double>>;             \
   using Name##b = Name<uint8_t>
 
 MI_VECTOR_ALIAS_DECLARATION(Vector1, 1);
