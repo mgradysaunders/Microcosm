@@ -392,8 +392,8 @@ inline void Path::Vertex::recalculateReversePathPDF(const Vertex &next) noexcept
 /// path tracer. We visit each vertex in the path and calculate an estimate of the direct lighting contribution,
 /// then scale it by the cumulative ratio at the vertex and add it to the total radiance estimate. This is a
 /// very simple loop, so this is inlined with templates instead of using std::function. The function is invoked with
-/// each vertex and the path wavelengths for convenience, and must return a Spectrum that is an unbiased estimate of
-/// the direct lighting contribution at the vertex, accounting for shadowing and transmission.
+/// each vertex, and must return a Spectrum that is an unbiased estimate of the direct lighting contribution at the 
+/// vertex, accounting for shadowing and transmission.
 template <std::invocable<const Path::Vertex &> DirectLightingEstimate>
 [[nodiscard]] inline Spectrum forwardRadianceEstimate(const Path &path, DirectLightingEstimate &&directLightingEstimate) {
   if (path.empty()) [[unlikely]]
