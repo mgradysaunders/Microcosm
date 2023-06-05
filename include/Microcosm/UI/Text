@@ -1,0 +1,241 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Font"
+
+namespace mi::ui {
+
+struct Context;
+
+/// The low-level data representation for laying out text that enables querying (i.e., hovering or
+/// clicking) and rendering.
+///
+/// Laying out text is a tough problem to tackle. There are tons of conventions and convenience features (visual,
+/// interactive, or otherwise) we have all grown accustomed to over the years, yet it is not obvious where many of
+/// these features ought to live in the backend of the application. The flexibility to support Unicode and localization
+/// into other languages further complicates everything, especially considering that many languages around the world
+/// have very different layout conventions, e.g., reading right-to-left instead of left-to-right.
+///
+/// The good news is that other people have already spent a ton of time thinking about this as evidenced by
+/// the fact that Unicode exists at all. Having decent Unicode support automatically gives you some sort of
+/// solution path for many of these concerns. While it would require a more involved data representation of font
+/// files to fully access things like ligatures and contextual positioning, there is usually a code somewhere in
+/// a Unicode block that represents the instance of the symbol in question. This is not robust for editing but is
+/// perfectly fine for displaying.
+///
+/// TODO UTF8
+/// TODO ANSI Escapes
+///
+/// Color   | Foreground             | Background
+/// --------|------------------------|------------------------
+/// Black   | `\033[30m`, `\033[90m` | `\033[40m`, `\033[100m`
+/// Red     | `\033[31m`, `\033[91m` | `\033[41m`, `\033[101m`
+/// Green   | `\033[32m`, `\033[92m` | `\033[42m`, `\033[102m`
+/// Yellow  | `\033[33m`, `\033[93m` | `\033[43m`, `\033[103m`
+/// Blue    | `\033[34m`, `\033[94m` | `\033[44m`, `\033[104m`
+/// Magenta | `\033[35m`, `\033[95m` | `\033[45m`, `\033[105m`
+/// Cyan    | `\033[36m`, `\033[96m` | `\033[46m`, `\033[106m`
+/// White   | `\033[37m`, `\033[97m` | `\033[47m`, `\033[107m`
+///
+struct MI_UI_API Text final : ArrayLike<Text> {
+public:
+  /// Terminal-emulator emphasis flags.
+  ///
+  /// Emphasis  | Enable    | Disable
+  /// ----------|-----------|------------
+  /// Bold      | `\033[1m` | `\033[22m`
+  /// Faint     | `\033[2m` | `\033[22m`
+  /// Italic    | `\033[3m` | `\033[23m`
+  /// Underline | `\033[4m` | `\033[24m`
+  /// Blink     | `\033[5m` | `\033[25m`
+  /// Hide      | `\033[8m` | `\033[28m`
+  /// Strike    | `\033[9m` | `\033[29m`
+  ///
+  struct Emphasis {
+    /// Bold?
+    ///
+    /// \note
+    /// At least for now, there is no dedicated typeface for this. We instead fake the effect
+    /// by modifying the threshold of the Signed-Distance Field (SDF).
+    uint8_t bold : 1 {0};
+
+    /// Faint or dim?
+    uint8_t faint : 1 {0};
+
+    /// Italic?
+    ///
+    /// \note
+    /// At least for now, there is no dedicated typeface for this. We instead fake the effect
+    /// by skewing the rectangles in the draw commands.
+    uint8_t italic : 1 {0};
+
+    /// Underline?
+    uint8_t underline : 1 {0};
+
+    /// Blinking or flashing?
+    uint8_t blink : 1 {0};
+
+    /// Hidden? This replaces the letter with an asterisk, useful for passwords, for example.
+    uint8_t hide : 1 {0};
+
+    /// Strike through?
+    uint8_t strike : 1 {0};
+
+    /// Superscript (+1) or subscript (-1).
+    ///
+    /// \note
+    /// This is not at all fancy. This just shifts the baseline up or down by 1/3 to invoke
+    /// idea of superscripts and subscripts. Watch out LaTeX, here I come.
+    int8_t script : 2 {0};
+  };
+
+  struct Letter {
+    /// The glyph, or nullptr if not present in the font.
+    const Font::Glyph *glyph{nullptr};
+
+    /// The UTF-32 codepoint.
+    char32_t codepoint{0};
+
+    /// The cursor X position on the left.
+    float left{0};
+
+    /// The cursor X position on the right (after adding the advance width).
+    float right{0};
+
+    /// The baseline Y position.
+    float baseline{0};
+
+    /// The baseline Y plus the metric ascent.
+    float baselinePlusAscent{0};
+
+    /// The baseline Y plus the metric descent.
+    float baselinePlusDescent{0};
+
+    /// The Y-location for underline.
+    [[nodiscard]] float underline() const noexcept { return lerp(0.5f, baseline, baselinePlusDescent); }
+
+    /// The Y-location for strike-through.
+    [[nodiscard]] float strike() const noexcept { return lerp(0.3f, baseline, baselinePlusAscent); }
+
+    /// The foreground color.
+    Vector4b foreground{0xFF, 0xFF, 0xFF, 0xFF};
+
+    /// The background color.
+    Vector4b background{0x00, 0x00, 0x00, 0x00};
+
+    /// The emphasis flags.
+    Emphasis emphasis{};
+
+    /// Allow implicit conversion to the cursor rectangle.
+    ///
+    /// \note
+    /// This is *NOT* the glyph rectangle for rendering. This rectangle establishes the interactable area for
+    /// this letter, which covers the full left-to-right in X and descent-to-ascent in Y. In general the glyph
+    /// rectangle is smaller than this. Furthermore, spaces and invisible characters may not have glyphs or glyph
+    /// rectangles, but they still have interactable areas (i.e., you should still have well-defined clickable
+    /// areas in a string of multiple spaces).
+    [[nodiscard]] operator Rect() const noexcept { return {{left, baselinePlusDescent}, {right, baselinePlusAscent}}; }
+
+    /// Allow implicit conversion to bool to ask "Is this letter visible?".
+    [[nodiscard]] operator bool() const noexcept { return glyph && !glyph->invisible; }
+  };
+
+  /// \name Construction
+  ///
+  /// The implementation depends on a persistent external `Font` object, which is stored as a read-only
+  /// pointer that is assumed to never be null. As such, the user must guarantee that the lifetime of the
+  /// given font is managed in such a way that it exceeds the lifetime of this text.
+  ///
+  /// \{
+  /// Construct.
+  Text(const Font &font) : mFont{&font}, mLineAdvance{font.metrics.advance()} {}
+
+  /// Construct, and also initialize with the given text string.
+  Text(const Font &font, std::string_view text) : Text(font) { refresh(text); }
+  /// \}
+
+  /// Refresh the structure to represent the given text string. This does all of the heavy lifting.
+  void refresh(std::string_view text);
+
+  // TODO Align?
+  // TODO Center?
+  // TODO Justify?
+  // TODO Mirror?
+
+  void clear() noexcept;
+
+public:
+  MI_ARRAY_LIKE_DATA(mLetters.data())
+
+  MI_ARRAY_LIKE_SIZE(mLetters.size())
+
+public:
+  /// The associated font metrics.
+  [[nodiscard]] const Font::Metrics &metrics() const noexcept { return mFont->metrics; }
+
+  /// The total number of letters.
+  [[nodiscard]] int numLetters() const noexcept { return mLetters.size(); }
+
+  /// The total number of lines.
+  [[nodiscard]] int numLines() const noexcept { return mLines.size(); }
+
+  /// The advancement in Y between lines (this is negative!).
+  [[nodiscard]] float lineAdvance() const noexcept { return mLineAdvance; }
+
+  struct LineView final : ArrayLike<LineView> {
+  public:
+    MI_ARRAY_LIKE_CONSTEXPR_DATA(letters.data())
+
+    MI_ARRAY_LIKE_CONSTEXPR_SIZE(letters.size())
+
+  public:
+    [[nodiscard]] const Letter *hoverLetter(float cursorX) const noexcept;
+
+    [[nodiscard]] operator Rect() const noexcept;
+
+  public:
+    /// The line number.
+    int lineNo{0};
+
+    /// The baseline Y position.
+    float baseline{0};
+
+    /// The baseline Y plus the metric ascent.
+    float baselinePlusAscent{0};
+
+    /// The baseline Y plus the metric descent.
+    float baselinePlusDescent{0};
+
+    /// The letters in the line.
+    IteratorRange<const Letter *> letters{};
+  };
+
+  [[nodiscard]] LineView line(int lineNo) const noexcept;
+
+  [[nodiscard]] LineView hoverLine(float cursorY, bool clampLineNo = true) const noexcept;
+
+  [[nodiscard]] Vector2f cursorToInsertBefore(const Letter *letter) const noexcept;
+
+  [[nodiscard]] Vector2f cursorToInsertAfter(const Letter *letter) const noexcept;
+
+  [[nodiscard]] Vector2f cursorCentered(const Letter *letter) const noexcept;
+
+  /// Convert back to string.
+  [[nodiscard]] operator std::string() const;
+
+  /// Convert to content rectangle.
+  [[nodiscard]] operator Rect() const noexcept { return mRect; }
+
+private:
+  const Font *mFont{nullptr};
+
+  const float mLineAdvance{0};
+
+  std::vector<Letter> mLetters;
+
+  std::vector<std::pair<size_t, size_t>> mLines;
+
+  Rect mRect;
+};
+
+} // namespace mi::ui

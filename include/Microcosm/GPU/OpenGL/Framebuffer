@@ -1,0 +1,41 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/gl3w"
+
+namespace mi::gl {
+
+struct Framebuffer final : Handle<Framebuffer> {
+public:
+  using Handle<Framebuffer>::Handle;
+
+  [[nodiscard]] static GLuint allocate() noexcept {
+    GLuint handle = 0;
+    glCreateFramebuffers(1, &handle);
+    return handle;
+  }
+
+  static void deallocate(GLuint handle) noexcept { glDeleteFramebuffers(1, &handle); }
+
+public:
+  void bind(GLenum target = GL_FRAMEBUFFER) const noexcept { glBindFramebuffer(target, mHandle); }
+
+  void attachTexture(GLenum attachment, GLuint texture, GLint level = 0) noexcept {
+    glNamedFramebufferTexture(mHandle, attachment, texture, level);
+  }
+
+  void attachTexture(GLenum attachment, GLuint texture, GLint level, GLint layer) noexcept {
+    glNamedFramebufferTextureLayer(mHandle, attachment, texture, level, layer);
+  }
+
+  void attachRenderbuffer(GLenum attachment, GLenum target, GLuint renderbuffer) noexcept {
+    glNamedFramebufferRenderbuffer(mHandle, attachment, target, renderbuffer);
+  }
+
+  [[nodiscard]] GLenum status(GLenum target = GL_FRAMEBUFFER) const noexcept { return glCheckNamedFramebufferStatus(mHandle, target); }
+
+protected:
+  using Handle<Framebuffer>::mHandle;
+};
+
+} // namespace mi::gl

@@ -1,0 +1,41 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Context"
+#include "Microcosm/UI/DrawCmds"
+
+namespace mi::ui {
+
+struct MI_UI_API Panel : DoublyLinked<Panel> {
+public:
+  Panel *parent{nullptr};
+
+  DoublyLinkedList<Panel> children;
+
+  /// The relative view transform.
+  Transform view;
+
+  /// The boundary rectangle in local coordinates.
+  Rect rect;
+
+  struct Snowball {
+    int depth{0};
+
+    /// The cumulative view-to-canvas transform.
+    Transform viewToCanvas;
+
+    /// The boundary rectangle in canvas coordinates.
+    Rect canvasRect{Rect::Inf()};
+
+    /// The boundary rectangle in canvas coordinates, clipped to all parent rectangles.
+    Rect canvasRectClipped{Rect::Inf()};
+
+    /// Is entirely omitted? (Clipped such that it is not even visible?)
+    uint8_t omitted : 1 {0};
+
+    /// Is hovered by the mouse?
+    uint8_t hovered : 1 {0};
+  } snowball;
+};
+
+} // namespace mi::ui

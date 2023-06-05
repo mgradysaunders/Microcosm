@@ -1,0 +1,115 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/Buffer"
+#include "Microcosm/GPU/OpenGL/VertexArray"
+
+namespace mi::gl {
+
+/// A pseudo-function object wrapping the standard `glDrawElements()` usage pattern.
+///
+/// The `glDrawElements()` function is the most common way to feed ordinary mesh data to
+/// an OpenGL pipeline. There are three key components:
+///
+/// 1. The vertex array object (VAO). This establishes the connection between the vertex
+///    and index buffer objects (see below) by keeping track of the layout of the vertex
+///    data.
+///
+/// 2. The vertex buffer object (VBO). This stores the relevant components (positions,
+///    texture coordinates, normals, colors, etc.) for every vertex in the mesh.
+///
+/// 3. The index buffer object (IBO). This stores indexes of vertexes in the VBO in
+///    order to form triangles with some understood drawing mode. By default, GL_TRIANGLES
+///    means that we read off indexes three at a time to form a barebones triangle list, but
+///    there is also, e.g., GL_TRIANGLE_STRIP, which means every triangle reuses two of
+///    the indexes in the previous triangle. This is more space efficient, but harder to
+///    organize ahead of time.
+///
+/// The vertex buffer object is generally very flexible, but must work hand-in-hand with
+/// the vertex shader it intends to be rendered with. The index buffer object is always just
+/// a list of unsigned 32-bit or 16-bit integers, again with the associated drawing mode.
+///
+struct DrawElements {
+public:
+  DrawElements() noexcept = default;
+
+  explicit DrawElements(GLenum drawMode, auto &&...more) { configure(drawMode, auto_forward(more)...); }
+
+  DrawElements(const DrawElements &) = delete;
+
+  DrawElements(DrawElements &&) = default;
+
+  DrawElements &operator=(const DrawElements &) = delete;
+
+  DrawElements &operator=(DrawElements &&) = default;
+
+  template <std::invocable<VertexAttributeBinder &> Attributes>
+  [[strong_inline]] DrawElements &configure(GLenum drawMode, Attributes &&attributes) {
+    mDrawMode = drawMode;
+    mVtxArray.bind();
+    mVtxBuffer.bind(GL_ARRAY_BUFFER);
+    VertexAttributeBinder binder;
+    std::invoke(std::forward<Attributes>(attributes), binder);
+    mIdxBuffer.bind(GL_ELEMENT_ARRAY_BUFFER);
+    glBindVertexArray(0);
+    return *this;
+  }
+
+  template <typename Value>
+  [[strong_inline]] DrawElements &uploadVtx(GLsizei count, const Value *first, GLenum mode = GL_STATIC_DRAW) noexcept {
+    mVtxBuffer.data(count, first, mode);
+    return *this;
+  }
+
+  template <typename Value>
+  [[strong_inline]] DrawElements &uploadIdx(GLsizei count, const Value *first, GLenum mode = GL_STATIC_DRAW) noexcept {
+    static_assert(std::is_unsigned_v<Value> && (sizeof(Value) == 4 || sizeof(Value) == 2));
+    mIdxType = sizeof(Value) == 4 ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
+    mIdxTypeSize = sizeof(Value);
+    mIdxCount = count;
+    mIdxBuffer.data(count, first, mode);
+    return *this;
+  }
+
+  template <std::ranges::random_access_range Values>
+  [[strong_inline]] DrawElements &uploadVtx(Values &&values, GLenum mode = GL_STATIC_DRAW) noexcept {
+    return uploadVtx(std::ranges::size(values), std::ranges::data(values), mode);
+  }
+
+  template <std::ranges::random_access_range Values>
+  [[strong_inline]] DrawElements &uploadIdx(Values &&values, GLenum mode = GL_STATIC_DRAW) noexcept {
+    return uploadIdx(std::ranges::size(values), std::ranges::data(values), mode);
+  }
+
+  [[strong_inline]] DrawElements &bind() noexcept {
+    mVtxArray.bind();
+    return *this;
+  }
+
+  [[strong_inline]] DrawElements &draw() noexcept {
+    glDrawElements(mDrawMode, mIdxCount, mIdxType, nullptr);
+    return *this;
+  }
+
+  [[strong_inline]] DrawElements &draw(GLsizei count, GLsizei first = 0) noexcept {
+    glDrawElements(mDrawMode, count, mIdxType, std::bit_cast<GLvoid *>(GLintptr(first * mIdxTypeSize)));
+    return *this;
+  }
+
+private:
+  GLenum mDrawMode = GL_TRIANGLES;
+
+  VertexArray mVtxArray;
+
+  Buffer mVtxBuffer;
+
+  Buffer mIdxBuffer;
+
+  GLenum mIdxType = GL_UNSIGNED_INT;
+
+  GLsizei mIdxTypeSize = 4;
+
+  GLsizei mIdxCount = 0;
+};
+
+} // namespace mi::gl

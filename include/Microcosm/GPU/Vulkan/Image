@@ -1,0 +1,161 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/Device"
+
+namespace mi::vk {
+
+struct ImageCreateInfo {
+  VkImageCreateInfo info{
+    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = {},
+    .imageType = VK_IMAGE_TYPE_2D,
+    .format = {},
+    .extent = {},
+    .mipLevels = 1,
+    .arrayLayers = 1,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .tiling = VK_IMAGE_TILING_OPTIMAL,
+    .usage = {},
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .queueFamilyIndexCount = 0,
+    .pQueueFamilyIndices = nullptr,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+
+  VkMemoryPropertyFlags propertyFlags{};
+};
+
+struct MI_VK_API Image final : MoveOnly, WithDeviceAndAllocator {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Image, create, destroy)
+
+  /// Create the image.
+  ///
+  /// \param[in] device      The device structure.
+  /// \param[in] createInfo  The create info structure.
+  /// \param[in] allocator   The allocation callbacks.
+  ///
+  void create(const Device &device, const ImageCreateInfo &createInfo, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the image.
+  void destroy();
+
+  /// Implicit usage as `VkImage`.
+  [[nodiscard]] operator VkImage() const noexcept { return image; }
+
+  /// Implicit usage as `VkImageView`.
+  [[nodiscard]] operator VkImageView() const noexcept { return imageView; }
+
+  /// The image.
+  NullifyOnMove<VkImage> image;
+
+  /// The default image view, for convenience.
+  NullifyOnMove<VkImageView> imageView;
+
+  /// The memory.
+  NullifyOnMove<VkDeviceMemory> memory;
+};
+
+struct MI_VK_API Images final : MoveOnly, WithDeviceAndAllocator, ArrayLike<Images> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Images, create, destroy)
+  MI_VK_DEFAULT_ARRAY_LIKE(images)
+
+  /// Create the images.
+  ///
+  /// \param[in] device       The device structure.
+  /// \param[in] createInfos  The create info structures.
+  /// \param[in] allocator    The allocation callbacks.
+  ///
+  void create(
+    const Device &device, const std::vector<ImageCreateInfo> &createInfos, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the images.
+  void destroy();
+
+  /// The images.
+  std::vector<VkImage> images;
+
+  /// The default image views, for convenience.
+  std::vector<VkImageView> imageViews;
+
+  /// The shared memory.
+  SharedDeviceMemory memory;
+};
+
+/// Create default image view from original create information.
+MI_VK_API VkImageView imageCreateDefaultView(
+  VkDevice device, VkImage image, const VkImageCreateInfo &createInfo, const VkAllocationCallbacks *allocator = nullptr);
+
+/// Record transition image layout commands.
+MI_VK_API void imageCmdTransitionLayout(
+  VkCommandBuffer commandBuffer,
+  VkImage image,
+  VkImageLayout oldLayout,
+  VkImageLayout newLayout,
+  VkImageSubresourceRange subresourceRange,
+  VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+  VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT);
+
+/// Transition image layout.
+MI_VK_API void imageTransitionLayout(
+  const Device &device,
+  VkImage image,
+  VkImageLayout oldLayout,
+  VkImageLayout newLayout,
+  VkImageSubresourceRange subresource_range);
+
+/// Get image data to a buffer.
+MI_VK_API void imageGetBuffer(
+  const Device &device,
+  VkImage image,
+  VkImageLayout imageLayout,
+  VkBuffer buffer,
+  IteratorRange<const VkBufferImageCopy *> regions);
+
+/// Set image data from a buffer.
+MI_VK_API void imageSetBuffer(
+  const Device &device,
+  VkImage image,
+  VkImageLayout imageLayout,
+  VkBuffer buffer,
+  IteratorRange<const VkBufferImageCopy *> regions);
+
+struct ImageAccess {
+  /// The image.
+  VkImage image{};
+
+  /// The imageLayout.
+  VkImageLayout imageLayout{};
+
+  /// The subresource layers.
+  VkImageSubresourceLayers subresourceLayers{};
+
+  /// The offset.
+  VkOffset3D offset{};
+
+  /// The extent.
+  VkExtent3D extent{};
+
+  /// The size in bytes.
+  VkDeviceSize size{0};
+};
+
+/// Get image data through a temporary staging buffer.
+///
+/// \param[in] device  The device structure.
+/// \param[in] access  The image access structure.
+/// \param[out] mem    The memory.
+///
+MI_VK_API void imageGetData(const Device &device, const ImageAccess &access, void *mem);
+
+/// Set image data through a temporary staging buffer.
+///
+/// \param[in] device  The device structure.
+/// \param[in] access  The image access structure.
+/// \param[in] mem     The memory.
+///
+MI_VK_API void imageSetData(const Device &device, const ImageAccess &access, const void *mem);
+
+} // namespace mi::vk

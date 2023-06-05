@@ -1,0 +1,61 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/ImmutableBVH"
+#include "Microcosm/Geometry/Mesh"
+#include "Microcosm/Render/Manifold"
+
+namespace mi::render {
+
+class MI_RENDER_API TriangleMesh final {
+public:
+  using shape_tag = std::true_type;
+
+  TriangleMesh() noexcept = default;
+
+  TriangleMesh(const geometry::Mesh &mesh) { build(mesh); }
+
+  [[nodiscard]] size_t numTris() const noexcept { return positions.rows() / 3; }
+
+  void clear() noexcept;
+
+  void build();
+
+  void build(const geometry::Mesh &mesh);
+
+  void validate();
+
+  [[nodiscard]] BoundBox3d box() const noexcept { return triangleBVH[0].box; }
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept;
+
+public:
+  /// The positions.
+  Matrix<float, Dynamic, 3> positions;
+
+  /// The texture coordinates.
+  std::optional<Matrix<float, Dynamic, 2>> texcoords;
+
+  /// The normal vectors.
+  std::optional<Matrix<float, Dynamic, 3>> normals;
+
+  /// The tangent vectors.
+  std::optional<Matrix<float, Dynamic, 3>> tangents;
+
+  /// The material identifiers.
+  std::optional<Vector<int16_t, Dynamic>> materials;
+
+  /// The triangle bounding volume hierarchy.
+  geometry::ImmutableBVH3 triangleBVH;
+
+  void onSerialize(auto &&serializer) {
+    serializer <=> positions <=> texcoords <=> normals <=> tangents <=> materials <=> triangleBVH;
+  }
+
+private:
+  void interpolateShading(Manifold &manifold) const noexcept;
+};
+
+} // namespace mi::render

@@ -1,0 +1,334 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <array>
+#include <map>
+#include <vector>
+
+#include "Microcosm/Json_Export.h"
+#include "Microcosm/utility"
+
+namespace mi {
+
+namespace concepts {
+
+template <typename Value>
+concept has_json_conversion = requires {
+  { &Value::jsonConversion } -> member_function_pointer;
+};
+
+} // namespace concepts
+
+class MI_JSON_API Json {
+public:
+  enum class Kind { None = 0, Bool, Number, String, Array, Table };
+
+  [[nodiscard]] static constexpr auto toString(Kind kind) noexcept {
+    switch (kind) {
+    case Kind::None: return "None";
+    case Kind::Bool: return "Bool";
+    case Kind::Number: return "Number";
+    case Kind::String: return "String";
+    case Kind::Array: return "Array";
+    case Kind::Table: return "Table";
+    }
+    return "";
+  }
+
+  using none_t = std::nullptr_t;
+  using bool_t = bool;
+  using number_t = double;
+  using string_t = std::string;
+  using array_t = std::vector<Json>;
+  using table_t = std::map<std::string, Json, std::less<>>;
+  using union_t = std::variant<none_t, bool_t, number_t, string_t, array_t, table_t>;
+
+  template <Kind K> using kind_to_type = std::variant_alternative_t<size_t(K), union_t>;
+
+  template <typename T>
+  static constexpr Kind type_to_kind = ([]() consteval {
+    if constexpr (std::same_as<T, none_t>) return Kind::None;
+    if constexpr (std::same_as<T, bool_t>) return Kind::Bool;
+    if constexpr (std::same_as<T, number_t>) return Kind::Number;
+    if constexpr (std::same_as<T, string_t>) return Kind::String;
+    if constexpr (std::same_as<T, array_t>) return Kind::Array;
+    if constexpr (std::same_as<T, table_t>) return Kind::Table;
+  })();
+
+public:
+  Json() = default;
+
+  Json(std::nullptr_t) : value(nullptr) {}
+
+  Json(bool value) : value(value) {}
+
+  template <typename Value> requires(concepts::arithmetic<Value> && !std::same_as<Value, bool>)
+  Json(Value value) : value(double(value)) {}
+
+  template <concepts::scoped_enum Value> Json(Value value) : value(double(std::underlying_type_t<Value>(value))) {}
+
+  Json(const char *value) : value(std::string(value)) {}
+
+  Json(std::string value) : value(std::move(value)) {}
+
+  Json(std::string_view value) : value(std::string(value)) {}
+
+  template <typename Value, size_t N> Json(const std::array<Value, N> &values) : value(array_t(values.begin(), values.end())) {}
+
+  template <typename Value, typename Alloc>
+  Json(const std::vector<Value, Alloc> &values) : value(array_t(values.begin(), values.end())) {}
+
+  template <typename... Args> Json(const std::map<std::string, Args...> &values) {
+    auto &table = asTable();
+    for (auto &each : values) table[each.first] = Json(each.second);
+  }
+
+#if 0
+  Json(std::initializer_list<Json> values) {
+    bool isTable = true;
+    for (auto& each : values)
+      if (!(each.is(Kind::Array) && each.size() == 2 && 
+            each[0].is(Kind::String))) {
+        isTable = false;
+        break;
+      }
+    if (isTable) {
+      auto& table = asTable();
+      for (auto& each : values) table[each[0].asString()] = each[1];
+    }
+    else
+      value = array_t(values.begin(), values.end());
+  }
+#endif
+
+  template <typename... Args> explicit Json(std::in_place_t, Args &&...args) : value(std::forward<Args>(args)...) {}
+
+  template <concepts::has_json_conversion Other> Json(const Other &other) : value(table_t()) {
+    Conversion conversion = {*this, Conversion::Mode::Writing};
+    const_cast<Other &>(other).jsonConversion(conversion);
+  }
+
+public:
+  [[nodiscard, strong_inline]] Kind kind() const noexcept { return Kind(value.index()); }
+
+  [[nodiscard, strong_inline]] bool is(Kind k) const noexcept { return kind() == k; }
+
+  template <typename T, bool IsConst = false> [[nodiscard]] T &as() {
+    if constexpr (!IsConst) {
+      if (is(Kind::None)) value = T();
+    }
+    auto ptr = std::get_if<T>(&value);
+    if (!ptr) {
+      throw std::runtime_error("Tried to access JSON {} as {}"_format(toString(kind()), toString(type_to_kind<T>)));
+    }
+    return *ptr;
+  }
+
+  template <typename T> [[nodiscard, strong_inline]] const T &as() const {
+    return const_cast<Json &>(*this).template as<T, /*IsConst=*/true>();
+  }
+
+  [[nodiscard, strong_inline]] bool_t &asBool() { return as<bool_t>(); }
+
+  [[nodiscard, strong_inline]] number_t &asNumber() { return as<number_t>(); }
+
+  [[nodiscard, strong_inline]] string_t &asString() { return as<string_t>(); }
+
+  [[nodiscard, strong_inline]] array_t &asArray() { return as<array_t>(); }
+
+  [[nodiscard, strong_inline]] table_t &asTable() { return as<table_t>(); }
+
+  [[nodiscard, strong_inline]] const bool_t &asBool() const { return as<bool_t>(); }
+
+  [[nodiscard, strong_inline]] const number_t &asNumber() const { return as<number_t>(); }
+
+  [[nodiscard, strong_inline]] const string_t &asString() const { return as<string_t>(); }
+
+  [[nodiscard, strong_inline]] const array_t &asArray() const { return as<array_t>(); }
+
+  [[nodiscard, strong_inline]] const table_t &asTable() const { return as<table_t>(); }
+
+public:
+  [[nodiscard]] size_t size() const noexcept {
+    if (is(Kind::Array)) return asArray().size();
+    if (is(Kind::Table)) return asTable().size();
+    return 0;
+  }
+
+  [[nodiscard]] bool has(std::string_view key) const noexcept { return is(Kind::Table) && asTable().contains(key); }
+
+  [[nodiscard]] auto &operator[](size_t key) {
+    auto &array = asArray();
+    array.resize(std::max(array.size(), key + 1));
+    return array[key];
+  }
+
+  [[nodiscard]] auto &operator[](size_t key) const {
+    auto &array = asArray();
+    if (array.size() <= key) throw std::out_of_range("Tried to access JSON array with invalid index {}"_format(key));
+    return array[key];
+  }
+
+  [[nodiscard]] auto &operator[](std::string_view key) {
+    auto &table = asTable();
+    auto itr = table.lower_bound(key);
+    if (itr != table.end() && itr->first == key) return itr->second;
+    return table.emplace_hint(itr, std::string(key), Json())->second;
+  }
+
+  [[nodiscard]] auto &operator[](std::string_view key) const {
+    auto &table = asTable();
+    auto itr = table.find(key);
+    if (itr == table.end()) throw std::out_of_range("Tried to access JSON table with invalid key {}"_format(show(key)));
+    return itr->second;
+  }
+
+  [[nodiscard]] auto &at(size_t key) const { return operator[](key); }
+
+  [[nodiscard]] auto &at(std::string_view key) const { return operator[](key); }
+
+  [[nodiscard]] bool operator==(const Json &) const = default;
+
+  [[nodiscard]] bool operator!=(const Json &) const = default;
+
+public:
+  /// Implicit cast to arithmetic or enum value.
+  template <concepts::arithmetic_or_enum Value> operator Value() const {
+    if constexpr (std::is_enum_v<Value>) {
+      return Value(std::underlying_type_t<Value>(*this));
+    } else if constexpr (std::same_as<Value, bool>) {
+      if (is(Kind::None)) return false;
+      if (is(Kind::Bool)) return asBool();
+      if (is(Kind::Number)) return asNumber() != 0.0;
+      return true;
+    } else {
+      if (is(Kind::Bool)) return asBool();
+      if (is(Kind::Number)) {
+        double num = asNumber();
+        if constexpr (std::integral<Value>)
+          if (!std::isfinite(num) || !(num == double(Value(num))))
+            throw std::runtime_error("{} is not representable as {}"_format(num, typenameString<Value>()));
+        return num;
+      }
+      throw std::runtime_error("{} is not convertible to {}"_format(toString(kind()), typenameString<Value>()));
+    }
+  }
+
+  [[nodiscard]] operator std::string() const { return asString(); }
+
+  template <typename Value, size_t N> [[nodiscard]] operator std::array<Value, N>() const {
+    size_t i = 0;
+    std::array<Value, N> values = {};
+    for (auto &each : asArray()) values[i++] = Value(each);
+    return values;
+  }
+
+  template <typename Value, typename Alloc> [[nodiscard]] operator std::vector<Value, Alloc>() const {
+    std::vector<Value, Alloc> values;
+    values.reserve(size());
+    for (auto &each : asArray()) values.emplace_back(Value(each));
+    return values;
+  }
+
+  template <typename Value, typename... Args> [[nodiscard]] operator std::map<std::string, Value, Args...>() const {
+    std::map<std::string, Value, Args...> values;
+    for (auto &each : asTable()) values[each.first] = Value(each.second);
+    return values;
+  }
+
+  template <concepts::has_json_conversion Other> operator Other() const {
+    Conversion conversion = {const_cast<Json &>(*this), Conversion::Mode::Reading};
+    Other other;
+    other.jsonConversion(conversion);
+    return other;
+  }
+
+public:
+  /// Parse from file.
+  [[nodiscard]] static Json parseFile(const std::string &filename) { return parse(loadFileToString(filename)); }
+
+  /// Parse.
+  [[nodiscard]] static Json parse(std::string_view source);
+
+  /// Render into result string.
+  [[nodiscard]] std::string render() const {
+    std::string result;
+    renderTo(result);
+    return result;
+  }
+
+  /// Render into result string, helper function.
+  void renderTo(std::string &result, size_t depth = 0) const;
+
+  friend std::ostream &operator<<(std::ostream &stream, const Json &json) { return stream << json.render(); }
+
+private:
+  union_t value;
+
+public:
+  class Conversion {
+  public:
+    enum class Mode { Reading = 0, Writing = 1 };
+
+    Conversion(Json &json, Mode mode) noexcept : json(json), mode(mode) {}
+
+    [[nodiscard]] Json &current() noexcept { return json; }
+
+    [[nodiscard]] bool reading() const noexcept { return mode == Mode::Reading; }
+
+    [[nodiscard]] bool writing() const noexcept { return mode == Mode::Writing; }
+
+  public:
+    template <typename Value> Conversion &required(std::string_view key, Value &value) {
+      if (reading()) value = Value(json.at(key));
+      if (writing()) json[key] = value;
+      return *this;
+    }
+
+    template <typename... Values>
+    Conversion &required(std::initializer_list<std::string_view> keys, std::variant<Values...> &values) {
+      if (reading()) {
+        size_t index = 0;
+        for (auto key : keys) {
+          if (json.has(key)) break;
+          index++;
+        }
+        variantSetIndex(values, index);
+      }
+      std::string_view key = keys.begin()[values.index()];
+      std::visit([&](auto &value) { required(key, value); }, values);
+      return *this;
+    }
+
+    template <typename Value> Conversion &optional(std::string_view key, std::optional<Value> &value) {
+      if (reading()) value = json.has(key) ? Value() : std::nullopt;
+      if (value.has_value()) required(key, *value);
+      return *this;
+    }
+
+    template <typename Value> Conversion &optionalByDefault(std::string_view key, Value &value, const Value &value0 = {}) {
+      if (reading()) value = json.has(key) ? Value(json.at(key)) : value0;
+      if (writing() && value != value0) json[key] = value;
+      return *this;
+    }
+
+    template <typename Value> Conversion &optionalImplicit(std::string_view key, Value &value) {
+      if (reading()) value = json.has(key) ? Value(json.at(key)) : Value();
+      if (writing()) {
+        if constexpr (std::convertible_to<Value, bool>) {
+          if (value) json[key] = value;
+        } else {
+          if (!value.empty()) json[key] = value;
+        }
+      }
+      return *this;
+    }
+
+  private:
+    Json &json;
+
+    Mode mode = Mode::Reading;
+  };
+};
+
+} // namespace mi

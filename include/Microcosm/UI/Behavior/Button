@@ -1,0 +1,65 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./Click"
+
+namespace mi::ui {
+
+struct ButtonBehavior : ClickBehavior {
+protected:
+  using ClickBehavior::think;
+
+public:
+  MI_UI_DECLARE_WITH(withMouseButton, mouseButton);
+  MI_UI_DECLARE_WITH(withRect, rect);
+
+  /// Update.
+  ///
+  /// \param[in] ctx
+  /// The context.
+  ///
+  /// \param[in] ignorePress
+  /// Ignore the press condition? If true, prevents the pressed state from being triggered by the
+  /// associated mouse button. This is desirable if the mouse is busy with something else, or if
+  /// the press trigger requires an additional condition, e.g., some keys being held down.
+  ///
+  /// \param[in] ignoreHover
+  /// Ignore the hover condition? If true, prevents or disables the hovered state.
+  ///
+  void think(Context &ctx, bool ignorePress = false, bool ignoreHover = false) noexcept {
+    bool isInputTriggered = ctx.mouse.isJustDown(mouseButton) && !ignorePress;
+    bool isInputSustained = ctx.mouse.isDown(mouseButton);
+    bool isHovered = rect.contains(ctx.mousePosition()) && !ignoreHover;
+    ClickBehavior::think(ctx, isInputTriggered, isInputSustained, isHovered);
+  }
+
+public:
+  /// The associated mouse button.
+  Mouse::Button mouseButton{Mouse::Button::L};
+
+  /// The associated rectangle.
+  Rect rect;
+};
+
+struct ToggleButtonBehavior final : ButtonBehavior {
+protected:
+  using ButtonBehavior::think;
+  using ButtonBehavior::withMouseButton;
+  using ButtonBehavior::withRect;
+
+public:
+  MI_UI_DECLARE_WITH(withMouseButton, mouseButton);
+  MI_UI_DECLARE_WITH(withRect, rect);
+  MI_UI_DECLARE_WITH(withChecked, checked);
+
+  /// \see Button::think
+  void think(Context &ctx, bool ignorePress = false, bool ignoreHover = false) noexcept {
+    ButtonBehavior::think(ctx, ignorePress, ignoreHover), checked.think(ctx, clicked() ? !bool(checked) : bool(checked));
+  }
+
+public:
+  /// Is checked?
+  BoolTracker checked{};
+};
+
+} // namespace mi::ui

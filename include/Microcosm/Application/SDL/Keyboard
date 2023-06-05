@@ -1,0 +1,113 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Application/SDL/Window"
+#include "Microcosm/Application/SDL/common"
+
+#include <SDL2/SDL_keyboard.h>
+#include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_scancode.h>
+#include <span>
+
+namespace mi::SDL {
+
+using Scancode = SDL_Scancode;
+
+using Keycode = SDL_Keycode;
+
+using Keymod = SDL_Keymod;
+
+/// Either a scancode or a keycode.
+struct MI_SDL_API Key {
+public:
+  constexpr Key() noexcept = default;
+
+  constexpr Key(Scancode code) noexcept : code(code) {}
+
+  constexpr Key(Keycode code) noexcept : code(code) {}
+
+  explicit Key(const char *name) noexcept : code(SDL_GetScancodeFromName(name)) {}
+
+  /// Get the scancode.
+  [[nodiscard]] Scancode scancode() const noexcept;
+
+  /// Get the keycode.
+  [[nodiscard]] Keycode keycode() const noexcept;
+
+  /// Get the name, empty if no human readable name.
+  [[nodiscard]] std::string_view name() const noexcept;
+
+  /// Implicit usage as `bool`, tests for a non-unknown scancode or keycode.
+  [[nodiscard]] operator bool() const noexcept;
+
+  /// The scancode or keycode.
+  std::variant<Scancode, Keycode> code = SDL_SCANCODE_UNKNOWN;
+};
+
+struct MI_SDL_API Keyboard {
+public:
+  Keyboard() = delete;
+
+  /// Analogous to `SDL_GetKeyboardFocus()`.
+  [[nodiscard]] static Window getFocus() { return Window(SDL_GetKeyboardFocus()); }
+
+  struct State {
+    [[nodiscard]] bool operator[](size_t pos) const noexcept { return pos < keys.size() ? keys[pos] : false; }
+
+    [[nodiscard]] bool operator[](Scancode code) const {
+      return code != SDL_SCANCODE_UNKNOWN ? operator[](size_t(code)) : false;
+    }
+
+    [[nodiscard]] bool operator[](Keycode code) const { return operator[](SDL_GetScancodeFromKey(code)); }
+
+    [[nodiscard]] bool operator[](Key key) const { return operator[](key.scancode()); }
+
+    /// The key states.
+    std::span<const uint8_t> keys;
+
+    /// The key modifiers.
+    Keymod mods;
+  };
+
+  /// Analogous to `SDL_GetKeyboardState()`.
+  [[nodiscard]] static State getState();
+
+  /// Analogous to `SDL_HasScreenKeyboardSupport()`.
+  [[nodiscard]] static bool hasScreenKeyboard() noexcept { return SDL_HasScreenKeyboardSupport() == SDL_TRUE; }
+
+  /// Analogous to `SDL_IsScreenKeyboardShown()`.
+  [[nodiscard]] static bool screenKeyboardShown(SDL_Window *window) noexcept {
+    return SDL_IsScreenKeyboardShown(window) == SDL_TRUE;
+  }
+};
+
+struct TextInput {
+  TextInput() = delete;
+
+  /// Analogous to `SDL_StartTextInput()`.
+  static void start() noexcept { SDL_StartTextInput(); }
+
+  /// Analogous to `SDL_StopTextInput()`.
+  static void stop() noexcept { SDL_StopTextInput(); }
+
+  /// Analogous to `SDL_IsTextInputActive()`.
+  [[nodiscard]] static bool active() noexcept { return SDL_IsTextInputActive() == SDL_TRUE; }
+
+  /// Analogous to `SDL_IsTextInputShown()`.
+  [[nodiscard]] static bool shown() noexcept { return SDL_IsTextInputShown() == SDL_TRUE; }
+
+  /// Analogous to `SDL_SetTextInputRect()`.
+  static void setInputRect(Vector2i from, Vector2i to) noexcept {
+    SDL_Rect rect;
+    rect.x = from[0];
+    rect.y = from[1];
+    rect.w = to[0] - from[0];
+    rect.h = to[1] - from[1];
+    SDL_SetTextInputRect(&rect);
+  }
+
+  /// Analogous to `SDL_ClearComposition()`.
+  static void clearComposition() noexcept { SDL_ClearComposition(); }
+};
+
+} // namespace mi::SDL

@@ -1,0 +1,186 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Clock"
+#include "Microcosm/UI/Rect"
+
+namespace mi::ui {
+
+struct Screen;
+
+struct MI_UI_API Mouse {
+  enum class Button : uint8_t {
+    L,
+    M,
+    R,
+    X1,
+    X2,
+    size ///< The number of button enums.
+  };
+
+  struct ButtonState {
+    /// Set down state.
+    constexpr void set(bool flag) noexcept { down = (down & 0b1111'1110) | uint8_t(flag); }
+
+    /// Is down this frame?
+    [[nodiscard]] constexpr bool isDown() const noexcept { return down & 1; }
+
+    /// Is down this frame and not down last frame?
+    [[nodiscard]] constexpr bool isJustDown() const noexcept { return (down & 0b11) == 0b01; }
+
+    /// Is down last frame and not down this frame?
+    [[nodiscard]] constexpr bool isJustUp() const noexcept { return (down & 0b11) == 0b10; }
+
+    /// Is down this frame and multi-clicking at the given order?
+    [[nodiscard]] constexpr bool isMultiClickDown(uint8_t order) const noexcept { return isDown() && clickOrder == order; }
+
+    /// Is down last frame and not down this frame and multi-clicking at the given order?
+    [[nodiscard]] constexpr bool isMultiClicked(uint8_t order) const noexcept { return isJustUp() && clickOrder == order; }
+
+    /// Is down this frame and not in the original vicinity?
+    [[nodiscard]] constexpr bool isDragged() const noexcept { return isDown() && (near & 1) == 0; }
+
+    /// Is down this frame and not in the original vicinity, but in the original vicinity last frame?
+    [[nodiscard]] constexpr bool isJustDragged() const noexcept { return isDown() && (near & 0b11) == 0b10; }
+
+    /// Is down?
+    uint8_t down{0};
+
+    uint8_t near{0};
+
+    /// The click order.
+    /// - 0 = single click
+    /// - 1 = double click
+    /// - ...
+    uint8_t clickOrder{0};
+
+    /// The last click ticks (microseconds), needed to track click level.
+    int64_t clickTicks{0};
+
+    Vector2d downPosition{};
+  };
+
+  enum class CursorIcon : uint8_t {
+    Arrow,    ///< Default arrow.
+    Wait,     ///< Waiting.
+    Size,     ///< Size.
+    SizeNS,   ///< Size north/south.
+    SizeEW,   ///< Size east/west.
+    SizeNWSE, ///< Size north-west/south-east.
+    SizeSWNE, ///< Size south-west/north-east.
+    Hand,     ///< Hand grab.
+    Text,     ///< Text editting.
+    Disabled  ///< Disabled.
+  };
+
+public:
+  /// Called by `Context::start()`.
+  void start() noexcept;
+
+  /// Called by `Context::afterInput()`.
+  void afterInput(const Clock &clock, const Screen &screen) noexcept;
+
+public:
+  constexpr void setCursorIcon(CursorIcon icon) noexcept { cursorIcon = icon; }
+
+  constexpr void setCursorIcon(Anchor anchor) noexcept {
+    switch (anchor) {
+    default: cursorIcon = CursorIcon::Size; break;
+    case Anchor::N:
+    case Anchor::S: cursorIcon = CursorIcon::SizeNS; break;
+    case Anchor::E:
+    case Anchor::W: cursorIcon = CursorIcon::SizeEW; break;
+    case Anchor::NW:
+    case Anchor::SE: cursorIcon = CursorIcon::SizeNWSE; break;
+    case Anchor::NE:
+    case Anchor::SW: cursorIcon = CursorIcon::SizeSWNE; break;
+    }
+  }
+
+  /// Access button state.
+  [[nodiscard]] constexpr auto &operator[](Button btn) noexcept { return buttons[uint32_t(btn)]; }
+
+  /// Access button state, const variant.
+  [[nodiscard]] constexpr auto &operator[](Button btn) const noexcept { return buttons[uint32_t(btn)]; }
+
+  /// Is down this frame?
+  [[nodiscard]] constexpr bool isDown(Button btn) const noexcept { return operator[](btn).isDown(); }
+
+  /// Is down this frame and not down last frame?
+  [[nodiscard]] constexpr bool isJustDown(Button btn) const noexcept { return operator[](btn).isJustDown(); }
+
+  /// Is down last frame and not down this frame?
+  [[nodiscard]] constexpr bool isJustUp(Button btn) const noexcept { return operator[](btn).isJustUp(); }
+
+  /// Is down this frame and part of a single-click?
+  [[nodiscard]] constexpr bool isSingleClickDown(Button btn) const noexcept { return operator[](btn).isMultiClickDown(0); }
+
+  /// Is down this frame and part of a double-click?
+  [[nodiscard]] constexpr bool isDoubleClickDown(Button btn) const noexcept { return operator[](btn).isMultiClickDown(1); }
+
+  /// Is down last frame and not down this frame and part of a single-click?
+  [[nodiscard]] constexpr bool isSingleClicked(Button btn) const noexcept { return operator[](btn).isMultiClicked(0); }
+
+  /// Is down last frame and not down this frame and part of a double-click?
+  [[nodiscard]] constexpr bool isDoubleClicked(Button btn) const noexcept { return operator[](btn).isMultiClicked(1); }
+
+  /// Is down this frame and not in the original vicinity?
+  [[nodiscard]] constexpr bool isDragged(Button btn) const noexcept { return operator[](btn).isDragged(); }
+
+  /// Is down this frame and not in the original vicinity, but in the original vicinity last frame?
+  [[nodiscard]] constexpr bool isJustDragged(Button btn) const noexcept { return operator[](btn).isJustDragged(); }
+
+  /// Is mouse moved this frame?
+  [[nodiscard]] constexpr bool isMoved() const noexcept { return anyTrue(input.position != input.positionLastFrame); }
+
+  /// If the mouse is dragged, the drag offset vector.
+  [[nodiscard]] constexpr Vector2d dragOffset(Button btn) const noexcept {
+    return isDragged(btn) ? Vector2d(position - operator[](btn).downPosition) : Vector2d();
+  }
+
+public:
+  struct Input {
+    /// The input mouse position in window space.
+    Vector2i position{};
+
+    /// The input mouse position in window space last frame.
+    Vector2i positionLastFrame{};
+
+    /// The input scroll.
+    Vector2d scroll{};
+  } input{};
+
+  /// The mouse position in canvas space.
+  Vector2d position{};
+
+  /// The mouse position in canvas space last frame.
+  Vector2d positionLastFrame{};
+
+  /// The estimated mouse velocity in canvas space.
+  Vector2d velocity{};
+
+  /// The scroll.
+  Vector2d scroll{};
+
+  /// The button states.
+  ButtonState buttons[uint32_t(Button::size)]{};
+
+  struct Settings {
+    /// The multi click threshold in microseconds.
+    int64_t multiClickThreshold{500'000};
+
+    /// The mouse drag radius in points.
+    double dragRadius{0.5};
+
+    /// The maximum speed in points per second.
+    double maxSpeed{1000};
+
+    /// The half life for smoothing velocity in seconds.
+    double halfLifeForVelocity{1e-3};
+  } settings{};
+
+  /// The active cursor icon.
+  CursorIcon cursorIcon{CursorIcon::Arrow};
+};
+
+} // namespace mi::ui

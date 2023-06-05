@@ -1,0 +1,192 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Rect"
+#include "Microcosm/UI/common"
+#include <map>
+#include <vector>
+
+namespace mi::ui {
+
+class MI_UI_API Font {
+public:
+  Font() = default;
+
+  explicit Font(const std::string &filename) { load(filename); }
+
+  static constexpr char32_t None = char32_t(-1);
+
+  struct Metrics {
+    /// The maximum Y coordinate of any glyph bound.
+    float ascent = 0;
+
+    /// The minimum Y coordinate of any glyph bound.
+    float descent = 0;
+
+    /// The Y space between the descent and ascent of adjacent lines.
+    float lineGap = 0;
+
+    [[nodiscard]] constexpr float height() const noexcept { return ascent - descent; }
+
+    [[nodiscard]] constexpr float advance() const noexcept { return -(ascent - descent + lineGap); }
+  };
+
+  /// The overall font metrics.
+  Metrics metrics;
+
+  struct Glyph {
+    /// The bound width.
+    [[nodiscard]] constexpr float width() const noexcept { return rect.extentX(); }
+
+    /// The bound height.
+    [[nodiscard]] constexpr float height() const noexcept { return rect.extentY(); }
+
+    /// The maximum Y coordinate of the bound.
+    [[nodiscard]] constexpr float ascent() const noexcept { return rect.upperY(); }
+
+    /// The minimum Y coordinate of the bound.
+    [[nodiscard]] constexpr float descent() const noexcept { return rect.lowerY(); }
+
+    /// The UTF codepoint.
+    char32_t codepoint = 0;
+
+    /// The rectangle surrounding the glyph.
+    Rect rect;
+
+    /// The rectangle in the atlas.
+    Rect atlasRect;
+
+    /// The advance width.
+    float advance{0};
+
+    /// The left side bearing.
+    float leftSideBearing{0};
+
+    /// Is invisible?
+    bool invisible{false};
+  };
+
+  struct CodepointSpan {
+    /// The first glyph associated with this span.
+    char32_t fromGlyph{None};
+
+    /// The first UTF codepoint.
+    char32_t from{0};
+
+    /// The last UTF codepoint (not inclusive).
+    char32_t to{0};
+
+    [[nodiscard]] constexpr bool contains(char32_t codepoint) const noexcept { return from <= codepoint && codepoint < to; }
+  };
+
+  using CodepointSpanRequests = std::vector<std::pair<char32_t, char32_t>>;
+
+  /// The glyphs.
+  std::vector<Glyph> glyphs;
+
+  /// The UTF codepoint spans.
+  std::vector<CodepointSpan> codepointSpans;
+
+  /// Convert glyph to UTF codepoint.
+  [[nodiscard]] char32_t glyphToCodepoint(char32_t glyph) const noexcept;
+
+  /// Convert UTF codepoint to glyph.
+  [[nodiscard]] char32_t codepointToGlyph(char32_t codepoint) const noexcept;
+
+public:
+  /// \name Kerning
+  /// \{
+
+  struct KerningKey {
+    constexpr KerningKey() noexcept = default;
+
+    constexpr KerningKey(char32_t glyph0, char32_t glyph1) noexcept {
+      key = uint64_t(glyph0) << 32;
+      key = uint64_t(glyph1) | key;
+    }
+
+    constexpr auto operator<=>(const KerningKey &other) const noexcept { return key <=> other.key; }
+
+    constexpr bool operator==(const KerningKey &) const noexcept = default;
+
+    constexpr bool operator!=(const KerningKey &) const noexcept = default;
+
+    uint64_t key = 0;
+  };
+
+  /// The kerning table.
+  std::map<KerningKey, float> kerningTable;
+
+  /// Look up kerning between glyphs.
+  [[nodiscard]] float kerning(char32_t glyph0, char32_t glyph1) const noexcept;
+
+  /// Look up net advance width between glyphs, accounting for kerning.
+  [[nodiscard]] float netAdvanceWidth(char32_t glyph0, char32_t glyph1) const noexcept;
+
+  float tabWidth{1};
+
+  /// \}
+
+public:
+  struct Atlas {
+    void clear() noexcept {
+      sizeX = 0;
+      sizeY = 0;
+      buffer.clear();
+    }
+
+    void resize(int w, int h) {
+      sizeX = max(w, 0);
+      sizeY = max(h, 0);
+      buffer.resize(sizeX * sizeY);
+    }
+
+    [[nodiscard]] auto &operator()(int y, int x) noexcept { return buffer[y * sizeX + x]; }
+
+    [[nodiscard]] auto &operator()(int y, int x) const noexcept { return buffer[y * sizeX + x]; }
+
+    /// The atlas size in X in pixels.
+    int sizeX = 0;
+
+    /// The atlas size in Y in pixels.
+    int sizeY = 0;
+
+    /// The atlas buffer in row-major layout.
+    ///
+    /// Each byte in the buffer represents a quantized signed-distance
+    /// field (SDF) value where 128 is the zero (on-edge) value. Values
+    /// greater than 128 are inside the font shape, and values less than
+    /// 128 are outside.
+    ///
+    std::vector<uint8_t> buffer;
+  };
+
+  Atlas atlas;
+
+  mutable UserData texture{};
+
+public:
+  /// Load from file.
+  void load(const std::string &filename, const CodepointSpanRequests &spanRequests);
+
+  /// Load from file, with default span requests.
+  ///
+  /// This requests the following of set of codepoint spans, which should
+  /// cover most English/European usages:
+  /// - Ascii
+  /// - Latin-1
+  /// - Greek alphabet
+  /// - En/em-dash
+  /// - Quotations
+  ///
+  void load(const std::string &filename) {
+    load(
+      filename, {{0x0020, 0x007F},   // Ascii
+                 {0x00A1, 0x0100},   // Latin-1
+                 {0x03B1, 0x03CA},   // Greek alphabet
+                 {0x2013, 0x2015},   // En/em-dash
+                 {0x2018, 0x2020}}); // Quotations
+  }
+};
+
+} // namespace mi::ui

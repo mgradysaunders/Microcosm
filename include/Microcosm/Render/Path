@@ -1,0 +1,407 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Manifold"
+#include "Microcosm/Render/Material"
+
+namespace mi::render {
+
+struct MI_RENDER_API Path final : ArrayLike<Path> {
+public:
+  Path() { mPath.reserve(16); }
+
+  enum class Kind : uint8_t { Camera, Light };
+
+  struct MI_RENDER_API Vertex final {
+  public:
+    Vertex() noexcept = default;
+
+    /// Construct from position.
+    Vertex(Vector3d position) noexcept : position(position) {}
+
+    /// Construct from manifold, which automatically sets position to agree with manifold.
+    Vertex(Manifold manifold) noexcept : position(manifold.point), manifold(manifold) {}
+
+    void clear() noexcept { *this = {}; }
+
+  public:
+    /// Mark as on path from camera.
+    Vertex &fromCamera() noexcept { return runtime.kind = Kind::Camera, *this; }
+
+    /// Mark as on path from light.
+    Vertex &fromLight() noexcept { return runtime.kind = Kind::Light, *this; }
+
+    /// Flag as infinite. __Only valid for source or terminal vertices!__
+    Vertex &flagInfinite() noexcept { return runtime.flags.isInfinite = true, *this; }
+
+    /// Flag as intangible. __Only valid for source vertices!__
+    Vertex &flagIntangible() noexcept { return runtime.flags.isIntangible = true, *this; }
+
+    /// Flag as incomplete. __Only valid for source vertices!__
+    Vertex &flagIncomplete() noexcept { return runtime.flags.isIncomplete = true, *this; }
+
+    /// Flag as sampled from Dirac delta position distribution. __Only valid for source vertices!__
+    Vertex &flagDeltaPosition() noexcept { return runtime.flags.isDeltaPosition = true, *this; }
+
+    /// Flag as sampled from Dirac delta direction distribution. __Only valid for source vertices!__
+    Vertex &flagDeltaDirection() noexcept { return runtime.flags.isDeltaDirection = true, *this; }
+
+    /// Flag as known opaque. __Only valid for surface vertices!__
+    Vertex &flagKnownOpaque() noexcept { return runtime.flags.isKnownOpaque = true, *this; }
+
+    /// Initialize material provider.
+    Vertex &withMaterialProvider(MaterialProvider provider) noexcept { return materialProvider = std::move(provider), *this; }
+
+    /// Initialize ratio.
+    Vertex &withRatio(Spectrum ratio) noexcept { return runtime.ratio = std::move(ratio), *this; }
+
+    /// Initialize omegaO.
+    Vertex &withOmegaO(Vector3d omegaO) noexcept { return runtime.omegaO = omegaO, *this; }
+
+    /// Initialize omegaI.
+    Vertex &withOmegaI(Vector3d omegaI) noexcept { return runtime.omegaI = omegaI, *this; }
+
+    /// Initialize forward scattering PDF (solid angle density of omegaI).
+    Vertex &withForwardScatteringPDF(double density) noexcept { return runtime.scatteringPDF.forward = density, *this; }
+
+    /// Initialize reverse scattering PDF (solid angle density of omegaO).
+    Vertex &withReverseScatteringPDF(double density) noexcept { return runtime.scatteringPDF.reverse = density, *this; }
+
+    /// Initialize forward path PDF.
+    Vertex &withForwardPathPDF(double density) noexcept { return runtime.pathPDF.forward = density, *this; }
+
+    /// Initialize reverse path PDF.
+    Vertex &withReversePathPDF(double density) noexcept { return runtime.pathPDF.reverse = density, *this; }
+
+    /// Initialize user variable.
+    template <typename Value> Vertex &withUserVar(std::string name, Value &&value) {
+      return userVars.set(std::move(name), std::forward<Value>(value)), *this;
+    }
+
+  public:
+
+    /// Is on path from camera?
+    [[nodiscard]] bool isFromCamera() const noexcept { return runtime.kind == Kind::Camera; }
+
+    /// Is on path from light?
+    [[nodiscard]] bool isFromLight() const noexcept { return runtime.kind == Kind::Light; }
+
+    /// Is infinite vertex?
+    [[nodiscard]] bool isInfinite() const noexcept { return runtime.flags.isInfinite; }
+
+    /// Is sampled from Dirac delta position distribution?
+    [[nodiscard]] bool isDeltaPosition() const noexcept { return runtime.flags.isDeltaPosition; }
+
+    /// Is sampled from Dirac delta direction distribution?
+    [[nodiscard]] bool isDeltaDirection() const noexcept { return runtime.flags.isDeltaDirection; }
+
+    /// Is on surface?
+    [[nodiscard]] bool isOnSurface() const noexcept { return manifold.has_value(); }
+
+    /// Is on opaque surface? (i.e., blocks visibility checks?)
+    [[nodiscard]] bool isOnOpaqueSurface() const noexcept {
+      return runtime.flags.isKnownOpaque || material.isOnOpaqueSurface();
+    }
+
+    /// If applicable, the correct normal at the surface.
+    [[nodiscard]] Vector3d correctNormal() const noexcept { return manifold ? manifold->correct.normal : Vector3d(); }
+
+    /// If applicable, the shading normal at the surface.
+    [[nodiscard]] Vector3d shadingNormal() const noexcept { return manifold ? manifold->shading.normal : Vector3d(); }
+
+    /// If applicable, the absolute cosine projection term with the correct normal at the surface. If not on surface, 1.
+    [[nodiscard]] double correctAbsCosTheta(Vector3d omegaI) const noexcept {
+      return manifold ? absDot(manifold->correct.normal, omegaI) : 1;
+    }
+
+    /// If applicable, the absolute cosine projection term with the shading normal at the surface. If not on surface, 1.
+    [[nodiscard]] double shadingAbsCosTheta(Vector3d omegaI) const noexcept {
+      return manifold ? absDot(manifold->shading.normal, omegaI) : 1;
+    }
+
+    /// The direction to the other vertex.
+    [[nodiscard]] Vector3d omega(const Vertex &other) const noexcept { return normalize(other.position - position); }
+
+    /// Assert valid initialization for surface vertex.
+    void assertValidInitialSurfaceVertex(const std::source_location &location = std::source_location::current());
+
+    /// Assert valid initialization for volume vertex.
+    void assertValidInitialVolumeVertex(const std::source_location &location = std::source_location::current());
+
+    /// Invoke material provider.
+    void invokeMaterialProvider(const Spectrum &waveLens);
+
+    /// Recalculate the forward path PDF from the scattering PDF at the previous vertex.
+    void recalculateForwardPathPDF(const Vertex &prev) noexcept;
+
+    /// Recalculate the reverse path PDF from the scattering PDF at the next vertex.
+    void recalculateReversePathPDF(const Vertex &next) noexcept;
+
+  public:
+    /// The position.
+    Vector3d position{};
+
+    /// The manifold, if applicable.
+    std::optional<Manifold> manifold{};
+
+    /// The material provider. This must be present for surface vertices. It constructs
+    /// the material associated with the vertex, which contains the scattering function
+    /// for the surface or medium if applicable, and the participating media (or medium).
+    MaterialProvider materialProvider{};
+
+    /// The material.
+    Material material{};
+
+    struct Runtime {
+      /// The ratio from the beginning of the path.
+      Spectrum ratio{};
+
+      /// The kind of path.
+      Kind kind{};
+
+      struct Flags {
+        /// Is the vertex understood to be at infinity? This may only be true if the vertex
+        /// is a terminal which represents either an escaped ray or an initial ray arriving
+        /// from infinity.
+        uint8_t isInfinite : 1 {0};
+
+        /// Is the vertex incomplete? This flag indicates that it is impossible to form the connection
+        /// between this vertex and the next vertex. The implementation needs this information to rule
+        /// out methods for forming the path and calculate the multiple importance weight correctly.
+        uint8_t isIncomplete : 1 {0};
+
+        /// Is the vertex intangible? This is only applicable to source vertices (the first vertex
+        /// in either a light or camera path). The idea of being intangible means the vertex has zero
+        /// probability of showing up during a random walk or, in other words, there is no physically
+        /// real extent associated with the vertex.
+        ///
+        /// Note: We usually model cameras as intangible. The camera itself is a source of importance
+        /// for bidirectional methods, but there is rarely any intersectable camera geometry that might
+        /// allow us to randomly intersect it when tracing a light path. Area lights on the other hand
+        /// typically do have intersectible geometry.
+        uint8_t isIntangible : 1 {0};
+
+        /// Is the vertex sampled from a Dirac delta position distribution? This is only applicable to
+        /// source vertices.
+        uint8_t isDeltaPosition : 1 {0};
+
+        /// Is the vertex sampled from a Dirac delta direction distribution? This is only applicable to
+        /// source vertices.
+        uint8_t isDeltaDirection : 1 {0};
+
+        uint8_t isDeltaScattering : 1{0};
+
+        /// Is known to be an opaque surface? (i.e., blocks visibility checks?) When performing
+        /// visibility checks, this flag can be used to instantly fail the check without having to
+        /// invoke the material provider, which can improve performance. It is important to emphasize
+        /// that if this flag is false, it does not necessarily mean the vertex is not opaque, it just
+        /// means we cannot know that until we construct the material and check whether or not it has
+        /// scattering functions.
+        uint8_t isKnownOpaque : 1 {0};
+      } flags;
+
+      /// If applicable, the direction to the previous vertex.
+      Vector3d omegaO{};
+
+      /// If applicable, the direction to the next vertex.
+      Vector3d omegaI{};
+
+      /// The bidirectional scattering PDF evaluations.
+      /// - Forward: The solid-angle probability density of sampling omegaI given omegaO.
+      /// - Reverse: The solid-angle probability density of sampling omegaO given omegaI.
+      BidirPDF scatteringPDF;
+
+      /// The bidirectional path PDF evaluations.
+      /// - Forward: The spatial probability density of sampling the vertex position.
+      /// - Reverse: The spatial probability density of sampling the vertex position by the conjugate method.
+      ///
+      /// \note
+      /// For source vertices, the probability density is determined externally by however the user chooses to
+      /// generate them. If the vertex is sampled from some distribution on a surface for example, the authentic
+      /// path PDF is the area density associated with the sampling method. For interior vertices, the path PDFs
+      /// come from projecting the solid-angle scattering PDFs of the neighboring vertices into the local space
+      /// of this vertex.
+      BidirPDF pathPDF;
+    } runtime;
+
+    AnyLookup userVars;
+  };
+
+public:
+  MI_ARRAY_LIKE_DATA(mPath.data())
+
+  MI_ARRAY_LIKE_SIZE(mPath.size())
+
+  void clear() noexcept { mPath.clear(); }
+
+  void push(Vertex vertex) { mPath.emplace_back(std::move(vertex)); }
+
+private:
+  std::vector<Vertex> mPath{};
+};
+
+using PathView = IteratorRange<Path::Vertex *>;
+
+/// This implements the fundamental path connection logic for Bi-Directional Path Tracing (BDPT). Of course the main
+/// idea of bidirectionality is to trace paths from both cameras and lights, form connections between the paths, then
+/// account for everything with multiple importance weights to reduce variance.
+///
+/// This implementation destructures the problem of forming bidirectional connections into three completely symmetric
+/// path-space operations (symmetric in the sense of having an identical interface regardless of whether we are dealing
+/// with camera or light paths). The operations are:
+/// 1. Truncation. One of the paths is empty. Interpret the other as complete.
+/// 2. Completion. One of the paths has one vertex. Resample the vertex from the last vertex of the other.
+/// 3. Connection. Both paths have more than one vertex. This is the general case where we simply connect
+///    the pair of last vertices to each other.
+///
+struct MI_RENDER_API PathConnector {
+public:
+  /// The path truncation operator.
+  ///
+  /// Could the vertex have been sampled as the source of the opposite kind of path? If so:
+  /// - Multiply vertex.runtime.ratio by the emission/importance along vertex.runtime.omegaO.
+  /// - Overwrite vertex.runtime.pathPDF.reverse with the probability density associated with the vertex position.
+  /// - Overwrite vertex.runtime.scatteringPDF.reverse with the probability density for sampling vertex.runtime.omegaO.
+  ///
+  using Truncation = std::function<bool(Path::Vertex &vertex)>;
+
+  /// The path completion operator.
+  ///
+  /// Consider that vertexP is the last scattering vertex in the path. Initialize vertexQ on a light (if vertexP is
+  /// on the camera subpath) or on the camera (if vertexP is on the light subpath), as if by a solid-angle sampling
+  /// technique defined with respect to vertexP.
+  /// - Set vertexQ.runtime.omegaI to point toward vertexP.
+  /// - Set vertexQ.runtime.pathPDF.forward to the probability density associated with the vertex position.
+  /// - Set vertexQ.runtime.scatteringPDF.forward to the probability density for sampling vertexQ.runtime.omegaI.
+  /// - Set vertexQ.runtime.ratio to the emission over the solid-angle density associated with whatever sampling
+  ///   strategy is used to generate vertexQ in this case.
+  ///
+  /// \note
+  /// The implementation should initialize vertexQ as the opposite kind from vertexP, so the scatteringPDF.forward
+  /// and pathPDF.forward densities reflect the generation strategy which could have produced vertexQ as the source of
+  /// the opposite kind of path. The solid angle density associated with how the implementation truly samples vertexQ
+  /// with respect to vertexP should be lumped into the denominator of the ratio.
+  ///
+  using Completion = std::function<bool(const Path::Vertex &vertexP, Path::Vertex &vertexQ)>;
+
+  /// The visibility term. This must determine whether the given pair of vertices is mutually visible. If so,
+  /// the implementation should return true, and apply whatever path transmission is present between the vertices to
+  /// the given spectrum.
+  using Visibility = std::function<bool(const Path::Vertex &vertexP, const Path::Vertex &vertexQ, Spectrum &L)>;
+
+  /// The receiver function, to process the contribution for each connection strategy. Note: the importanceWeight is
+  /// not yet applied to the spectrum, so the implementation should do the multiplication itself in the standard use
+  /// case. Having the weight separate from the contribution is useful for doing visualizations of the different
+  /// strategies.
+  using Receiver = std::function<void(PathView pathA, PathView pathB, double importanceWeight, const Spectrum &L)>;
+
+  PathConnector() noexcept = default;
+
+  PathConnector(Truncation truncation, Completion completion, Visibility visibility) noexcept
+    : mTruncation(std::move(truncation)), //
+      mCompletion(std::move(completion)), //
+      mVisibility(std::move(visibility)) {}
+
+public:
+  /// Connect the given paths in every possible way.
+  void connect(Random &random, PathView pathA, PathView pathB, const Receiver &receiver) const;
+
+  /// Connect the given paths. (The connect() method calls this repeatedly.)
+  void connectTerm(Random &random, PathView pathA, PathView pathB, const Receiver &receiver) const;
+
+  /// Calculate the multiple importance weight for the given path connection.
+  [[nodiscard]] double multipleImportanceWeight(PathView pathA, PathView pathB) const;
+
+private:
+  Truncation mTruncation{};
+
+  Completion mCompletion{};
+
+  Visibility mVisibility{};
+
+  /// Forming path connections involves overwriting some of the PDF calculations. This is a helper to preserve
+  /// the original values. The connectTerm() implementation uses it to make sure that any temporary changes needed
+  /// for the multipleImportanceWeight() are undone once the function returns.
+  struct PathBackup {
+  public:
+    PathBackup(PathView pathView) : mPathView(pathView) {
+      for (ptrdiff_t i = 0, j = max(mPathView.size() - 2, 0); j < mPathView.size(); i++, j++)
+        mRuntimes[i] = mPathView[j].runtime;
+    }
+    ~PathBackup() {
+      for (ptrdiff_t i = 0, j = max(mPathView.size() - 2, 0); j < mPathView.size(); i++, j++)
+        mPathView[j].runtime = std::move(mRuntimes[i]);
+    }
+
+  private:
+    PathView mPathView;
+
+    // It is only ever necessary to modify the runtimes of the last two (at most).
+    Path::Vertex::Runtime mRuntimes[2]{};
+  };
+};
+
+/// This calculates the factor needed to convert a solid-angle measure at vertex A into a path measure at
+/// vertex B, which is necessary for bidirectional path-space probability densities. To carry out bidirectional
+/// Multiple Importance Sampling (MIS), we must have a common density measure with respect to which we can quantify
+/// the overall density for sampling an entire path in a specific way, i.e., which portion of the path we sampled from
+/// the camera and which we sampled from the light.
+[[nodiscard]] inline double convertSolidAngleToPath(const Path::Vertex &vertexA, const Path::Vertex &vertexB) noexcept {
+  if (vertexB.isInfinite()) {
+    // If vertex B represents an escaped ray that shoots off to infinite light sources, then vertex B really has no
+    // area or volume measure associated with it. It is just representative of a direction, and so the conversion is
+    // just 1 because we do not want to disturbe the solid angle density.
+    return 1;
+  } else if (!vertexB.isOnOpaqueSurface()) {
+    // If vertex B is a volume scattering event, then the density falls off with distance squared.
+    return 1 / distanceSquare(vertexA.position, vertexB.position);
+  } else {
+    // If vertex B is a surface scattering event, then we can fall back to the convertSolidAngleToArea() routine, which
+    // is essentially equal to the absolute value of the dot product of the direction from vertex A to vertex B with the
+    // surface normal at vertex B, divided by the distance squared. That is, it is the distance squared falloff from the
+    // volume case times the projected area factor.
+    return convertSolidAngleToArea(vertexA.position, *vertexB.manifold);
+  }
+}
+
+inline void Path::Vertex::recalculateForwardPathPDF(const Vertex &prev) noexcept {
+  if (prev.runtime.flags.isDeltaScattering)
+    runtime.pathPDF.forward = 1;
+  else
+    runtime.pathPDF.forward =
+      (runtime.kind == prev.runtime.kind ? prev.runtime.scatteringPDF.forward : prev.runtime.scatteringPDF.reverse) *
+      convertSolidAngleToPath(prev, *this);
+}
+
+inline void Path::Vertex::recalculateReversePathPDF(const Vertex &next) noexcept {
+  // If the vertex is intangible, then no matter what it is not possible to randomly stumble across it
+  // by the conjugate method.
+  if (runtime.flags.isIntangible)
+    runtime.pathPDF.reverse = 0;
+  else if (next.runtime.flags.isDeltaScattering)
+    runtime.pathPDF.reverse = 1;
+  else
+    runtime.pathPDF.reverse =
+      (runtime.kind == next.runtime.kind ? next.runtime.scatteringPDF.reverse : next.runtime.scatteringPDF.forward) *
+      convertSolidAngleToPath(next, *this);
+}
+
+/// This is the primary logic for forward radiance estimation in a standard unidirectional Monte Carlo
+/// path tracer. We visit each vertex in the path and calculate an estimate of the direct lighting contribution,
+/// then scale it by the cumulative ratio at the vertex and add it to the total radiance estimate. This is a
+/// very simple loop, so this is inlined with templates instead of using std::function. The function is invoked with
+/// each vertex and the path wavelengths for convenience, and must return a Spectrum that is an unbiased estimate of
+/// the direct lighting contribution at the vertex, accounting for shadowing and transmission.
+template <std::invocable<const Path::Vertex &> DirectLightingEstimate>
+[[nodiscard]] inline Spectrum forwardRadianceEstimate(const Path &path, DirectLightingEstimate &&directLightingEstimate) {
+  if (path.empty()) [[unlikely]]
+    return {};
+  Spectrum estimate{spectrumZerosLike(path[0].runtime.ratio)};
+  for (const auto &vertex : path | std::views::drop(1)) { // Drop the camera vertex.
+    Spectrum term{vertex.runtime.ratio * auto_invoke(directLightingEstimate, vertex)};
+    if (isPositiveAndFinite(term)) estimate += term;
+  }
+  return estimate;
+}
+
+} // namespace mi::render

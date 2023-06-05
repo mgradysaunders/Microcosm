@@ -1,0 +1,56 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Tensor"
+#include "Microcosm/stbi_Export.h"
+#include "Microcosm/utility"
+
+namespace mi::stbi {
+
+template <typename Value> using Image = Tensor<Value, TensorShape<Dynamic, Dynamic, Dynamic>>;
+
+/// Unsigned 8-bit buffer.
+using ImageU8 = Image<uint8_t>;
+
+/// Unsigned 16-bit buffer.
+using ImageU16 = Image<uint16_t>;
+
+/// Floating point 32-bit buffer.
+using ImageF32 = Image<float>;
+
+/// Load from stream.
+template <typename Value> MI_STBI_API [[nodiscard]] Image<Value> load(std::istream &stream, int forceNumChannels = 0);
+
+/// Load from file.
+template <typename Value> MI_STBI_API [[nodiscard]] Image<Value> load(const std::string &filename, int forceNumChannels = 0);
+
+/// Alias for `load<uint8_t>()`.
+[[nodiscard]] inline ImageU8 loadU8(auto &&...args) { return load<uint8_t>(auto_forward(args)...); }
+
+/// Alias for `load<uint16_t>()`.
+[[nodiscard]] inline ImageU16 loadU16(auto &&...args) { return load<uint16_t>(auto_forward(args)...); }
+
+/// Alias for `load<float>()`.
+[[nodiscard]] inline ImageF32 loadF32(auto &&...args) { return load<float>(auto_forward(args)...); }
+
+/// File type indicator for the save function.
+enum class FileType {
+  /// Infer file type from filename extension if applicable. Otherwise falls back to PNG.
+  Default,
+  /// Lossless uncompressed Microsoft Bitmap (no alpha channel).
+  BMP,
+  /// Lossy Joint Photographic Experts Group format hardcoded with compression 'quality' parameter of 90%.
+  JPG,
+  /// Lossless Portable Network Graphics format using miniz zlib compression.
+  PNG,
+  /// Lossless Targa format with basic run length encoding (RLE) compression.
+  TGA
+};
+
+/// Save to stream.
+MI_STBI_API void saveU8(FileType fileType, std::ostream &stream, const ImageU8 &image);
+
+/// Save to file.
+MI_STBI_API void saveU8(FileType fileType, const std::string &filename, const ImageU8 &image);
+
+} // namespace mi::stbi

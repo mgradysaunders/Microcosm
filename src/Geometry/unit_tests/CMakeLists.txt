@@ -1,0 +1,14 @@
+microcosm_add_tests(
+  "test_Geometry"
+  SOURCES
+    "HalfEdgeMesh.cc"
+    "FCurve.cc"
+    "FileMTL.cc"
+    "FileOBJ.cc"
+    "glTF.cc"
+    "Mesh.cc"
+    "MinkowskiDifference.cc"
+    "IntersectMPR.cc"
+  DEPENDS
+    ${PROJECT_NAME}::Geometry
+  )

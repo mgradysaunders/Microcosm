@@ -1,0 +1,52 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Medium"
+#include "Microcosm/Render/Scattering"
+
+namespace mi::render {
+
+struct MI_RENDER_API Material final {
+public:
+  void clear() noexcept;
+
+  /// Has scattering functions?
+  [[nodiscard]] bool hasScattering() const noexcept { return scattering.has_value(); }
+
+  /// Is on surface?
+  [[nodiscard]] bool isOnSurface() const noexcept { return medium.isOnSurface(); }
+
+  /// Is on opaque surface? (i.e., blocks visibility checks?)
+  [[nodiscard]] bool isOnOpaqueSurface() const noexcept { return isOnSurface() && hasScattering(); }
+
+public:
+  /// \name Scattering
+  ///
+  /// These wrap the scattering calls, but first check that the std::optional<Scattering> object
+  /// is in fact present and throw a std::logic_error if it is not. Note that the documentation page
+  /// for std::logic_error says: "It reports errors that are a consequence of faulty logic within the
+  /// program such as violating logical preconditions or class invariants and may be preventable" which
+  /// is the case here, as users should always verify that the material in fact has scattering functions
+  /// before trying to use them.
+  ///
+  /// \{
+  BidirPDF scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const;
+
+  BidirPDF scatterSample(Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) const;
+  /// \}
+
+public:
+  /// The medium accessor.
+  MediumAccessor medium{};
+
+  /// The scattering functions.
+  std::optional<Scattering> scattering{};
+
+private:
+  static void throwLogicErrorNoScattering(const char *functionName);
+};
+
+/// The material provider function signature, which takes some wavelengths and produces a material.
+using MaterialProvider = std::function<Material(const Spectrum &waveLens)>;
+
+} // namespace mi::render

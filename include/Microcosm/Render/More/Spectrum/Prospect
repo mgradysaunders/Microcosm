@@ -1,0 +1,77 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+struct MI_RENDER_API Prospect final {
+public:
+  /// The number of layers. Usually between 1 and 2.
+  double numLayers{1.5};
+
+  /// The amount of dry matter in grams per square centimeter. Usually ~0.005, >0.001 and <0.02.
+  double dryMatter{0.005};
+
+  /// The amount of water as equivalent thickness in centimeters. Usually ~0.01, >0.0001 and <0.05.
+  double water{0.01};
+
+  /// \name Content Parameters
+  ///
+  /// Parameter    | Units   | Colors         | Range
+  /// -------------|---------|----------------|--------------------------------
+  /// Chlorophylls | μg/cm^2 | Green          | Usually <40, almost always <80
+  /// Anthocyanins | μg/cm^2 | Red, Purple    | Usually <10, almost always <40
+  /// Carotenoids  | μg/cm^2 | Orange, Yellow | Usually <10, almost always <30
+  /// Browns       | none    | Brown          | Usually <1, almost always <10
+  ///
+  /// \{
+
+  /// The chlorophyll content in micrograms per square centimeter.
+  double chlorophylls{30};
+
+  /// The anthocyanin content in micrograms per square centimeter.
+  double anthocyanins{5};
+
+  /// The carotenoid content in micrograms per square centimeter.
+  double carotenoids{5};
+
+  /// The brown pigment content in arbitrary units. This is not exactly as physical or
+  /// real as the other parameters, but is useful for modeling senescence, also known as
+  /// leaf death.
+  double browns{0};
+
+  /// \}
+
+public:
+  /// The result structure.
+  template <typename Value> struct Result {
+    /// The total reflectance.
+    Value totalR{};
+    /// The total transmittance.
+    Value totalT{};
+  };
+
+  /// Calculate the reflectance and transmittance. Non-zero between 0.4-2.5μm.
+  [[nodiscard]] Result<double> operator()(double waveLen) const noexcept;
+
+  /// Calculate the reflectance and transmittance. Non-zero between 0.4-2.5μm.
+  [[nodiscard]] Result<Spectrum> operator()(const Spectrum &waveLens) const noexcept {
+    Spectrum totalsR{waveLens.shape};
+    Spectrum totalsT{waveLens.shape};
+    for (size_t i = 0; i < waveLens.size(); i++) {
+      auto result = operator()(waveLens[i]);
+      totalsR[i] = result.totalR;
+      totalsT[i] = result.totalT;
+    }
+    return {std::move(totalsR), std::move(totalsT)};
+  }
+
+  [[nodiscard]] Result<Vector3d> convertToXYZ() const noexcept;
+
+  void neuralNetworkFitFromXYZ(Vector3d totalAlbedoXYZ) noexcept;
+
+  void neuralNetworkFitFromRGB(Vector3d totalAlbedoRGB) noexcept { neuralNetworkFitFromXYZ(convertRGBToXYZ(totalAlbedoRGB)); }
+};
+
+} // namespace mi::render

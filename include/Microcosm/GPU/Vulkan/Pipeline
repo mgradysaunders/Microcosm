@@ -1,0 +1,229 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/common"
+
+namespace mi::vk {
+
+/// Graphics pipeline input state.
+///
+/// This struct combines
+/// - `VkPipelineVertexInputStateCreateInfo`,
+/// - `VkPipelineInputAssemblyStateCreateInfo`,
+/// - `VkPipelineTessellationStateCreateInfo`, and
+/// - partially `VkPipelineRasterizationStateCreateInfo`.
+///
+/// This aims to capture the entirety of how graphics primitives are
+/// input to and rasterized by Vulkan. Hence, this includes the vertex
+/// bindings and attributes, the primitive topology and culling options,
+/// and the number of patch control points if tessellation is used.
+///
+struct GraphicsPipelineInputState {
+  /// The topology.
+  VkPrimitiveTopology topology{VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST};
+
+  /// The front face setting.
+  VkFrontFace frontFace{VK_FRONT_FACE_COUNTER_CLOCKWISE};
+
+  /// The cull mode.
+  VkCullModeFlags cullMode{VK_CULL_MODE_BACK_BIT};
+
+  /// The polygon mode.
+  VkPolygonMode polygonMode{VK_POLYGON_MODE_FILL};
+
+  /// Primitive restart enable?
+  bool primitiveRestartEnable{false};
+
+  /// Rasterizer discard enable?
+  bool rasterizerDiscardEnable{false};
+
+  /// Control points per patch, or 0 if no tessellation.
+  uint32_t patchControlPoints{0};
+
+  /// The line width, if rasterizing lines.
+  float lineWidth{0};
+
+  /// The vertex bindings.
+  std::vector<VkVertexInputBindingDescription> vertexBindings;
+
+  /// The vertex attributes.
+  std::vector<VkVertexInputAttributeDescription> vertexAttributes;
+};
+
+struct DepthBounds {
+  /// The minimum depth bounds.
+  float minBounds{0};
+
+  /// The maximum depth bounds.
+  float maxBounds{1};
+};
+
+struct DepthBias {
+  /// The depth bias constant factor.
+  float constantFactor{0};
+
+  /// The depth bias clamp.
+  float clamp{0};
+
+  /// The depth bias slope factor.
+  float slopeFactor{1};
+};
+
+/// Graphics pipeline depth state.
+///
+/// This struct combines
+/// - partially `VkPipelineDepthStencilStateCreateInfo`, and
+/// - partially `VkPipelineRasterizationStateCreateInfo`.
+///
+struct GraphicsPipelineDepthState {
+  /// Depth clamp enable?
+  bool clampEnable{false};
+
+  /// Depth write enable?
+  bool writeEnable{true};
+
+  /// The depth compare op.
+  VkCompareOp compareOp{VK_COMPARE_OP_LESS};
+
+  /// The depth bounds test.
+  std::optional<DepthBounds> bounds;
+
+  /// The depth bias.
+  std::optional<DepthBias> bias;
+};
+
+/// Graphics pipeline stencil state.
+struct GraphicsPipelineStencilState {
+  /// The front state.
+  VkStencilOpState front{};
+
+  /// The back state.
+  VkStencilOpState back{};
+};
+
+/// Graphics pipeline multisample state.
+///
+/// This struct wraps `VkPipelineMultisampleStateCreateInfo`. It is
+/// nearly identical, but inlines `pSampleMask` as `sampleMask` since it
+/// should never be a pointer to more than two values. Also, this may be
+/// left out of `GraphicsPipelineCreateInfo`, in which case an effective
+/// _no multisampling_ default struct is used.
+///
+struct GraphicsPipelineMultisampleState {
+  /// The samples.
+  VkSampleCountFlagBits samples{VK_SAMPLE_COUNT_1_BIT};
+
+  /// The minimum sample shading fraction.
+  std::optional<float> minSampleShading{std::nullopt};
+
+  /// The sample mask.
+  std::vector<VkSampleMask> sampleMask;
+
+  /// Alpha-to-coverable enable?
+  bool alphaToCoverageEnable{false};
+
+  /// Alpha-to-one enable?
+  bool alphaToOneEnable{false};
+};
+
+/// Graphics pipeline create info.
+///
+/// This struct replaces `VkGraphicsPipelineCreateInfo`. This uses
+/// - `VkxGraphicsPipelineInputState`,
+/// - `VkxGraphicsPipelineDepthState`,
+/// - `VkxGraphicsPipelineStencilState`, and
+/// - `VkxGraphicsPipelineMultisampleState`
+///
+/// to replace
+/// - `VkPipelineVertexInputStateCreateInfo`,
+/// - `VkPipelineInputAssemblyStateCreateInfo`,
+/// - `VkPipelineTessellationStateCreateInfo`,
+/// - `VkPipelineDepthStencilStateCreateInfo`,
+/// - `VkPipelineRasterizationStateCreateInfo`, and
+/// - `VkPipelineMultisampleStateCreateInfo`.
+///
+/// This further inlines
+/// `VkPipelineViewportStateCreateInfo`,
+/// `VkPipelineColorBlendStateCreateInfo`, and
+/// `VkPipelineDynamicStateCreateInfo`, thus reducing the number of
+/// intermediate structs from 9 to 4.
+///
+struct GraphicsPipelineCreateInfo {
+  /// The shader stages.
+  std::vector<VkPipelineShaderStageCreateInfo> stages;
+
+  /// The input state.
+  const GraphicsPipelineInputState *inputState{nullptr};
+
+  /// _Optional_. The depth state.
+  const GraphicsPipelineDepthState *depthState{nullptr};
+
+  /// _Optional_. The stencil state.
+  const GraphicsPipelineStencilState *stencilState{nullptr};
+
+  /// _Optional_. The multisample state.
+  const GraphicsPipelineMultisampleState *multisampleState{nullptr};
+
+  /// \name Viewport state
+  /// \{
+
+  /// The viewports.
+  std::vector<VkViewport> viewports;
+
+  /// The scissor rectangles.
+  std::vector<VkRect2D> scissors;
+
+  /// \}
+
+  /// \name Color blend state
+  /// \{
+
+  /// The logic op.
+  std::optional<VkLogicOp> logicOp{std::nullopt};
+
+  /// The blend attachments.
+  std::vector<VkPipelineColorBlendAttachmentState> blendAttachments;
+
+  /// The blend constants.
+  std::array<float, 4> blendConstants{1, 1, 1, 1};
+
+  /// \}
+
+  /// \name Dynamic state
+  /// \{
+
+  /// The dynamic states.
+  std::vector<VkDynamicState> dynamicStates;
+
+  /// \}
+
+  /// The layout.
+  VkPipelineLayout layout{VK_NULL_HANDLE};
+
+  /// The render pass.
+  VkRenderPass renderPass{VK_NULL_HANDLE};
+
+  /// The subpass index.
+  uint32_t subpass{0};
+
+  /// The base pipeline index, or -1 if no parent.
+  int32_t basePipeline{-1};
+};
+
+struct MI_VK_API GraphicsPipelines final : MoveOnly, WithDeviceAndAllocator, ArrayLike<GraphicsPipelines> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(GraphicsPipelines, create, destroy)
+  MI_VK_DEFAULT_ARRAY_LIKE(pipelines)
+
+  void create(
+    VkDevice device,
+    const std::vector<GraphicsPipelineCreateInfo> &createInfos,
+    const VkAllocationCallbacks *allocator = nullptr);
+
+  void destroy();
+
+  /// The pipelines.
+  std::vector<VkPipeline> pipelines;
+};
+
+} // namespace mi::vk

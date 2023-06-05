@@ -1,0 +1,189 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/common"
+
+namespace mi::ui {
+
+struct MI_UI_API Color final : ArrayLike<Color> {
+public:
+  [[strong_inline]] constexpr Color() noexcept = default;
+
+  [[strong_inline]] constexpr Color(float valueR, float valueA = 1) noexcept : Color(valueR, valueR, valueR, valueA) {}
+
+  [[strong_inline]] constexpr Color(float valueR, float valueG, float valueB, float valueA = 1) noexcept
+    : mValue{valueR, valueG, valueB, valueA} {}
+
+  [[strong_inline]] constexpr Color(Vector3f valueRGB, float valueA = 1) noexcept
+    : mValue{valueRGB[0], valueRGB[1], valueRGB[2], valueA} {}
+
+  [[strong_inline]] constexpr Color(Vector4f valueRGBA) noexcept : mValue(valueRGBA) {}
+
+  explicit Color(std::string_view name) noexcept : Color(fromWeb(name)) {}
+
+  /// \name ArrayLike API
+  /// \{
+  [[nodiscard]] constexpr auto *data() noexcept { return &mValue[0]; }
+
+  [[nodiscard]] constexpr auto *data() const noexcept { return &mValue[0]; }
+
+  [[nodiscard]] static constexpr auto size() noexcept { return 4; }
+  /// \}
+
+  // clang-format off
+  [[strong_inline]] constexpr Color &withR(float value) noexcept { mValue[0] = value; return *this; }
+
+  [[strong_inline]] constexpr Color &withG(float value) noexcept { mValue[1] = value; return *this; }
+
+  [[strong_inline]] constexpr Color &withB(float value) noexcept { mValue[2] = value; return *this; }
+
+  [[strong_inline]] constexpr Color &withA(float value) noexcept { mValue[3] = value; return *this; }
+  // clang-format on
+
+public:
+  /// \name Conversion
+  /// \{
+
+  /// Construct from hexadecimal RGBA.
+  [[nodiscard]] static Color fromHex(uint32_t valueRGBA) noexcept;
+
+  /// Construct from XYZ triple.
+  [[nodiscard]] static Color fromXYZ(Vector3f valueXYZ, float valueA = 1) noexcept;
+
+  /// Construct from LAB triple.
+  [[nodiscard]] static Color fromLAB(Vector3f valueLAB, float valueA = 1) noexcept;
+
+  /// Construct from LCH triple.
+  [[nodiscard]] static Color fromLCH(Vector3f valueLCH, float valueA = 1) noexcept;
+
+  /// Construct from web-color name.
+  [[nodiscard]] static Color fromWeb(std::string_view name) noexcept;
+
+  /// Extract hexadecimal RGBA.
+  [[nodiscard]] uint32_t toHex() const noexcept;
+
+  /// Extract RGB as XYZ triple.
+  [[nodiscard]] Vector3f toXYZ() const noexcept;
+
+  /// Extract RGB as LAB triple.
+  [[nodiscard]] Vector3f toLAB() const noexcept;
+
+  /// Extract RGB as LCH triple.
+  [[nodiscard]] Vector3f toLCH() const noexcept;
+
+  /// Closest web-color.
+  [[nodiscard]] std::string_view toWeb() const noexcept;
+
+  /// \}
+
+public:
+  /// \name Perception
+  /// \{
+
+  /// Measure the luminance.
+  [[nodiscard]] float luminance() const noexcept { return toXYZ()[1]; }
+
+  /// Measure the lightness.
+  [[nodiscard]] float lightness() const noexcept { return toLAB()[0]; }
+
+  /// Measure the chroma.
+  [[nodiscard]] float chroma() const noexcept { return toLCH()[1]; }
+
+  /// Measure the hue.
+  [[nodiscard]] float hue() const noexcept { return toLCH()[2]; }
+
+  /// Quantify the perceptual distance with CIEDE2000.
+  [[nodiscard]] float distanceTo(const Color &other) const noexcept;
+
+  /// Quantify the perceptual contrast.
+  [[nodiscard]] float contrast(const Color &other) const noexcept;
+
+  enum class Anomaly {
+    Protan, ///< Red-green color blindness from defective L cones. (Protanopia)
+    Deutan, ///< Red-green color blindness from defective M cones. (Deuteranopia)
+    Tritan  ///< Blue-yellow color blindness from defective S cones. (Tritanopia)
+  };
+
+  /// Simulate color-blindness.
+  [[nodiscard]] Color simulate(Anomaly anomaly, float severity = 0.85f) const noexcept;
+
+  /// Shortcut for `simulate(Anomaly::Protan, severity)`.
+  [[nodiscard]] Color simulateProtan(float severity = 0.85f) const noexcept { return simulate(Anomaly::Protan, severity); }
+
+  /// Shortcut for `simulate(Anomaly::Deutan, severity)`.
+  [[nodiscard]] Color simulateDeutan(float severity = 0.85f) const noexcept { return simulate(Anomaly::Deutan, severity); }
+
+  /// Shortcut for `simulate(Anomaly::Tritan, severity)`.
+  [[nodiscard]] Color simulateTritan(float severity = 0.85f) const noexcept { return simulate(Anomaly::Tritan, severity); }
+
+  /// Construct ramp from LAB interpolation. (See rampFromContour())
+  [[nodiscard]] static std::vector<Color>
+  rampFromLAB(const Vector3f &valueLAB0, const Vector3f &valueLAB1, size_t numColors = 10, bool optimizePerception = true);
+
+  /// Construct ramp from LCH interpolation. (See rampFromContour())
+  [[nodiscard]] static std::vector<Color>
+  rampFromLCH(const Vector3f &valueLCH0, const Vector3f &valueLCH1, size_t numColors = 10, bool optimizePerception = true);
+
+  /// Construct ramp from an arbitrary color contour.
+  ///
+  /// If `optimizePerception` is true, the implementation will try to optimize the
+  /// perceptual gradient of the colors along the ramp. Because the calculation is restricted
+  /// to the 1-D space of the contour and an acceptable result does not require tons of precision,
+  /// the optimization is done by brute-force search to minimize a loss function.
+  ///
+  /// The loss function considers CIEDE2000 distance and APCA contrast for both standard
+  /// and color-deficient observers. I have not done any quantitative or qualitative validation
+  /// of this technique, but the results seem to be very robust and to hold up under simulated
+  /// deficiency visualizations. This is of course dependent on the colors appearing on the ramp
+  /// and the number of different colors we want, so your mileage may vary.
+  ///
+  [[nodiscard]] static std::vector<Color>
+  rampFromContour(const std::function<Color(float)> &colorContour, size_t numColors = 10, bool optimizePerception = true);
+
+  /// \}
+
+public:
+  /// \name Alpha
+  /// \{
+
+  /// The alpha channel.
+  [[nodiscard]] constexpr float alpha() const noexcept { return mValue[3]; }
+
+  /// Helper to separate the RGB channels from the alpha channel.
+  [[nodiscard]] constexpr auto detachAlpha() const noexcept -> std::pair<Vector3f, float> {
+    return {Vector3f(mValue), mValue[3]};
+  }
+
+  /// Is transparent? (Alpha < 1)
+  [[nodiscard]] constexpr bool isTransparent() const noexcept { return alpha() < 1; }
+
+  /// Is opaque? (Alpha == 1)
+  [[nodiscard]] constexpr bool isOpaque() const noexcept { return alpha() == 1; }
+
+  /// Alpha blend over the given color.
+  [[nodiscard]] Color over(const Color &other) const noexcept;
+
+  [[nodiscard]] Color fade(float fraction) const noexcept { return Color(Vector3f(mValue), saturate(fraction * alpha())); }
+
+  [[nodiscard]] Color lerpTo(float fraction, const Color &other) const noexcept {
+    return Vector4f(lerp(fraction, mValue, other.mValue));
+  }
+  /// \}
+
+  /// Extract RGB.
+  [[nodiscard]] operator Vector3f() const noexcept { return mValue; }
+
+  /// Extract RGBA.
+  [[nodiscard]] operator Vector4f() const noexcept { return mValue; }
+
+  /// Extract SRGB8.
+  [[nodiscard]] operator Vector3b() const noexcept;
+
+  /// Extract SRGBA8.
+  [[nodiscard]] operator Vector4b() const noexcept;
+
+private:
+  Vector4f mValue{};
+};
+
+} // namespace mi::ui

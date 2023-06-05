@@ -1,0 +1,463 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Differentiable"
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+template <typename Value> struct Quaternion : ArrayLike<Quaternion<Value>> {
+public:
+  using Float = to_float_t<Value>;
+
+  static constexpr bool IsDual = concepts::differentiable<Value>;
+
+  constexpr Quaternion() noexcept = default;
+
+  constexpr Quaternion(const Quaternion &) noexcept = default;
+
+  constexpr Quaternion(Quaternion &&) noexcept = default;
+
+  constexpr Quaternion &operator=(const Quaternion &) noexcept = default;
+
+  constexpr Quaternion &operator=(Quaternion &&) noexcept = default;
+
+  constexpr Quaternion(const Value &coeffW) noexcept : mCoeffs{coeffW, Value(0), Value(0), Value(0)} {}
+
+  constexpr Quaternion(const Value &coeffW, const Value &coeffX, const Value &coeffY, const Value &coeffZ) noexcept
+    : mCoeffs{coeffW, coeffX, coeffY, coeffZ} {}
+
+  constexpr Quaternion(const Value &coeffW, const Vector3<Value> &coeffV) noexcept
+    : mCoeffs{coeffW, coeffV[0], coeffV[1], coeffV[2]} {}
+
+  constexpr Quaternion(const Vector4<Value> &coeffs) noexcept : mCoeffs{coeffs} {}
+
+  template <typename Expr> requires(concepts::tensor_with_shape<Expr, 4> && concepts::tensor_lambda<Expr>)
+  constexpr Quaternion(Expr &&expr) : mCoeffs{std::forward<Expr>(expr)} {}
+
+  constexpr Quaternion(const Quaternion<Float> &quaternionQ, const Quaternion<Float> &quaternionR = {}) noexcept
+    requires(IsDual)
+    : mCoeffs{
+        Differentiable<Float>{quaternionQ[0], quaternionR[0]}, //
+        Differentiable<Float>{quaternionQ[1], quaternionR[1]}, //
+        Differentiable<Float>{quaternionQ[2], quaternionR[2]}, //
+        Differentiable<Float>{quaternionQ[3], quaternionR[3]}} {}
+
+  constexpr Quaternion(const Quaternion<Float> &quaternionQ, const Vector3<Float> &vectorV) noexcept requires(IsDual)
+    : Quaternion(quaternionQ, Quaternion<Float>(0, Float(0.5) * vectorV) * quaternionQ) {}
+
+  explicit Quaternion(const Matrix3<Float> &matrix) noexcept {
+    Quaternion<Float> quaternion;
+    quaternion[0] = trace(matrix);
+    if (quaternion[0] > 0) {
+      quaternion[0] += 1;
+      quaternion[1] = -matrix(1, 2) + matrix(2, 1);
+      quaternion[2] = -matrix(2, 0) + matrix(0, 2);
+      quaternion[3] = -matrix(0, 1) + matrix(1, 0);
+      quaternion *= Float(0.5) / sqrt(quaternion[0]);
+    } else {
+      int i = argmax(diag(matrix));
+      int j = (i + 1) % 3;
+      int k = (j + 1) % 3;
+      quaternion[0] = matrix(j, k) - matrix(k, j);
+      quaternion[1 + i] = -matrix(i, i) + matrix(j, j) + matrix(k, k) - 1;
+      quaternion[1 + j] = -matrix(i, j) - matrix(j, i);
+      quaternion[1 + k] = -matrix(k, i) - matrix(i, k);
+      quaternion *= Float(0.5) / sqrt(-quaternion[1 + i]);
+    }
+    new (this) Quaternion(quaternion);
+  }
+
+  explicit Quaternion(const Matrix4<Float> &matrix) noexcept {
+    Matrix3<Float> linear = matrix(Slice<0, 3>(), Slice<0, 3>());
+    Vector3<Float> affine = matrix(Slice<0, 3>(), 3);
+    if constexpr (IsDual)
+      new (this) Quaternion(Quaternion<Float>(linear), Vector3<Float>(affine));
+    else
+      new (this) Quaternion(linear);
+  }
+
+public:
+  MI_ARRAY_LIKE_CONSTEXPR_DATA(&mCoeffs[0])
+
+  MI_ARRAY_LIKE_STATIC_CONSTEXPR_SIZE(4)
+
+public:
+  [[nodiscard]] constexpr Vector4<Value> coeffs() const noexcept { return mCoeffs; }
+
+  [[nodiscard]] constexpr Value scalar() const noexcept { return mCoeffs[0]; }
+
+  [[nodiscard]] constexpr Vector3<Value> vector() const noexcept { return mCoeffs[Slice<1, ToEnd>()]; }
+
+  // TODO There has to be a better way
+  [[nodiscard]] constexpr Quaternion<Float> real() const noexcept {
+    if constexpr (IsDual)
+      return {mCoeffs[0].value(), mCoeffs[1].value(), mCoeffs[2].value(), mCoeffs[3].value()};
+    else
+      return *this;
+  }
+
+  // TODO There has to be a better way
+  [[nodiscard]] constexpr Quaternion<Float> dual() const noexcept {
+    if constexpr (IsDual)
+      return {mCoeffs[0].deriv(), mCoeffs[1].deriv(), mCoeffs[2].deriv(), mCoeffs[3].deriv()};
+    else
+      return {};
+  }
+
+  [[nodiscard]] Float rotationAngle() const noexcept { return 2 * atan2(length(real().vector()), real().scalar()); }
+
+  [[nodiscard]] Vector3<Float> rotationAxis() const noexcept { return normalize(real().vector()); }
+
+  [[nodiscard]] Vector3<Float> translation() const noexcept {
+    if constexpr (IsDual)
+      return 2 * (dual() * conj(real())).vector();
+    else
+      return Vector3<Float>();
+  }
+
+  [[nodiscard]] Vector3<Float> applyLinear(const Vector3<Float> &vectorU) const noexcept {
+    Float scalarS = real().scalar();
+    Vector3<Float> vectorV = real().vector();
+    Vector3<Float> vectorW = cross(vectorV, vectorU);
+    return (scalarS * scalarS) * vectorU + (2 * scalarS) * vectorW +
+           (cross(vectorV, vectorW) + vectorV * dot(vectorV, vectorU));
+  }
+
+  [[nodiscard]] Vector3<Float> applyAffine(const Vector3<Float> &vectorU) const noexcept {
+    return applyLinear(vectorU) + translation();
+  }
+
+  [[nodiscard]] Vector3<Float> applyNormal(const Vector3<Float> &vectorU) const noexcept { return applyLinear(vectorU); }
+
+  [[nodiscard]] Vector3<Float> basisX() const noexcept { return applyLinear(Vector3<Float>::unitX()); }
+
+  [[nodiscard]] Vector3<Float> basisY() const noexcept { return applyLinear(Vector3<Float>::unitY()); }
+
+  [[nodiscard]] Vector3<Float> basisZ() const noexcept { return applyLinear(Vector3<Float>::unitZ()); }
+
+  [[nodiscard]] constexpr operator Matrix3<Float>() const noexcept {
+    Matrix3<Float> matrix;
+    auto scalarS = real().scalar();
+    auto vectorV = real().vector();
+    for (size_t i = 0; i < 3; i++) {
+      size_t j = (i + 1) % 3;
+      size_t k = (i + 2) % 3;
+      matrix(i, i) = scalarS * scalarS;
+      matrix(i, i) += vectorV[i] * vectorV[i];
+      matrix(i, i) -= vectorV[j] * vectorV[j] + vectorV[k] * vectorV[k];
+      matrix(i, j) = 2 * (vectorV[i] * vectorV[j] - scalarS * vectorV[k]);
+      matrix(i, k) = 2 * (vectorV[i] * vectorV[k] + scalarS * vectorV[j]);
+    }
+    return matrix;
+  }
+
+  [[nodiscard]] constexpr operator Matrix4<Float>() const noexcept {
+    Matrix4<Float> matrix;
+    matrix(Slice<0, 3>(), Slice<0, 3>()).assign(Matrix3<Float>(*this));
+    matrix(Slice<0, 3>(), 3).assign(translation());
+    matrix(3, 3) = 1;
+    return matrix;
+  }
+
+private:
+  Vector4<Value> mCoeffs = {0, 0, 0, 0};
+
+public:
+  [[nodiscard]] static Quaternion identity() noexcept { return Quaternion(Value(1)); }
+
+  /// Rotate one vector onto another vector.
+  [[nodiscard]] static Quaternion rotate(const Vector3<Float> &vectorU, const Vector3<Float> &vectorV) noexcept {
+    auto lenU = length(vectorU);
+    auto lenV = length(vectorV);
+    return normalize(Quaternion<Float>(lenU * lenV + dot(vectorU, vectorV), cross(vectorU, vectorV)));
+  }
+
+  /// Rotate counter-clockwise around arbitrary axis.
+  [[nodiscard]] static Quaternion rotate(Float theta, const Vector3<Float> &vectorU) noexcept {
+    return Quaternion<Float>(cos(Float(0.5) * theta), sin(Float(0.5) * theta) * normalize(vectorU));
+  }
+
+  /// Rotate counter-clockwise around X-axis.
+  [[nodiscard]] static Quaternion rotateX(Float theta) noexcept { return rotate(theta, Vector3<Float>::unitX()); }
+
+  /// Rotate counter-clockwise around Y-axis.
+  [[nodiscard]] static Quaternion rotateY(Float theta) noexcept { return rotate(theta, Vector3<Float>::unitY()); }
+
+  /// Rotate counter-clockwise around Z-axis.
+  [[nodiscard]] static Quaternion rotateZ(Float theta) noexcept { return rotate(theta, Vector3<Float>::unitZ()); }
+
+  [[nodiscard]] static Quaternion translate(const Vector3<Float> &vectorU) noexcept requires(IsDual) {
+    return {
+      Differentiable<Float>(1, 0),                       //
+      Differentiable<Float>(0, Float(0.5) * vectorU[0]), //
+      Differentiable<Float>(0, Float(0.5) * vectorU[1]), //
+      Differentiable<Float>(0, Float(0.5) * vectorU[2])};
+  }
+
+  [[nodiscard]] static Quaternion
+  lookAt(const Vector3<Float> &source, const Vector3<Float> &target, const Vector3<Float> &up) noexcept requires(IsDual) {
+    return Quaternion(Matrix4<Float>::lookAt(source, target, up));
+  }
+
+  /// Constructs a screw generator given two points and the pitch.
+  ///
+  /// \param[in] pointP  The first point on the screw line.
+  /// \param[in] pointQ  The other point on the screw line.
+  /// \param[in] pitch   The pitch, or rate of rotation.
+  ///
+  /// \note
+  /// The screw transform is obtained by taking the exponential of real scalar multiples of the generator.
+  ///
+  [[nodiscard]] static Quaternion
+  screwGenerator(const Vector3<Float> &pointP, const Vector3<Float> &pointQ, Float pitch) noexcept requires(IsDual) {
+    Vector3<Float> vectorL = normalize(pointQ - pointP);
+    Vector3<Float> vectorM = cross(pointP, vectorL);
+    Differentiable<Float> phi = {pitch, 1};
+    return Float(0.5) * phi * Quaternion(Quaternion<Float>(0, vectorL), Quaternion<Float>(0, vectorM));
+  }
+};
+
+template <concepts::number... Values> Quaternion(const Values &...) -> Quaternion<std::common_type_t<Values...>>;
+
+template <concepts::number ValueW, typename ValueV> requires(concepts::tensor_with_shape<ValueV, 3>)
+Quaternion(const ValueW &, ValueV &&) -> Quaternion<std::common_type_t<ValueW, value_type_t<ValueV>>>;
+
+template <typename ValueV> requires(concepts::tensor_with_shape<ValueV, 4>)
+Quaternion(ValueV &&) -> Quaternion<value_type_t<ValueV>>;
+
+template <std::floating_point FloatQ, std::floating_point FloatR>
+Quaternion(const Quaternion<FloatQ> &, const Quaternion<FloatR> &)
+  -> Quaternion<Differentiable<std::common_type_t<FloatQ, FloatR>>>;
+
+[[nodiscard, strong_inline]] constexpr auto conj(concepts::match<Quaternion> auto const &quaternion) {
+  return Quaternion(quaternion.scalar(), -quaternion.vector());
+}
+
+[[nodiscard, strong_inline]] constexpr auto norm(concepts::match<Quaternion> auto const &quaternion) {
+  return lengthSquare(quaternion.coeffs());
+}
+
+[[nodiscard, strong_inline]] inline auto
+dot(concepts::match<Quaternion> auto const &quaternionQ, concepts::match<Quaternion> auto const &quaternionR) {
+  return dot(quaternionQ.coeffs(), quaternionR.coeffs());
+}
+
+[[nodiscard, strong_inline]] inline auto length(concepts::match<Quaternion> auto const &quaternion) {
+  return length(quaternion.real().coeffs());
+}
+
+[[nodiscard, strong_inline]] inline auto lengthSquare(concepts::match<Quaternion> auto const &quaternion) {
+  return lengthSquare(quaternion.real().coeffs());
+}
+
+[[nodiscard, strong_inline]] inline auto normalize(concepts::match<Quaternion> auto const &quaternion) {
+  return quaternion / length(quaternion.real().coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto inverse(concepts::match<Quaternion> auto const &quaternion) {
+  return conj(quaternion) / norm(quaternion);
+}
+
+[[nodiscard, strong_inline]] constexpr auto operator+(concepts::match<Quaternion> auto const &quaternion) noexcept {
+  return quaternion;
+}
+
+[[nodiscard, strong_inline]] constexpr auto operator-(concepts::match<Quaternion> auto const &quaternion) noexcept {
+  return Quaternion(-quaternion.coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator+(concepts::match<Quaternion> auto const &quaternion, concepts::number auto scalar) {
+  return Quaternion(quaternion.coeffs() + scalar);
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator-(concepts::match<Quaternion> auto const &quaternion, concepts::number auto scalar) {
+  return Quaternion(quaternion.coeffs() - scalar);
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator*(concepts::match<Quaternion> auto const &quaternion, concepts::number auto scalar) {
+  return Quaternion(quaternion.coeffs() * scalar);
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator/(concepts::match<Quaternion> auto const &quaternion, concepts::number auto scalar) {
+  return Quaternion(quaternion.coeffs() / scalar);
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator+(concepts::number auto scalar, concepts::match<Quaternion> auto const &quaternion) {
+  return Quaternion(scalar + quaternion.coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator-(concepts::number auto scalar, concepts::match<Quaternion> auto const &quaternion) {
+  return Quaternion(scalar - quaternion.coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator*(concepts::number auto scalar, concepts::match<Quaternion> auto const &quaternion) {
+  return Quaternion(scalar * quaternion.coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator/(concepts::number auto scalar, concepts::match<Quaternion> auto const &quaternion) {
+  return (scalar / norm(quaternion)) * conj(quaternion);
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator+(concepts::match<Quaternion> auto const &quaternionQ, concepts::match<Quaternion> auto const &quaternionR) {
+  return Quaternion(quaternionQ.coeffs() + quaternionR.coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator-(concepts::match<Quaternion> auto const &quaternionQ, concepts::match<Quaternion> auto const &quaternionR) {
+  return Quaternion(quaternionQ.coeffs() - quaternionR.coeffs());
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator*(concepts::match<Quaternion> auto const &quaternionQ, concepts::match<Quaternion> auto const &quaternionR) {
+  auto scalarQ = quaternionQ.scalar();
+  auto vectorQ = quaternionQ.vector();
+  auto scalarR = quaternionR.scalar();
+  auto vectorR = quaternionR.vector();
+  return Quaternion(scalarQ * scalarR - dot(vectorQ, vectorR), scalarQ * vectorR + vectorQ * scalarR + cross(vectorQ, vectorR));
+}
+
+[[nodiscard, strong_inline]] constexpr auto
+operator/(concepts::match<Quaternion> auto const &quaternionQ, concepts::match<Quaternion> auto const &quaternionR) {
+  return quaternionQ * inverse(quaternionR);
+}
+
+constexpr auto &operator+=(concepts::match<Quaternion> auto &quaternion, const auto &any) {
+  return quaternion = quaternion + any;
+}
+
+constexpr auto &operator-=(concepts::match<Quaternion> auto &quaternion, const auto &any) {
+  return quaternion = quaternion - any;
+}
+
+constexpr auto &operator*=(concepts::match<Quaternion> auto &quaternion, const auto &any) {
+  return quaternion = quaternion * any;
+}
+
+constexpr auto &operator/=(concepts::match<Quaternion> auto &quaternion, const auto &any) {
+  return quaternion = quaternion / any;
+}
+
+template <std::floating_point Float>
+[[nodiscard, gnu::flatten]] inline Quaternion<Float> slerp( //
+  Float mu, Quaternion<Float> quaternionQ, Quaternion<Float> quaternionR, Quaternion<Float> *deriv = nullptr) noexcept {
+  Float cosTheta = clamp(dot(quaternionQ, quaternionR), -1, +1);
+  if (!(cosTheta > 0)) cosTheta = -cosTheta, quaternionR = -quaternionR; // Take the shortest path
+  if (!(cosTheta < Float(0.9999))) {
+    Quaternion quaternion = lerp(mu, quaternionQ, quaternionR);
+    Float invLen2 = Float(1) / norm(quaternion);
+    Float invLen1 = sqrt(invLen2);
+    quaternion *= invLen1;
+    if (deriv) *deriv = invLen1 * (quaternionR - quaternionQ) + invLen2 * (1 - 2 * mu) * (1 - cosTheta) * quaternion;
+    return quaternion;
+  } else {
+    Float theta = angleBetweenUnitLength(quaternionQ.coeffs(), quaternionR.coeffs());
+    Float sinMuTheta = sin(mu * theta);
+    Float cosMuTheta = cos(mu * theta);
+    Quaternion quaternionPerp = normalize(quaternionR - cosTheta * quaternionQ);
+    Quaternion quaternion = cosMuTheta * quaternionQ + sinMuTheta * quaternionPerp;
+    if (deriv)
+      *deriv = (theta * cosMuTheta) * quaternionPerp - //
+               (theta * sinMuTheta) * quaternionQ;
+    return quaternion;
+  }
+}
+
+template <std::floating_point Float>
+[[nodiscard, gnu::flatten]] inline Quaternion<Differentiable<Float>> slerp(
+  Float mu, Quaternion<Differentiable<Float>> quaternionQ, Quaternion<Differentiable<Float>> quaternionR,
+  Quaternion<Differentiable<Float>> *deriv = nullptr) noexcept {
+  Quaternion<Float> realPartQ = quaternionQ.real(), dualPartQ = quaternionQ.dual();
+  Quaternion<Float> realPartR = quaternionR.real(), dualPartR = quaternionR.dual();
+  if (!(dot(realPartQ, realPartR) > 0)) { // Take the shortest path.
+    realPartR = -realPartR;
+    dualPartR = -dualPartR;
+  }
+  Quaternion<Float> realPartDeriv{};
+  Quaternion<Float> dualPartDeriv{dualPartR - dualPartQ};
+  Quaternion<Float> realPart = slerp(mu, realPartQ, realPartR, &realPartDeriv);
+  Quaternion<Float> dualPart = lerp(mu, dualPartQ, dualPartR);
+  if (deriv) *deriv = {realPartDeriv, dualPartDeriv};
+  return {realPart, dualPart};
+}
+
+[[nodiscard]] inline auto exp(concepts::match<Quaternion> auto const &quaternion) {
+  auto scalar = quaternion.scalar();
+  auto vector = quaternion.vector();
+  auto phi = sqrt(dot(vector, vector));
+  auto cosPhi = cos(phi);
+  auto sinPhi = sin(phi);
+  if (abs(phi) > 0)
+    sinPhi /= phi;
+  else
+    sinPhi = decltype(sinPhi)(1); // Limit of sin(x)/x
+  return exp(scalar) * Quaternion(cosPhi, sinPhi * vector);
+}
+
+[[nodiscard]] inline auto log(concepts::match<Quaternion> auto const &quaternion) {
+  auto scalar = quaternion.scalar();
+  auto vector = quaternion.vector();
+  auto vectorLen = sqrt(dot(vector, vector));
+  auto phi = atan2(vectorLen, scalar);
+  if (abs(vectorLen) > 0)
+    phi /= vectorLen;
+  else
+    phi = decltype(scalar)(1) / scalar; // Limit of atan(y/x)/y
+  auto coeffs = quaternion.coeffs();
+  auto coeffsLen = sqrt(dot(coeffs, coeffs));
+  return Quaternion(log(coeffsLen), phi * vector);
+}
+
+[[nodiscard]] inline auto pow(concepts::match<Quaternion> auto const &quaternion, concepts::arithmetic auto exponent) {
+  auto scalar = quaternion.scalar();
+  auto vector = quaternion.vector();
+  auto vectorLen = sqrt(dot(vector, vector));
+  auto phi = decltype(scalar)(exponent) * atan2(vectorLen, scalar);
+  auto cosPhi = cos(phi);
+  auto sinPhi = sin(phi);
+  if (abs(vectorLen) > 0)
+    sinPhi /= vectorLen;
+  else
+    sinPhi = decltype(scalar)(exponent) / scalar; // Limit of sin(p atan(y/x))/y
+  auto coeffs = quaternion.coeffs();
+  auto coeffsLen = sqrt(dot(coeffs, coeffs));
+  return pow(coeffsLen, decltype(coeffsLen)(exponent)) * Quaternion(cosPhi, sinPhi * vector);
+}
+
+template <auto Thresh> [[nodiscard]] inline bool isNearIdentity(concepts::match<Quaternion> auto const &quaternion) {
+  return isNear<Thresh>(quaternion, decltype(quaternion)(1));
+}
+
+template <auto Thresh>
+[[nodiscard]] inline bool isNear(
+  concepts::match<Quaternion> auto const &quaternionQ, //
+  concepts::match<Quaternion> auto const &quaternionR) {
+  return isNear<Thresh>(quaternionQ.coeffs(), quaternionR.coeffs());
+}
+
+template <std::floating_point Float, typename ExprA, typename ExprB>
+requires(concepts::tensor_with_shape<ExprA, 3> && concepts::tensor_with_shape<ExprB, 3>)
+[[nodiscard]] inline auto rotateByAngleAxis(Float angle, ExprA &&exprA, ExprB &&exprB) {
+  return Quaternion<Float>::rotate(angle, normalize(auto_forward(exprA))).applyLinear(auto_forward(exprB));
+}
+
+using Quaternionf = Quaternion<float>;
+using Quaterniond = Quaternion<double>;
+
+template <std::floating_point Float> using DualQuaternion = Quaternion<Dual<Float>>;
+using DualQuaternionf = DualQuaternion<float>;
+using DualQuaterniond = DualQuaternion<double>;
+
+template <typename Value> struct to_float<Quaternion<Value>> : to_float<Value> {};
+template <typename Value> struct to_field<Quaternion<Value>> : to_field<Value> {};
+
+} // namespace mi

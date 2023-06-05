@@ -1,0 +1,102 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+/// The difference over the sum, for convenience.
+[[nodiscard]] constexpr auto differenceOverSum(auto valueA, auto valueB) noexcept {
+  return (valueA - valueB) / (valueA + valueB);
+}
+
+/// Calculate the critical angle in radians. This is the angle beyond which Total Internal Reflection (TIR) occurs.
+[[nodiscard]] inline double criticalAngle(double etaI, double etaT) noexcept { return asin(min(etaT / etaI, 1.0)); }
+
+/// Calculate the Brewster angle in radians. This is the angle at which the p-polarization mode is perfectly transmitted.
+[[nodiscard]] inline double brewsterAngle(double etaI, double etaT) noexcept { return atan(etaT / etaI); }
+
+/// Schlick's approximation for the Fresnel term.
+[[nodiscard]] inline double schlickApproximation(double cosThetaI, double eta) noexcept {
+  double R0 = sqr(differenceOverSum(eta, 1));
+  return R0 + (1.0 - R0) * nthPow(1 - abs(cosThetaI), 5);
+}
+
+/// \overload
+[[nodiscard]] inline double schlickApproximation(double cosThetaI, double etaI, double etaT) noexcept {
+  return schlickApproximation(cosThetaI, etaI / etaT);
+}
+
+struct MI_RENDER_API FresnelTerms {
+  FresnelTerms() noexcept = default;
+
+  explicit FresnelTerms(auto cosThetaI, complex<double> eta) noexcept
+    : eta(eta), cosThetaI(cosThetaI), cosThetaT(sign(cosThetaI) * sqrt(1.0 - sqr(eta) * (1.0 - sqr(cosThetaI)))),
+      Rs(differenceOverSum(eta * cosThetaI, cosThetaT)), Rp(differenceOverSum(cosThetaI, eta * cosThetaT)), Ts((1.0 + Rs)),
+      Tp((1.0 + Rp) * eta) {}
+
+  explicit FresnelTerms(auto cosThetaI, complex<double> etaI, complex<double> etaT) noexcept
+    : FresnelTerms(cosThetaI, etaI / etaT) {}
+
+  /// The reflectance for the s-polarization mode.
+  [[nodiscard]] double powerRs() const noexcept { return norm(Rs); }
+
+  /// The reflectance for the p-polarization mode.
+  [[nodiscard]] double powerRp() const noexcept { return norm(Rp); }
+
+  /// The transmittance for the s-polarization mode.
+  [[nodiscard]] double powerTs() const noexcept { return norm(Ts) * abs(cosThetaT / (eta * cosThetaI)); }
+
+  /// The transmittance for the p-polarization mode.
+  [[nodiscard]] double powerTp() const noexcept { return norm(Tp) * abs(cosThetaT / (eta * cosThetaI)); }
+
+  /// The reflectance.
+  [[nodiscard]] double powerR() const noexcept { return (powerRs() + powerRp()) / 2; }
+
+  /// The transmittance.
+  [[nodiscard]] double powerT() const noexcept { return (powerTs() + powerTp()) / 2; }
+
+  /// The reflectance or transmissmittance.
+  [[nodiscard]] double powerROrT(bool isR) const noexcept { return isR ? powerR() : powerT(); }
+
+  /// Has evanescent transmission?
+  [[nodiscard]] bool evanescentTransmission() const noexcept { return cosThetaT.imag() != 0; }
+
+  /// The refractive index.
+  complex<double> eta{};
+
+  /// The cosine of the angle of incidence.
+  complex<double> cosThetaI{};
+
+  /// The cosine of the angle of transmission, with the same sign as the cosine of the angle of incidence.
+  complex<double> cosThetaT{};
+
+  /// The polarized coefficients for reflection.
+  complex<double> Rs{}, Rp{};
+
+  /// The polarized coefficients for transmission.
+  complex<double> Ts{}, Tp{};
+
+  struct Layer {
+    /// The thickness.
+    double tau{};
+
+    /// The refractive index.
+    complex<double> eta{};
+  };
+
+  [[nodiscard]] static FresnelTerms forLayers( //
+    double cosThetaI, double eta0, IteratorRange<const Layer *> layers, double waveLen) noexcept;
+};
+
+using FresnelR = std::function<void(Spectrum &f, double cosThetaF, bool isOutsideF)>;
+
+MI_RENDER_API [[nodiscard]] FresnelR schlickFresnelR(double eta);
+
+MI_RENDER_API [[nodiscard]] FresnelR dielectricFresnelR(double eta);
+
+MI_RENDER_API [[nodiscard]] FresnelR dielectricFresnelR(Spectrum eta);
+
+MI_RENDER_API [[nodiscard]] FresnelR conductiveFresnelR(ComplexSpectrum eta);
+
+} // namespace mi::render

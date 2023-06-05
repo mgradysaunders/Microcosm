@@ -1,0 +1,288 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+struct MicrosurfaceHeight;
+
+struct MicrosurfaceSlope;
+
+struct Microsurface;
+
+template <typename Value>
+concept is_microsurface_height = std::same_as<typename std::decay_t<Value>::microsurface_height_tag, std::true_type>;
+
+template <typename Value>
+concept is_microsurface_slope = std::same_as<typename std::decay_t<Value>::microsurface_slope_tag, std::true_type>;
+
+struct MI_RENDER_API MicrosurfaceHeight final : Any {
+public:
+  using HeightPDF = std::function<double(const MicrosurfaceHeight &self, double value)>;
+
+  using HeightCDF = std::function<double(const MicrosurfaceHeight &self, double value)>;
+
+  using HeightSample = std::function<double(const MicrosurfaceHeight &self, double sampleU)>;
+
+  MicrosurfaceHeight() noexcept = default;
+
+  MicrosurfaceHeight(
+    std::in_place_t, std::any any, HeightPDF heightPDF, HeightCDF heightCDF,
+    HeightSample heightSample) noexcept
+    : Any(std::move(any)),              //
+      mHeightPDF(std::move(heightPDF)), //
+      mHeightCDF(std::move(heightCDF)), //
+      mHeightSample(std::move(heightSample)) {}
+
+  template <typename Value> requires is_microsurface_height<Value> MicrosurfaceHeight(Value &&value)
+    : MicrosurfaceHeight(
+        std::in_place, std::any(std::forward<Value>(value)),
+        [](auto &self, double value) { return self.template as<Value>().heightPDF(value); },
+        [](auto &self, double value) { return self.template as<Value>().heightCDF(value); },
+        [](auto &self, double sampleU) { return self.template as<Value>().heightSample(sampleU); }) {}
+
+public:
+  [[nodiscard, strong_inline]] double heightPDF(double value) const { return mHeightPDF(*this, value); }
+
+  [[nodiscard, strong_inline]] double heightCDF(double value) const { return mHeightCDF(*this, value); }
+
+  [[nodiscard, strong_inline]] double heightSample(double sampleU) const { return mHeightSample(*this, sampleU); }
+
+private:
+  HeightPDF mHeightPDF{};
+
+  HeightCDF mHeightCDF{};
+
+  HeightSample mHeightSample{};
+};
+
+struct MI_RENDER_API UniformMicrosurfaceHeight final {
+public:
+  using microsurface_height_tag = std::true_type;
+
+  [[nodiscard]] double heightPDF(double value) const noexcept { return distributions::Uniform(-1, 1).distributionPDF(value); }
+
+  [[nodiscard]] double heightCDF(double value) const noexcept { return distributions::Uniform(-1, 1).distributionCDF(value); }
+
+  [[nodiscard]] double heightSample(double sampleU) const noexcept {
+    return distributions::Uniform(-1, 1).distributionSample(sampleU);
+  }
+};
+
+struct MI_RENDER_API NormalMicrosurfaceHeight final {
+public:
+  using microsurface_height_tag = std::true_type;
+
+  [[nodiscard]] double heightPDF(double value) const noexcept { return distributions::Normal(0, 1).distributionPDF(value); }
+
+  [[nodiscard]] double heightCDF(double value) const noexcept { return distributions::Normal(0, 1).distributionCDF(value); }
+
+  [[nodiscard]] double heightSample(double sampleU) const noexcept {
+    return distributions::Normal(0, 1).distributionSample(sampleU);
+  }
+};
+
+MI_RENDER_API extern const MicrosurfaceHeight uniformMicrosurfaceHeight;
+
+MI_RENDER_API extern const MicrosurfaceHeight normalMicrosurfaceHeight;
+
+struct MI_RENDER_API MicrosurfaceSlope final : Any {
+public:
+  using SmithLambda = std::function<double(const MicrosurfaceSlope &self, double slopeO)>;
+
+  using SlopePDF = std::function<double(const MicrosurfaceSlope &self, Vector2d slopeM)>;
+
+  using VisibleSlopeSample = std::function<Vector2d(const MicrosurfaceSlope &self, Vector2d sampleU, double cosThetaO)>;
+
+  MicrosurfaceSlope() noexcept = default;
+
+  MicrosurfaceSlope(
+    std::in_place_t, std::any any, SmithLambda smithLambda, SlopePDF slopePDF, VisibleSlopeSample visibleSlopeSample) noexcept
+    : Any(std::move(any)),                  //
+      mSmithLambda(std::move(smithLambda)), //
+      mSlopePDF(std::move(slopePDF)),       //
+      mVisibleSlopeSample(std::move(visibleSlopeSample)) {}
+
+  template <typename Value> requires is_microsurface_slope<Value> MicrosurfaceSlope(Value &&value)
+    : MicrosurfaceSlope(
+        std::in_place, std::any(std::forward<Value>(value)),
+        [](auto &self, auto &&...args) { return self.template as<Value>().smithLambda(auto_forward(args)...); },
+        [](auto &self, auto &&...args) { return self.template as<Value>().slopePDF(auto_forward(args)...); },
+        [](auto &self, auto &&...args) { return self.template as<Value>().visibleSlopeSample(auto_forward(args)...); }) {}
+
+public:
+  [[nodiscard, strong_inline]] double smithLambda(double slopeO) const { return mSmithLambda(*this, slopeO); }
+
+  [[nodiscard, strong_inline]] double slopePDF(Vector2d slopeM) const { return mSlopePDF(*this, slopeM); }
+
+  [[nodiscard, strong_inline]] Vector2d visibleSlopeSample(Vector2d sampleU, double cosThetaO) const {
+    return mVisibleSlopeSample(*this, sampleU, cosThetaO);
+  }
+
+private:
+  SmithLambda mSmithLambda{};
+
+  SlopePDF mSlopePDF{};
+
+  VisibleSlopeSample mVisibleSlopeSample{};
+};
+
+/// The GGX microsurface slope distribution, also known as Trowbridge-Reitz. Analogous to a Cauchy distribution.
+struct MI_RENDER_API GGXMicrosurfaceSlope final {
+public:
+  using microsurface_slope_tag = std::true_type;
+
+  [[nodiscard]] double smithLambda(double slopeO) const noexcept {
+    return copysign(0.5, slopeO) * sqrt(1 + 1 / sqr(slopeO)) - 0.5;
+  }
+
+  [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept { return OneOverPi / sqr(1 + lengthSquare(slopeM)); }
+
+  [[nodiscard]] Vector2d visibleSlopeSample(Vector2d sampleU, double cosThetaO) const noexcept;
+};
+
+/// The Beckmann microsurface slope distribution. Analogous to a Gaussian distribution.
+struct MI_RENDER_API BeckmannMicrosurfaceSlope final {
+public:
+  using microsurface_slope_tag = std::true_type;
+
+  [[nodiscard]] double smithLambda(double slopeO) const noexcept {
+    return 0.5 * OneOverSqrtPi * exp(-sqr(slopeO)) / slopeO - 0.5 * erfc(slopeO);
+  }
+
+  [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept { return OneOverPi * exp(-lengthSquare(slopeM)); }
+
+  [[nodiscard]] Vector2d visibleSlopeSample(Vector2d sampleU, double cosThetaO) const noexcept;
+};
+
+MI_RENDER_API extern const MicrosurfaceSlope ggxMicrosurfaceSlope;
+
+MI_RENDER_API extern const MicrosurfaceSlope beckmannMicrosurfaceSlope;
+
+struct MI_RENDER_API Microsurface final {
+public:
+  Microsurface() noexcept = default;
+
+  Microsurface(
+    Vector2d roughness,                                           //
+    const MicrosurfaceHeight &height = uniformMicrosurfaceHeight, //
+    const MicrosurfaceSlope &slope = ggxMicrosurfaceSlope)
+    : mRoughness(roughness), mHeight(height), mSlope(slope) {}
+
+  /// The Smith lambda function.
+  [[nodiscard]] double smithLambda(Vector3d omega) const noexcept {
+    return mSlope.smithLambda(omega[2] / hypot(mRoughness[0] * omega[0], mRoughness[1] * omega[1]));
+  }
+
+  /// The projected area.
+  [[nodiscard]] double projectedArea(Vector3d omega) const noexcept { //
+    return (1 + smithLambda(omega)) * omega[2];
+  }
+
+  /// The shadowing function. Note: This is the expectation of G1(ω, h0) over all heights.
+  [[nodiscard]] double shadowG1(Vector3d omega) const noexcept {
+    return isUpperHemisphere(omega) ? 1 / (1 + smithLambda(omega)) : 0;
+  }
+
+  /// The height-specific shadowing function.
+  [[nodiscard]] double shadowG1(Vector3d omega, double h0) const noexcept {
+    return isUpperHemisphere(omega) ? finiteOrZero(pow(mHeight.heightCDF(h0), smithLambda(omega))) : 0;
+  }
+
+  /// The bidirectional masking-shadowing function. Note: Intuitively, G2(ωo, ωi) is approximately equal to
+  /// the product of G1(ωo) and G1(ωi), and at least historically it was commonly defined this way. However, the
+  /// direct product of the one-side shadowing functions does not account for the fact that facets that are both
+  /// shadowed by light and masked to the observer should not be doubly counted. The correct version of G2 (which
+  /// depends on whether we are dealing with reflection or transmission) was laid out by Heitz in "Understanding
+  /// the Masking-Shadowing Function" (2014).
+  [[nodiscard]] double shadowG2(Vector3d omegaO, Vector3d omegaI) const noexcept {
+    // BRDF: G2(ωo, ωi) = 1 / (1 + Λ(ωo) + Λ(ωi))
+    // BTDF: G2(ωo, ωi) = B(1 + Λ(ωo), 1 + Λ(ωi))
+    double smithLambdaOmegaO{smithLambda(upperHemisphere(omegaO))};
+    double smithLambdaOmegaI{smithLambda(upperHemisphere(omegaI))};
+    return isSameHemisphere(omegaO, omegaI) ? 1 / (1 + smithLambdaOmegaO + smithLambdaOmegaI)
+                                            : std::beta(1 + smithLambdaOmegaO, 1 + smithLambdaOmegaI);
+  }
+
+  /// The slope Probability Density Function (PDF).
+  [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept {
+    return finiteOrZero(mSlope.slopePDF(slopeM / mRoughness) / mRoughness.product());
+  }
+
+  /// The normal Probability Density Function (PDF).
+  [[nodiscard]] double normalPDF(Vector3d omegaM) const noexcept;
+
+  /// The visible normal Probability Density Function (PDF) with respect to the given viewing direction.
+  [[nodiscard]] double visibleNormalPDF(Vector3d omegaO, Vector3d omegaM) const noexcept;
+
+  [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO) const noexcept;
+
+  [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO, bool isOutsideO) const noexcept {
+    return isOutsideO ? Vector3d(+visibleNormalSample(sampleU, +omegaO)) : Vector3d(-visibleNormalSample(sampleU, -omegaO));
+  }
+
+public:
+  /// \name Height Distribution
+  /// \{
+
+  [[nodiscard]] double heightPDF(double h) const noexcept { return mHeight.heightPDF(h); }
+
+  [[nodiscard]] double heightCDF(double h) const noexcept { return mHeight.heightCDF(h); }
+
+  [[nodiscard]] double heightSample(double sampleU) const noexcept { return mHeight.heightSample(sampleU); }
+
+  /// The visible height Probability Density Function (PDF). If the viewing direction is pointing down (z < 0) into
+  /// the microsurface, the function is normalized and non-zero for heights h1 less than h0. If the viewing direction
+  /// is pointing up (z > 0), the function integrates to 1-G1(ω, h0) and is thus less than normalized, with some
+  /// probability of not scattering, and is non-zero for heights h1 greater than h0.
+  [[nodiscard]] double visibleHeightPDF(Vector3d omega, double h0, double h1) const noexcept;
+
+  /// The visible height Cumulative Density Function (CDF).
+  [[nodiscard]] double visibleHeightCDF(Vector3d omega, double h0, double h1) const noexcept;
+
+  /// The visible height sampling routine.
+  [[nodiscard]] double visibleHeightSample(double sampleU, Vector3d omega, double h0) const noexcept;
+
+  /// \}
+
+public:
+  /// \name Volume Scattering Interpretation
+  /// \{
+
+  [[nodiscard]] double smithExtinction(Vector3d omega, double h) const noexcept {
+    return finiteOrZero(projectedArea(omega) * mHeight.heightPDF(h) / mHeight.heightCDF(h));
+  }
+
+  [[nodiscard]] double smithTransmission(Vector3d omega, double h0, double h1) const noexcept {
+    if (h0 < h1 && omega[2] < 0) return 0; // Increasing height but pointing down?
+    if (h0 > h1 && omega[2] > 0) return 0; // Decreasing height but pointing up?
+    return 1 - visibleHeightCDF(omega, h0, h1);
+  }
+
+  /// \}
+
+public:
+  struct SpecularTerms {
+    double value{};
+
+    BidirPDF bidirPDF{};
+  };
+
+  [[nodiscard]] SpecularTerms specularReflection(Vector3d omegaO, Vector3d omegaI) const noexcept;
+
+  [[nodiscard]] SpecularTerms specularRefraction(Vector3d omegaO, Vector3d omegaI, double eta) const noexcept;
+
+  [[nodiscard]] SpecularTerms specularRefraction(Vector3d omegaO, Vector3d omegaI, double etaO, double etaI) const noexcept {
+    return specularRefraction(omegaO, omegaI, etaO / etaI);
+  }
+
+private:
+  Vector2d mRoughness{0.5, 0.5};
+
+  const MicrosurfaceHeight &mHeight{uniformMicrosurfaceHeight};
+
+  const MicrosurfaceSlope &mSlope{ggxMicrosurfaceSlope};
+};
+
+} // namespace mi::render

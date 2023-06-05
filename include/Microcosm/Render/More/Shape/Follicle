@@ -1,0 +1,47 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Bezier"
+#include "Microcosm/Render/Manifold"
+
+namespace mi::render {
+
+struct MI_RENDER_API Follicle final {
+public:
+  using shape_tag = std::true_type;
+
+  enum class Kind {
+    Flat,  ///< Flat appearance.
+    Tube,  ///< Tube-like or cylindrical appearance.
+    Ribbon ///< Ribbon-like appearance.
+  };
+
+  [[nodiscard]] BoundBox3d box() const noexcept;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept;
+
+  [[nodiscard]] std::optional<double> intersectWithZAxis(double minParam, double maxParam, Manifold &manifold) const noexcept;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept;
+
+public:
+  Kind kind{};
+
+  double radiusA{0.1};
+
+  double radiusB{0.1};
+
+  Vector3d normalA{};
+
+  Vector3d normalB{};
+
+  Bezier3d<3> curve{};
+
+  void onTransform(auto &&transform) {
+    normalA = transform.applyNormal(normalA);
+    normalB = transform.applyNormal(normalB);
+    curve >>= transform;
+  }
+};
+
+} // namespace mi::render

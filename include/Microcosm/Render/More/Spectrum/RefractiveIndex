@@ -1,0 +1,60 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+template <typename Value = double> struct RefractiveIndex {
+public:
+  RefractiveIndex(double minWaveLen, double maxWaveLen, auto &&func)
+    : mMinKnownWaveLen(minWaveLen), mMaxKnownWaveLen(maxWaveLen), mFunction(auto_forward(func)) {}
+
+  [[nodiscard]] constexpr double minKnownWaveLen() const noexcept { return mMinKnownWaveLen; }
+
+  [[nodiscard]] constexpr double maxKnownWaveLen() const noexcept { return mMaxKnownWaveLen; }
+
+  [[nodiscard]] SpectrumOf<Value> operator()(const Spectrum &waveLens) const noexcept { return mFunction(waveLens); }
+
+private:
+  const double mMinKnownWaveLen{};
+
+  const double mMaxKnownWaveLen{};
+
+  const std::function<SpectrumOf<Value>(const Spectrum &waveLens)> mFunction{};
+};
+
+using DielectricRefractiveIndex = RefractiveIndex<double>;
+
+using ConductiveRefractiveIndex = RefractiveIndex<std::complex<double>>;
+
+enum class KnownGlass { BK7, BAF10, BAK1, FK51A, LASF9, SF5, SF10, SF11 };
+
+enum class KnownMetal {
+  Ag = 0, ///< Silver.
+  Al,     ///< Aluminum.
+  Au,     ///< Gold.
+  Co,     ///< Cobalt.
+  Cu,     ///< Copper.
+  CuZn,   ///< Copper+Zinc, also known as brass.
+  Fe,     ///< Iron.
+  Hg,     ///< Mercury.
+  Li,     ///< Lithium.
+  Mg,     ///< Magnesium.
+  Na,     ///< Sodium.
+  Ni,     ///< Nickel.
+  Pb,     ///< Lead.
+  Pt,     ///< Platinum.
+  Sn,     ///< Tin.
+  Ti,     ///< Titanium.
+  Zn      ///< Zinc.
+};
+
+MI_RENDER_API [[nodiscard]] DielectricRefractiveIndex
+refractiveIndexOfAir(double temperatureC = 15, double pressurekPa = 101.33);
+
+MI_RENDER_API [[nodiscard]] DielectricRefractiveIndex refractiveIndexOf(KnownGlass knownGlass);
+
+MI_RENDER_API [[nodiscard]] ConductiveRefractiveIndex refractiveIndexOf(KnownMetal knownMetal);
+
+} // namespace mi::render

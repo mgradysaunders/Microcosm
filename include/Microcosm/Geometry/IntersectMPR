@@ -1,0 +1,151 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/MinkowskiDifference"
+
+namespace mi::geometry {
+
+template <size_t N> struct MI_GEOMETRY_API IntersectMPR {
+public:
+  enum class ContainsOrigin : int { Maybe = -1, No = 0, Yes = 1 };
+
+  using Support = typename MinkowskiDifference<N>::Support;
+
+  MinkowskiDifference<N> minkowskiDifference{};
+
+  Support supports[N + 1]{};
+
+  struct Witness {
+    /// The barycentric coordinates of the closest point on the simplex to the origin.
+    Vector<float, N + 1> barycentric{};
+
+    /// The closest point on the simplex to the origin.
+    Vector<float, N> point{};
+
+    /// The normalized direction from the closest point to the origin.
+    Vector<float, N> direction{};
+
+    /// The current number of supports in the simplex. This maximizes at N + 1, but may
+    /// end up less than that if the origin is very close (within floating-point tolerance) of a
+    /// sub-simplex during initialization.
+    size_t rank{0};
+
+    [[nodiscard]] constexpr bool isFullRank() const noexcept { return rank == N + 1; }
+  } witness;
+
+  float tolerance{1e-5f};
+
+  size_t maxIterations{16};
+
+  [[nodiscard]] bool run();
+
+  [[nodiscard]] Vector<float, N> penetrationCenter() const noexcept;
+
+  [[nodiscard]] Vector<float, N> penetrationOffsetVector() const noexcept;
+
+private:
+  /// Extract range of supports as columns of an affine matrix.
+  ///
+  /// The matrix is constructed as follows:
+  /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.cpp}
+  /// Matrix<float, N + 1, B - A> matrix = {
+  ///   {supports[A].v[0], /* ... */, supports[B-1].v[0]},
+  ///   {supports[A].v[1], /* ... */, supports[B-1].v[1]},
+  ///   /* ... */
+  ///   {1.0f, /* ... */, 1.0f}};
+  /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  /// So, the bottom row is all ones, as if each support vector were extended to an affine vector
+  /// representing a point. This is useful for enforcing the condition that barycentric coordinates add
+  /// to one as a constraint in the linear system.
+  ///
+  template <size_t A, size_t B> requires(A < B && B <= N + 1)
+  [[nodiscard]] constexpr Matrix<float, N + 1, B - A> supportMatrix() const noexcept {
+    Matrix<float, N + 1, B - A> matrix{};
+    for (size_t i = 0; i < N; i++) {
+      for (size_t j = 0; j < B - A; j++) {
+        matrix(i, j) = supports[j + A].v[i];
+      }
+    }
+    matrix.row(N) = 1.0f;
+    return matrix;
+  }
+
+  /// Calculate the witness and find support for the given sub-simplex.
+  template <size_t A, size_t B> requires(A < B && B <= N + 1)
+  [[nodiscard]] ContainsOrigin calculateWitnessAndFindSupport(Support &support) noexcept {
+    witness.rank = B;
+    if constexpr (B - A == 1) {
+      witness.point = supports[A].v;
+      // Check if the first support point is already approximately the origin. In theory we
+      // could exit immediately, but we lack the information necessary to compute the penetration
+      // point and separation vector. So, arbitrarily clamp the witness point to be sufficiently
+      // outside the origin and carry on.
+      if (lengthSquare(witness.point) < sqr(8 * constants::Epsf)) [[unlikely]]
+        witness.point = clampLength(witness.point, 8 * constants::Epsf, constants::Inff);
+    } else {
+      witness.point = {};
+      witness.barycentric = {};
+      if constexpr (B - A == 2) {
+        // Solve directly for the nearest point on a line segment.
+        const auto &support0 = supports[A + 0];
+        const auto &support1 = supports[A + 1];
+        auto [point, param] = Line<float, N>(support0.v, support1.v).nearestTo(Vector<float, N>(), /*clampToSeg=*/true);
+        witness.point = point;
+        witness.barycentric[A + 0] = 1 - param;
+        witness.barycentric[A + 1] = param;
+#if 0
+      } else if constexpr (B - A == 3 && N < 4) {
+        // Solve directly for the nearest point on a triangle.
+        const auto &support0 = supports[A + 0];
+        const auto &support1 = supports[A + 1];
+        const auto &support2 = supports[A + 2];
+        auto location = Triangle<float, N>(support0.v, support1.v, support2.v).nearestTo(Vector<float, N>());
+        witness.point = location.point;
+        witness.barycentric[A + 0] = location.barycentric[0];
+        witness.barycentric[A + 1] = location.barycentric[1];
+        witness.barycentric[A + 2] = location.barycentric[2];
+#endif
+      } else {
+        try {
+          // Solve the generic linear system with singular-value decomposition, and clamp the result so that the witness is
+          // restricted to the interior of simplex. Note that barycentric coordinates are not exactly in correspondence with
+          // Voronoi regions, so clamping like this is not exactly correct! Technically we would need to check for the nearest
+          // point on sub-simplexes recursively, but for now just clamp.
+          witness.barycentric[Slice<A, B>()].assign(DecompSVD{supportMatrix<A, B>()}.solve(Vector<float, N>().append(1)));
+          witness.barycentric = max(witness.barycentric, 0.0f);
+          for (size_t j = A; j < B; j++) witness.point += witness.barycentric[j] * supports[j].v;
+        } catch (...) {
+          return ContainsOrigin::No; // Shouldn't happen unless the matrix is terribly ill-posed or full of NaNs.
+        }
+      }
+      // Check if the nearest point to the origin on the existing simplex is approximately the origin
+      // already. If so, we contain the origin without reaching full rank and, by now, we have enough
+      // information to calculate the intersection point and separation vector.
+      if (lengthSquare(witness.point) < sqr(constants::Epsf)) [[unlikely]]
+        return ContainsOrigin::Yes;
+    }
+    witness.direction = fastNormalize(witness.point);
+    if (dot(witness.direction, supports[0].v) > 0) witness.direction = -witness.direction;
+    // We know the origin O is in the direction D from the current sub-simplex. We find the farthest
+    // support P in the Minkowski difference along D. If we choose to think of that point like a vector
+    // V = P - O (which has the same coordinates, just thinking about it like an arrow instead of a spec),
+    // then we can see that the dot product dot(V, D) should never be negative. That is, the point should
+    // be on the other side of the origin, or else it is impossible to contain the origin.
+    support = minkowskiDifference.support(witness.direction);
+    if (fuzzySign(dot(witness.direction, support.v)) > FuzzySign::Zero) {
+      if constexpr (B == N + 1) {
+        return ContainsOrigin::Yes;
+      } else {
+        return ContainsOrigin::Maybe;
+      }
+    } else {
+      return ContainsOrigin::No;
+    }
+  }
+};
+
+using IntersectMPR2 = IntersectMPR<2>;
+using IntersectMPR3 = IntersectMPR<3>;
+using IntersectMPR4 = IntersectMPR<4>;
+
+} // namespace mi::geometry

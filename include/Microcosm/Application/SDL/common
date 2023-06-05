@@ -1,0 +1,114 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Application/SDL/Export.h"
+#include "Microcosm/utility"
+
+#include <SDL2/SDL_clipboard.h>
+#include <SDL2/SDL_log.h>
+#include <SDL2/SDL_timer.h>
+
+namespace mi::SDL {
+
+/// Assuming an error has occurred, throw an exception with `SDL_GetError()`.
+MI_SDL_API void throwError(const std::source_location &location = std::source_location::current());
+
+struct MI_SDL_API Version {
+  int major = 0;
+  int minor = 0;
+  int patch = 0;
+  std::string_view revision = {};
+
+  operator std::string() const;
+  [[nodiscard]] static Version running() noexcept;
+  [[nodiscard]] static Version builtAgainst() noexcept;
+};
+
+/// Analogous to `SDL_Init()`.
+MI_SDL_API void init(uint32_t flags);
+
+/// Analogous to `SDL_Quit()`.
+MI_SDL_API void quit();
+
+/// Wrapper for functions in `SDL_clipboard.h`.
+struct MI_SDL_API Clipboard {
+public:
+  Clipboard() = delete;
+
+  /// Analogous to `SDL_HasClipboardText()`.
+  [[nodiscard]] static bool hasText() noexcept;
+
+  /// Analogous to `SDL_GetClipboardText()`.
+  [[nodiscard]] static std::string getText();
+
+  /// Analogous to `SDL_SetClipboardText()`.
+  static void setText(const std::string &text);
+};
+
+/// Wrapper for functions in `SDL_filesystem.h`.
+struct MI_SDL_API Filesystem {
+public:
+  Filesystem() = delete;
+
+  /// Analogous to `SDL_GetBasePath()`.
+  [[nodiscard]] static std::string basePath();
+
+  /// Analogous to `SDL_GetPrefPath()`.
+  [[nodiscard]] static std::string prefPath(const char *org, const char *app);
+};
+
+struct Log {
+  Log() = delete;
+
+  enum Priority : std::underlying_type_t<SDL_LogPriority> {
+    // clang-format off
+    Verbose  = SDL_LOG_PRIORITY_VERBOSE,
+    Debug    = SDL_LOG_PRIORITY_DEBUG,
+    Info     = SDL_LOG_PRIORITY_INFO,
+    Warn     = SDL_LOG_PRIORITY_WARN,
+    Error    = SDL_LOG_PRIORITY_ERROR,
+    Critical = SDL_LOG_PRIORITY_CRITICAL
+    // clang-format on
+  };
+
+  /// Analogous to `SDL_LogMessage()`.
+  static void message(Priority priority, std::string_view what) {
+    SDL_LogMessage(SDL_LOG_CATEGORY_APPLICATION, SDL_LogPriority(priority), "%.*s", int(what.size()), what.data());
+  }
+
+  /// Analogous to `SDL_LogCritical()`.
+  static void critical(std::string_view what) { message(Critical, what); }
+
+  /// Analogous to `SDL_LogError()`.
+  static void error(std::string_view what) { message(Error, what); }
+
+  /// Analogous to `SDL_LogWarn()`.
+  static void warn(std::string_view what) { message(Warn, what); }
+
+  /// Analogous to `SDL_LogInfo()`.
+  static void info(std::string_view what) { message(Info, what); }
+
+  /// Analogous to `SDL_LogDebug()`.
+  static void debug(std::string_view what) { message(Debug, what); }
+
+  /// Analogous to `SDL_LogSetAllPriority()`.
+  static void setPriority(Priority priority) { SDL_LogSetPriority(SDL_LOG_CATEGORY_APPLICATION, SDL_LogPriority(priority)); }
+};
+
+constexpr std::string_view to_string(Log::Priority priority) noexcept {
+  switch (priority) {
+  case Log::Priority::Verbose: return "Verbose";
+  case Log::Priority::Debug: return "Debug";
+  case Log::Priority::Info: return "Info";
+  case Log::Priority::Warn: return "Warn";
+  case Log::Priority::Error: return "Error";
+  case Log::Priority::Critical: return "Critical";
+  default: break;
+  }
+  return "Unknown";
+}
+
+/// Analogous to `SDL_GetTicks()`.
+[[nodiscard]] inline uint32_t getTicks() noexcept { return SDL_GetTicks(); }
+
+} // namespace mi::SDL

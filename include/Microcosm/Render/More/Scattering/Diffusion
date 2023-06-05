@@ -1,0 +1,41 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+struct MI_RENDER_API DisneyDiffusion {
+public:
+  DisneyDiffusion() noexcept = default;
+
+  DisneyDiffusion(Spectrum radius) noexcept : mRadius(std::move(radius)), mRadiusForPDF(stats::mean(mRadius)) {}
+
+  DisneyDiffusion(Spectrum radius, double radiusForPDF) noexcept : mRadius(std::move(radius)), mRadiusForPDF(radiusForPDF) {}
+
+public:
+  /// The diffusion profile.
+  [[nodiscard]] Spectrum profile(double d) const noexcept;
+
+  /// The distance Probability Density Function (PDF).
+  [[nodiscard]] double distancePDF(double d) const noexcept;
+
+  /// The distance sampling routine.
+  [[nodiscard]] double distanceSample(double sampleU) const noexcept;
+
+private:
+  /// The radius.
+  Spectrum mRadius;
+
+  /// The radius of the associated Probability Density Function and sampling routine.
+  double mRadiusForPDF{};
+
+public:
+  /// Construct from albedo and Volume Mean-Free-Path (VMFP).
+  [[nodiscard]] static DisneyDiffusion fromAlbedoVMFP(const Spectrum &albedo, Spectrum radius) noexcept;
+
+  /// Construct from albedo and Surface Mean-Free-Path (SMFP).
+  [[nodiscard]] static DisneyDiffusion fromAlbedoSMFP(const Spectrum &albedo, Spectrum radius) noexcept;
+};
+
+} // namespace mi::render

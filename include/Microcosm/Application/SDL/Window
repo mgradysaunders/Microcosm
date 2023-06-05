@@ -1,0 +1,172 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Application/SDL/common"
+#include "Microcosm/Tensor"
+
+#include <SDL2/SDL_video.h>
+#include <SDL2/SDL_vulkan.h>
+
+namespace mi::SDL {
+
+struct MI_SDL_API Window {
+public:
+  /// Construct from raw pointer.
+  explicit Window(SDL_Window *window) : window(window) { incrementRefCount(); }
+
+  /// Construct from title, size, and flags.
+  explicit Window(const char *title, Vector2i size, uint32_t flags = 0);
+
+  /// Copy, incrementing reference count.
+  Window(const Window &other) : window(other.window) { incrementRefCount(); }
+
+  /// Move.
+  Window(Window &&other) : window(steal(other.window)) {}
+
+  /// Copy, incrementing reference count.
+  Window &operator=(const Window &other) {
+    if (this != &other) {
+      this->~Window();
+      this->window = other.window;
+      incrementRefCount();
+    }
+    return *this;
+  }
+
+  /// Move.
+  Window &operator=(Window &&other) {
+    this->~Window();
+    this->window = steal(other.window);
+    return *this;
+  }
+
+  /// Deconstruct, decrementing reference count.
+  ~Window() { decrementRefCount(); }
+
+  operator SDL_Window *() const noexcept { return window; }
+
+public:
+  /// \name Accessors
+  /// \{
+
+  [[nodiscard]] auto getTitle() const noexcept { return std::string_view(SDL_GetWindowTitle(window)); }
+
+  [[nodiscard]] auto getPosition() const noexcept {
+    int x = 0;
+    int y = 0;
+    SDL_GetWindowPosition(window, &x, &y);
+    return Vector2i{x, y};
+  }
+
+  [[nodiscard]] auto getSize() const noexcept {
+    int sizeX = 0;
+    int sizeY = 0;
+    SDL_GetWindowSize(window, &sizeX, &sizeY);
+    return Vector2i{sizeX, sizeY};
+  }
+
+  [[nodiscard]] auto getMinimumSize() const noexcept {
+    int sizeX = 0;
+    int sizeY = 0;
+    SDL_GetWindowMinimumSize(window, &sizeX, &sizeY);
+    return Vector2i{sizeX, sizeY};
+  }
+
+  [[nodiscard]] auto getMaximumSize() const noexcept {
+    int sizeX = 0;
+    int sizeY = 0;
+    SDL_GetWindowMaximumSize(window, &sizeX, &sizeY);
+    return Vector2i{sizeX, sizeY};
+  }
+
+  [[nodiscard]] auto getGrab() const noexcept { return SDL_GetWindowGrab(window) == SDL_TRUE; }
+
+  template <typename Value> [[nodiscard]] auto getData(const char *key) const noexcept {
+    return static_cast<Value *>(SDL_GetWindowData(window, key));
+  }
+
+  void setTitle(const std::string &title) noexcept { SDL_SetWindowTitle(window, title.c_str()); }
+
+  void setTitle(const char *title) noexcept { SDL_SetWindowTitle(window, title); }
+
+  void setPosition(Vector2i position) noexcept { SDL_SetWindowPosition(window, position[0], position[1]); }
+
+  void setSize(Vector2i size) noexcept { SDL_SetWindowSize(window, size[0], size[1]); }
+
+  void setMinimumSize(Vector2i size = {}) noexcept { SDL_SetWindowMinimumSize(window, size[0], size[1]); }
+
+  void setMaximumSize(Vector2i size = {}) noexcept { SDL_SetWindowMaximumSize(window, size[0], size[1]); }
+
+  void setGrab(bool grab) noexcept { SDL_SetWindowGrab(window, grab ? SDL_TRUE : SDL_FALSE); }
+
+  void setData(const char *key, auto *value) noexcept { SDL_SetWindowData(window, key, value); }
+
+  [[nodiscard]] int getDisplayIndex() const {
+    int i = SDL_GetWindowDisplayIndex(window);
+    if (i < 0) throwError();
+    return i;
+  }
+
+  [[nodiscard]] Vector2f getDisplayDPI() const {
+    float dpiX = 0;
+    float dpiY = 0;
+    if (SDL_GetDisplayDPI(getDisplayIndex(), nullptr, &dpiX, &dpiY) < 0) throwError();
+    return Vector2f{dpiX, dpiY};
+  }
+  /// \}
+
+public:
+  /// \name Manipulators
+  /// \{
+
+  void minimize() noexcept { SDL_MinimizeWindow(window); }
+
+  void maximize() noexcept { SDL_MaximizeWindow(window); }
+
+  void restore() noexcept { SDL_RestoreWindow(window); }
+
+  void hide() noexcept { SDL_HideWindow(window); }
+
+  void show() noexcept { SDL_ShowWindow(window); }
+
+  void focus() noexcept { SDL_RaiseWindow(window); }
+
+  /// \}
+
+public:
+  /// \name Vulkan
+  /// \{
+
+  /// Analogous to `SDL_Vulkan_GetInstanceExtensions()`.
+  [[nodiscard]] std::vector<const char *> vulkanInstanceExtensions() const;
+
+  /// Analogous to `SDL_Vulkan_CreateSurface()`.
+  [[nodiscard]] VkSurfaceKHR vulkanCreateSurface(VkInstance instance) const;
+
+  /// Analogous to `SDL_Vulkan_GetDrawableSize()`.
+  [[nodiscard]] Vector2i vulkanDrawableSize() const noexcept {
+    int sizeX = 0;
+    int sizeY = 0;
+    SDL_Vulkan_GetDrawableSize(window, &sizeX, &sizeY);
+    return {sizeX, sizeY};
+  }
+
+  /// \}
+
+private:
+  /// \name Reference counting
+  /// \{
+
+  /// Increment the reference count, if present.
+  void incrementRefCount();
+
+  /// Decrement the reference count, if present.
+  void decrementRefCount();
+
+  /// \}
+
+public:
+  SDL_Window *window = nullptr;
+};
+
+} // namespace mi::SDL

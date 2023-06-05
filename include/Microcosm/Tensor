@@ -1,0 +1,75 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./math"
+
+// clang-format off
+#include "./hidden@/Tensor/Tensor.h"
+#include "./hidden@/Tensor/TensorLambda.h"
+#include "./hidden@/Tensor/TensorView.h"
+#include "./hidden@/Tensor/math.h"
+// clang-format on
+
+namespace mi {
+
+[[nodiscard]] constexpr auto operator>>(auto object, auto &&transform) requires requires {
+  { object.onTransform(auto_forward(transform)) } -> std::same_as<void>;
+} {
+  return object.onTransform(auto_forward(transform)), object;
+}
+
+constexpr auto &operator>>=(auto &object, auto &&transform) requires requires {
+  { object.onTransform(auto_forward(transform)) } -> std::same_as<void>;
+} {
+  return object.onTransform(auto_forward(transform)), object;
+}
+
+constexpr auto operator>>=(auto &&object, auto &&transform) requires requires {
+  { object.onTransform(auto_forward(transform)) } -> std::same_as<void>;
+} {
+  return object.onTransform(auto_forward(transform)), object;
+}
+
+template <typename Value> struct AsAffine {
+  constexpr AsAffine(Value value) noexcept : value(value) {}
+
+  constexpr operator Value() const noexcept { return value; }
+
+  constexpr void onTransform(auto &&transform) noexcept { value = transform.applyAffine(value); }
+
+  Value value;
+};
+
+template <typename Value> struct AsLinear {
+  constexpr AsLinear(Value value) noexcept : value(value) {}
+
+  constexpr operator Value() const noexcept { return value; }
+
+  constexpr void onTransform(auto &&transform) noexcept { value = transform.applyLinear(value); }
+
+  Value value;
+};
+
+template <typename Value> struct AsNormal {
+  constexpr AsNormal(Value value) noexcept : value(value) {}
+
+  constexpr operator Value() const noexcept { return value; }
+
+  constexpr void onTransform(auto &&transform) noexcept { value = transform.applyNormal(value); }
+
+  Value value;
+};
+
+template <typename Value> AsAffine(Value &) -> AsAffine<Value &>;
+
+template <typename Value> AsLinear(Value &) -> AsLinear<Value &>;
+
+template <typename Value> AsNormal(Value &) -> AsNormal<Value &>;
+
+template <typename Value> AsAffine(Value &&) -> AsAffine<std::decay_t<Value>>;
+
+template <typename Value> AsLinear(Value &&) -> AsLinear<std::decay_t<Value>>;
+
+template <typename Value> AsNormal(Value &&) -> AsNormal<std::decay_t<Value>>;
+
+} // namespace mi

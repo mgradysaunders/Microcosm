@@ -1,0 +1,88 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Ray"
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+template <typename Float, size_t N> struct Plane {
+public:
+  constexpr Plane() noexcept = default;
+
+  constexpr Plane(const Vector<Float, N> &vectorN, const Vector<Float, N> &vectorO) noexcept
+    : vectorN(vectorN), vectorO(vectorO) {}
+
+  constexpr Plane(const Vector<Float, N> &vectorN, Float offset = 0) noexcept
+    : vectorN(vectorN), vectorO(-offset / lengthSquare(vectorN) * vectorN) {}
+
+public:
+  /// The normal vector.
+  [[nodiscard]] constexpr Vector<Float, N> normal() const noexcept { return vectorN; }
+
+  /// The offset vector or origin point.
+  [[nodiscard]] constexpr Vector<Float, N> origin() const noexcept { return vectorO; }
+
+  /// The scalar offset that appears in the plane equation.
+  [[nodiscard]] constexpr Float offset() const noexcept { return -dot(vectorN, vectorO); }
+
+  /// The plane equation.
+  [[nodiscard]] constexpr Float operator()(const Vector<Float, N> &vectorP) const noexcept {
+    return dot(vectorN, vectorP - vectorO);
+  }
+
+  /// Project onto the plane.
+  [[nodiscard]] Vector<Float, N> project(const Vector<Float, N> &vectorP) const noexcept {
+    return vectorP - finiteOrZero(dot(vectorP - vectorO, vectorN) / dot(vectorN, vectorN)) * vectorN;
+  }
+
+  /// Reflect over the plane.
+  [[nodiscard]] Vector<Float, N> reflect(const Vector<Float, N> &vectorP) const noexcept {
+    return vectorP - 2 * finiteOrZero(dot(vectorP - vectorO, vectorN) / dot(vectorN, vectorN)) * vectorN;
+  }
+
+  /// Calculate the side of the given point, being positive (+1) if above and negative (-1) if below.
+  [[nodiscard]] int sideOf(const Vector<Float, N> &vectorP) const noexcept { return sign(dot(vectorP - vectorO, vectorN)); }
+
+  /// Test for intersection with the given ray.
+  [[nodiscard]] constexpr std::optional<Float> rayCast(const Ray<Float, N> &ray) const noexcept {
+    if (auto param = rayCast(ray.origin, ray.direction); ray.isInRange(param)) {
+      return param;
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  /// Test for intersection with the given ray.
+  [[nodiscard]] constexpr Float rayCast(const Vector<Float, N> &origin, const Vector<Float, N> &direction) const noexcept {
+    return dot(vectorN, vectorO - origin) / dot(vectorN, direction);
+  }
+
+public:
+  /// The normal vector.
+  Vector<Float, N> vectorN;
+
+  /// The offset or origin vector.
+  Vector<Float, N> vectorO;
+
+  void onSerialize(auto &serializer) { serializer <=> vectorN <=> vectorO; }
+
+  void onTransform(auto &transform) {
+    vectorN = transform.applyNormal(vectorN);
+    vectorO = transform.applyAffine(vectorO);
+  }
+};
+
+template <std::floating_point Float> using Plane2 = Plane<Float, 2>;
+
+template <std::floating_point Float> using Plane3 = Plane<Float, 3>;
+
+using Plane2f = Plane2<float>;
+
+using Plane3f = Plane3<float>;
+
+using Plane2d = Plane2<double>;
+
+using Plane3d = Plane3<double>;
+
+} // namespace mi

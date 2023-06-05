@@ -1,0 +1,564 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+/// This is an experimental generalization/replacement for the dual number class that supports arbitrarily
+/// many first order derivatives. This renders it possible to fully track matrix gradients of vector functions
+/// automatically.
+template <concepts::floating_point_or_complex Value, size_t N = 0> struct Differentiable {
+public:
+  using value_type = Value;
+
+  using number_tag = std::true_type;
+
+  static constexpr size_t Size = N;
+
+  constexpr Differentiable() noexcept = default;
+
+  constexpr Differentiable(Value value) noexcept : mValue(value) {}
+
+  constexpr Differentiable(Value value, Value deriv) noexcept requires(N == 0) : mValue(value), mDeriv(deriv) {}
+
+  constexpr Differentiable(Value value, Vector<Value, N> deriv) noexcept requires(N > 0) : mValue(value), mDeriv(deriv) {}
+
+  constexpr Differentiable(std::uniform_random_bit_generator auto &gen) noexcept : mValue(randomize<Value>(gen)) {}
+
+public:
+  [[nodiscard, strong_inline]] constexpr operator Value() const noexcept { return mValue; }
+
+  [[nodiscard, strong_inline]] constexpr auto &value() noexcept { return mValue; }
+
+  [[nodiscard, strong_inline]] constexpr auto &deriv() noexcept { return mDeriv; }
+
+  [[nodiscard, strong_inline]] constexpr const auto &value() const noexcept { return mValue; }
+
+  [[nodiscard, strong_inline]] constexpr const auto &deriv() const noexcept { return mDeriv; }
+
+  template <typename Other> [[nodiscard]] constexpr operator Differentiable<Other, N>() const noexcept {
+    return {Other(mValue), Vector<Other, N>(mDeriv)};
+  }
+
+private:
+  Value mValue{};
+
+  std::conditional_t<N == 0, Value, Vector<Value, N>> mDeriv{};
+
+public:
+  void onSerialize(auto &&serializer) { serializer <=> mValue <=> mDeriv; }
+};
+
+template <typename Value, typename Deriv> requires(!concepts::tensor_vector<Deriv>) Differentiable(Value &&, Deriv &&)
+  -> Differentiable<std::common_type_t<std::decay_t<Value>, value_type_t<std::decay_t<Deriv>>>, 0>;
+
+template <typename Value, typename Deriv> requires(concepts::tensor_vector<Deriv>) Differentiable(Value &&, Deriv &&)
+  -> Differentiable<std::common_type_t<std::decay_t<Value>, value_type_t<std::decay_t<Deriv>>>, tensor_size_v<Deriv, 0>>;
+
+/// Extract derivatives of a vector expression into the Jacobian matrix.
+template <typename Expr> requires(concepts::tensor_vector<Expr>)
+[[nodiscard, strong_inline]] constexpr auto derivsOf(Expr &&expr) noexcept {
+  using Value = value_type_t<std::decay_t<Expr>>;
+  constexpr size_t Rows = tensor_size_v<Expr, 0>;
+  constexpr size_t Cols = Value::Size;
+  Tensor<value_type_t<Value>, TensorShape<Rows, Cols>> matrix;
+  for (size_t i = 0; i < Rows; i++) matrix[i].assign(expr[i].deriv());
+  return matrix;
+}
+
+template <typename Value, size_t N> struct to_float<Differentiable<Value, N>> : to_float<Value> {};
+
+template <typename Value, size_t N> struct to_field<Differentiable<Value, N>> : to_field<Value> {};
+
+namespace concepts {
+
+template <typename T> struct is_differentiable : std::false_type {};
+
+template <typename T, size_t N> struct is_differentiable<Differentiable<T, N>> : std::true_type {};
+
+template <typename T>
+concept differentiable = is_differentiable<T>::value;
+
+} // namespace concepts
+
+} // namespace mi
+
+namespace std {
+
+template <typename ValueA, typename ValueB, size_t N>
+struct common_type<mi::Differentiable<ValueA, N>, mi::Differentiable<ValueB, N>> {
+  using type = mi::Differentiable<std::common_type_t<ValueA, ValueB>, N>;
+};
+
+template <typename ValueA, typename ValueB, size_t N> requires(!mi::concepts::differentiable<ValueB>)
+struct common_type<mi::Differentiable<ValueA, N>, ValueB> {
+  using type = mi::Differentiable<std::common_type_t<ValueA, ValueB>, N>;
+};
+
+template <typename ValueA, typename ValueB, size_t N> requires(!mi::concepts::differentiable<ValueA>)
+struct common_type<ValueA, mi::Differentiable<ValueB, N>> {
+  using type = mi::Differentiable<std::common_type_t<ValueA, ValueB>, N>;
+};
+
+} // namespace std
+
+namespace mi {
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto operator+(const Differentiable<Value, N> &value) noexcept {
+  return value;
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto operator-(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{-value.value(), -value.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] constexpr auto operator+(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return Differentiable{valueA.value() + valueB, valueA.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] constexpr auto operator-(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return Differentiable{valueA.value() - valueB, valueA.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] constexpr auto operator*(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return Differentiable{valueA.value() * valueB, valueA.deriv() * valueB};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] constexpr auto operator/(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return Differentiable{valueA.value() / valueB, valueA.deriv() / valueB};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] constexpr auto operator+(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA + valueB.value(), valueB.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] constexpr auto operator-(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA - valueB.value(), -valueB.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] constexpr auto operator*(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA * valueB.value(), valueA * valueB.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] constexpr auto operator/(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA / valueB.value(), -valueA * valueB.deriv() / sqr(valueB.value())};
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] constexpr auto operator+(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA.value() + valueB.value(), valueA.deriv() + valueB.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] constexpr auto operator-(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA.value() - valueB.value(), valueA.deriv() - valueB.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] constexpr auto operator*(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{valueA.value() * valueB.value(), valueA.deriv() * valueB.value() + valueA.value() * valueB.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] constexpr auto operator/(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{
+    valueA.value() / valueB.value(), (valueA.deriv() * valueB.value() - valueA.value() * valueB.deriv()) / sqr(valueB.value())};
+}
+
+template <typename Value, size_t N>
+[[strong_inline]] constexpr auto &operator+=(Differentiable<Value, N> &value, const auto &other) noexcept {
+  return value = value + other;
+}
+
+template <typename Value, size_t N>
+[[strong_inline]] constexpr auto &operator-=(Differentiable<Value, N> &value, const auto &other) noexcept {
+  return value = value - other;
+}
+
+template <typename Value, size_t N>
+[[strong_inline]] constexpr auto &operator*=(Differentiable<Value, N> &value, const auto &other) noexcept {
+  return value = value * other;
+}
+
+template <typename Value, size_t N>
+[[strong_inline]] constexpr auto &operator/=(Differentiable<Value, N> &value, const auto &other) noexcept {
+  return value = value / other;
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard]] constexpr auto operator<=>(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA.value() <=> valueB.value();
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard]] constexpr auto operator<=>(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return valueA.value() <=> valueB;
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard]] constexpr auto operator<=>(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA <=> valueB.value();
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard]] constexpr auto operator==(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA.value() == valueB.value();
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard]] constexpr auto operator==(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return valueA.value() == valueB;
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard]] constexpr auto operator==(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA == valueB.value();
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard]] constexpr auto operator!=(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA.value() != valueB.value();
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard]] constexpr auto operator!=(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return valueA.value() != valueB;
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard]] constexpr auto operator!=(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA != valueB.value();
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto real(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{real(value.value()), real(value.deriv())};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto imag(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{imag(value.value()), imag(value.deriv())};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto conj(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{conj(value.value()), conj(value.deriv())};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto norm(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{norm(value.value()), to_float_t<Value>(2) * real(value.deriv() * conj(value.value()))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] constexpr auto abs(const Differentiable<Value, N> &value) noexcept {
+  if constexpr (concepts::arithmetic<Value>) {
+    return value < 0 ? -value : +value;
+  } else {
+    to_float_t<Value> absValue{abs(value.value())};
+    return Differentiable{absValue, real(value.deriv() * conj(value.value())) / absValue};
+  }
+}
+
+template <typename ValueA, typename ValueB, size_t N, typename ValueC = std::common_type_t<ValueA, ValueB>>
+[[nodiscard, strong_inline]] constexpr auto min( //
+  const Differentiable<ValueA, N> &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA < valueB ? Differentiable<ValueC, N>(valueA) : Differentiable<ValueC, N>(valueB);
+}
+
+template <typename ValueA, typename ValueB, size_t N, typename ValueC = std::common_type_t<ValueA, ValueB>>
+[[nodiscard, strong_inline]] constexpr auto max( //
+  const Differentiable<ValueA, N> &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return valueA > valueB ? Differentiable<ValueC, N>(valueA) : Differentiable<ValueC, N>(valueB);
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline bool isinf(const Differentiable<Value, N> &value) noexcept {
+  return isinf(value.value()) || anyTrue(isinf(value.deriv()));
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline bool isnan(const Differentiable<Value, N> &value) noexcept {
+  return isnan(value.value()) || allTrue(isnan(value.deriv()));
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline bool isfinite(const Differentiable<Value, N> &value) noexcept {
+  return isfinite(value.value()) && allTrue(isfinite(value.deriv()));
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline bool isnormal(const Differentiable<Value, N> &value) noexcept {
+  return isnormal(value.value()) && allTrue(isnormal(value.deriv()));
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto floor(const Differentiable<Value, N> &value) noexcept {
+  return floor(value.value());
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto ceil(const Differentiable<Value, N> &value) noexcept {
+  return ceil(value.value());
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto round(const Differentiable<Value, N> &value) noexcept {
+  return round(value.value());
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto trunc(const Differentiable<Value, N> &value) noexcept {
+  return trunc(value.value());
+}
+
+template <std::integral Int = int, std::floating_point Float, size_t N>
+[[nodiscard, strong_inline]] constexpr Int fastFloor(const Differentiable<Float, N> &value) noexcept {
+  return fastFloor<Int>(value.value());
+}
+
+template <std::integral Int = int, std::floating_point Float, size_t N>
+[[nodiscard, strong_inline]] constexpr Int fastCeil(const Differentiable<Float, N> &value) noexcept {
+  return fastCeil<Int>(value.value());
+}
+
+template <std::integral Int = int, std::floating_point Float, size_t N>
+[[nodiscard, strong_inline]] constexpr Int fastRound(const Differentiable<Float, N> &value) noexcept {
+  return fastRound<Int>(value.value());
+}
+
+template <std::integral Int = int, std::floating_point Float, size_t N>
+[[nodiscard, strong_inline]] constexpr Int fastTrunc(const Differentiable<Float, N> &value) noexcept {
+  return fastTrunc<Int>(value.value());
+}
+
+template <std::integral Int = int, std::floating_point Float, size_t N>
+[[nodiscard, strong_inline]] constexpr auto fastFract(const Differentiable<Float, N> &value, auto &&...args) noexcept {
+  return value - fastFloor<Int>(value.value(), auto_forward(args)...);
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto sqrt(const Differentiable<Value, N> &value) noexcept {
+  auto sqrtValue{sqrt(value.value())};
+  return Differentiable{sqrtValue, value.deriv() / (to_float_t<Value>(2) * sqrtValue)};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto cbrt(const Differentiable<Value, N> &value) noexcept {
+  auto cbrtValue{cbrt(value.value())};
+  return Differentiable{cbrtValue, value.deriv() / (to_float_t<Value>(3) * sqr(cbrtValue))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto exp(const Differentiable<Value, N> &value) noexcept {
+  return exp(value.value()) * Differentiable{1, value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto log(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{log(value.value()), value.deriv() / value.value()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto exp2(const Differentiable<Value, N> &value) noexcept {
+  return exp2(value.value()) * Differentiable{to_float_t<Value>(1), constants::LnTwo<Value> * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto log2(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{log2(value.value()), value.deriv() / (constants::LnTwo<Value> * value.value())};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto log10(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{log10(value.value()), value.deriv() / (constants::LnTen<Value> * value.value())};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto expm1(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{expm1(value.value()), exp(value.value()) * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto log1p(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{log1p(value.value()), value.deriv() / (to_float_t<Value>(1) + value.value())};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto sin(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{sin(value.value()), cos(value.value()) * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto cos(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{cos(value.value()), -sin(value.value()) * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto tan(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{tan(value.value()), value.deriv() / sqr(cos(value.value()))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto asin(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{asin(value.value()), +value.deriv() / sqrt(to_float_t<Value>(1) - sqr(value.value()))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto acos(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{acos(value.value()), -value.deriv() / sqrt(to_float_t<Value>(1) - sqr(value.value()))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto atan(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{atan(value.value()), +value.deriv() / (to_float_t<Value>(1) + sqr(value))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto sinh(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{sinh(value.value()), cosh(value.value()) * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto cosh(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{cosh(value.value()), sinh(value.value()) * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto tanh(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{tanh(value.value()), value.deriv() / sqr(cosh(value.value()))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto asinh(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{asinh(value.value()), value.deriv() / sqrt(sqr(value) + to_float_t<Value>(1))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto acosh(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{
+    acosh(value.value()),
+    value.deriv() / (sqrt(value.value() - to_float_t<Value>(1)) * //
+                     sqrt(value.value() + to_float_t<Value>(1)))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto atanh(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{atanh(value.value()), value.deriv() / (to_float_t<Value>(1) - sqr(value.value()))};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto erf(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{erf(value.value()), constants::TwoOverSqrtPi<Value> * exp(-sqr(value.value())) * value.deriv()};
+}
+
+template <typename Value, size_t N>
+[[nodiscard, strong_inline]] inline auto erfc(const Differentiable<Value, N> &value) noexcept {
+  return Differentiable{erfc(value.value()), -constants::TwoOverSqrtPi<Value> * exp(-sqr(value.value())) * value.deriv()};
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] inline auto pow(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  // TODO Not completely sure this holds up in all zero-limit cases?
+  const auto powValue{pow(valueA.value(), valueB.value())};
+  const auto coeffForDerivA{pow(valueA.value(), valueB.value() - ValueB(1)) * valueB.value()};
+  const auto coeffForDerivB{powValue * log(valueA.value())};
+  using ValueC = std::decay_t<decltype(powValue)>;
+  Differentiable<ValueC, N> valueC{powValue};
+  if constexpr (N == 0) {
+    const auto &derivA = valueA.deriv();
+    const auto &derivB = valueB.deriv();
+    auto &derivC = valueC.deriv();
+    if (derivA != ValueA(0)) derivC += coeffForDerivA * derivA;
+    if (derivB != ValueB(0)) derivC += coeffForDerivB * derivB;
+  } else {
+    for (size_t i = 0; i < N; i++) {
+      const auto &derivA = valueA.deriv()[i];
+      const auto &derivB = valueB.deriv()[i];
+      auto &derivC = valueC.deriv()[i];
+      if (derivA != ValueA(0)) derivC += coeffForDerivA * derivA;
+      if (derivB != ValueB(0)) derivC += coeffForDerivB * derivB;
+    }
+  }
+  return valueC;
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] inline auto pow(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return pow(valueA, Differentiable<to_field_t<ValueB>, N>(valueB));
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] inline auto pow(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return pow(Differentiable<to_field_t<ValueA>, N>(valueA), valueB);
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] inline auto hypot(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  const auto hypotValue{hypot(valueA.value(), valueB.value())};
+  return Differentiable{
+    hypotValue, (valueA.value() * valueA.deriv() + valueB.value() * valueB.deriv()) * finiteOrZero(1 / hypotValue)};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] inline auto hypot(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return hypot(valueA, Differentiable<to_field_t<ValueB>, N>(valueB));
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] inline auto hypot(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return hypot(Differentiable<to_field_t<ValueA>, N>(valueA), valueB);
+}
+
+template <typename ValueA, typename ValueB, size_t N>
+[[nodiscard, strong_inline]] inline auto atan2(
+  const Differentiable<ValueA, N> &valueA, //
+  const Differentiable<ValueB, N> &valueB) noexcept {
+  return Differentiable{
+    atan2(valueA.value(), valueB.value()), //
+    (valueA.deriv() * valueB.value() - valueA.value() * valueB.deriv()) *
+      finiteOrZero(1 / (sqr(valueA.value()) + sqr(valueB.value())))};
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueB> && !concepts::differentiable<ValueB>)
+[[nodiscard, strong_inline]] inline auto atan2(const Differentiable<ValueA, N> &valueA, const ValueB &valueB) noexcept {
+  return atan2(valueA, Differentiable<to_field_t<ValueB>, N>(valueB));
+}
+
+template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<ValueA> && !concepts::differentiable<ValueA>)
+[[nodiscard, strong_inline]] inline auto atan2(const ValueA &valueA, const Differentiable<ValueB, N> &valueB) noexcept {
+  return atan2(Differentiable<to_field_t<ValueA>, N>(valueA), valueB);
+}
+
+template <typename Value> using Dual = Differentiable<Value, 0>;
+
+} // namespace mi

@@ -1,0 +1,51 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/common"
+
+namespace mi::vk {
+
+struct InstanceCreateInfo {
+  /// The application name.
+  const char *applicationName = "Application";
+
+  /// The application version.
+  uint32_t applicationVersion = VK_MAKE_VERSION(0, 0, 1);
+
+  /// The Vulkan API version.
+  uint32_t apiVersion = VK_API_VERSION_1_3;
+
+  /// The requested instance layer names, if any.
+  std::vector<const char *> requestedLayerNames = {};
+
+  /// The requested instance extension names, if any.
+  std::vector<const char *> requestedExtensionNames = {};
+};
+
+struct MI_VK_API Instance final : MoveOnly {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Instance, create, destroy)
+
+  void create(const InstanceCreateInfo &createInfo, const VkAllocationCallbacks *allocator = nullptr);
+
+  void destroy();
+
+  /// Implicit usage as `VkInstance`.
+  [[nodiscard]] operator VkInstance() const noexcept { return instance; }
+
+  /// Implicit usage as `bool`.
+  [[nodiscard]] operator bool() const noexcept { return instance; }
+
+  /// The instance.
+  NullifyOnMove<VkInstance> instance;
+
+  /// The enabled instance layer names.
+  std::vector<const char *> enabledLayerNames;
+
+  /// The enabled instance extension names.
+  std::vector<const char *> enabledExtensionNames;
+
+  const VkAllocationCallbacks *allocator{nullptr};
+};
+
+} // namespace mi::vk

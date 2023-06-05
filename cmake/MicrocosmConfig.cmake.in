@@ -1,0 +1,25 @@
+@PACKAGE_INIT@
+
+# Use find_dependency for fmt since fmt is REQUIRED for Microcosm, but the user could be running find_package(Microcosm QUIET).
+include(CMakeFindDependencyMacro)
+find_dependency(fmt)
+if(!fmt_FOUND)
+  return()
+endif()
+
+# Everything else is QUIET for now, though this may not be perfect behavior. We should probably account for which components 
+# were enabled at build time and propagate that here somehow.
+find_package(SDL2 QUIET)
+find_package(Vulkan QUIET)
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+  pkg_check_modules(
+    LIBAV IMPORTED_TARGET 
+    libavformat libavcodec libavutil
+    libswresample libswscale
+    )
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/@PROJECT_NAME@Targets.cmake")
+set_and_check(MICROCOSM_INCLUDE_DIR "@PACKAGE_INCLUDE_DIR@")
+check_required_components("@PROJECT_NAME@")

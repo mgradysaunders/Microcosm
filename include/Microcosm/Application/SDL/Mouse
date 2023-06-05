@@ -1,0 +1,71 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Application/SDL/Window"
+#include "Microcosm/Application/SDL/common"
+
+#include <SDL2/SDL_mouse.h>
+
+namespace mi::SDL {
+
+struct MI_SDL_API Mouse {
+public:
+  Mouse() = delete;
+
+  /// Analogous to `SDL_GetMouseFocus()`.
+  [[nodiscard]] static Window getFocus() { return Window(SDL_GetMouseFocus()); }
+
+  struct State {
+    enum class Mode : uint8_t { Relative, Global };
+
+    /// The mode.
+    Mode mode{};
+
+    /// The button mask.
+    uint8_t mask{0};
+
+    [[nodiscard]] constexpr bool buttonL() const noexcept { return mask & SDL_BUTTON_LMASK; }
+    [[nodiscard]] constexpr bool buttonM() const noexcept { return mask & SDL_BUTTON_MMASK; }
+    [[nodiscard]] constexpr bool buttonR() const noexcept { return mask & SDL_BUTTON_RMASK; }
+    [[nodiscard]] constexpr bool buttonX1() const noexcept { return mask & SDL_BUTTON_X1MASK; }
+    [[nodiscard]] constexpr bool buttonX2() const noexcept { return mask & SDL_BUTTON_X2MASK; }
+
+    /// The position of the cursor.
+    Vector2i position;
+  };
+
+  /// Analogous to `SDL_GetMouseState()`.
+  [[nodiscard]] static State getState() noexcept;
+
+  /// Analogous to `SDL_Get[...]MouseState()`.
+  [[nodiscard]] static State getState(State::Mode mode) noexcept;
+
+  /// Analogous to `SDL_GetRelativeMouseMode()`.
+  [[nodiscard]] static State::Mode getDefaultMode() noexcept;
+
+  /// Analogous to `SDL_SetRelativeMouseMode()`.
+  static void setDefaultMode(State::Mode mode);
+
+  /// Analogous to `SDL_WarpMouseInWindow()`.
+  static void warpTo(const Window &window, Vector2i position);
+
+  /// Analogous to `SDL_WarpMouseGlobal()`.
+  static void warpTo(Vector2i position);
+
+  /// Analogous to `SDL_CaptureMouse()`.
+  static void capture(bool flag);
+
+  /// Show the mouse cursor.
+  static void show();
+
+  /// Hide the mouse cursor.
+  static void hide();
+
+  /// Is the mouse cursor shown?
+  [[nodiscard]] static bool shown();
+
+  /// Is the mouse cursor hidden?
+  [[nodiscard]] static bool hidden() { return !shown(); }
+};
+
+} // namespace mi::SDL

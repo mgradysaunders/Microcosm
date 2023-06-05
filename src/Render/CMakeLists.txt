@@ -1,0 +1,33 @@
+microcosm_add_library(
+  "Render"
+  SHARED
+  SOURCES
+    "common.cc"
+    "More/Scattering/Diffuse.cc"
+    "More/Scattering/Diffusion.cc"
+    "More/Scattering/Fresnel.cc"
+    "More/Shape/Follicle.cc"
+    "Manifold.cc"
+    "Material.cc"
+    "More/Scattering/Media.cc"
+    "More/Scattering/Microflake.cc"
+    "More/Scattering/Microsurface.cc"
+    "MLT.cc"
+    "Path.cc"
+    "More/Scattering/Phase.cc"
+    "More/Shape/Primitives.cc"
+    "More/Spectrum/Prospect.cc"
+    "More/Spectrum/RefractiveIndex.cc"
+    "Scattering.cc"
+    "Scene.cc"
+    "Shape.cc"
+    "Spectrum.cc"
+    "SpectrumImage.cc"
+    "More/Shape/TriangleMesh.cc"
+  DEPENDS 
+    ${PROJECT_NAME}::Geometry
+    ${PROJECT_NAME}::Quadrature
+  EXPORT_MACRO "MI_RENDER_API"
+  EXPORT_FILENAME "Microcosm/Render/Export.h"
+  )
+add_subdirectory(unit_tests)

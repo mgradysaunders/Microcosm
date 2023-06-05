@@ -1,0 +1,154 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+template <typename Value>
+concept is_bsdf = std::same_as<typename std::decay_t<Value>::bsdf_tag, std::true_type>;
+
+/// Three functions form the primary hooks for the scattering API:
+/// 1. The Bidirectional Scattering Distribution Function (BSDF).
+/// 2. The Probability Density Function (PDF).
+/// 3. The importance sampling routine the Probability Density Function.
+///
+/// There are some understood conventions worth noting:
+/// - The _outgoing_ direction is denoted omegaO, and it points toward the sensor.
+/// - The _incident_ direction is denoted omegaI, and it points toward the light.
+/// - We assume directions are already normalized.
+/// - We assume directions are already transformed into the appropriate local coordinate system.
+///
+/// These functions may either model scattering at surfaces, where the BSDF combines the
+/// Bidirectional Reflectance and Transmittance Distribution Functions (BRDF, BTDF), or inside
+/// volumes, where the BSDF instead goes by the term "phase function". At surfaces, the BSDF
+/// contains an implicit cosine term, specifically |cos(thetaI)|, to account for projection of
+/// incident light onto the surface. This is important to note because some rendering software
+/// explicitly factors this term out into the rest of the path tracing. However, at least for
+/// the scope of this project, it is much cleaner to allow it to be truly implicit.
+///
+struct MI_RENDER_API Scattering final : public Any {
+public:
+  using Scatter = std::function<BidirPDF( //
+    const Scattering &self, Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f)>;
+
+  using ScatterSample = std::function<BidirPDF(
+    const Scattering &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta)>;
+
+  Scattering() noexcept = default;
+
+  explicit Scattering(std::in_place_t, std::any any, Scatter scatter, ScatterSample scatterSample)
+    : Any(std::move(any)), mScatter(std::move(scatter)), mScatterSample(std::move(scatterSample)) {}
+
+  /// Construct from BSDF.
+  template <typename Value> requires is_bsdf<Value> Scattering(Value &&value)
+    : Scattering(
+        std::in_place, std::any(std::forward<Value>(value)),
+        [](auto &self, Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) -> BidirPDF {
+          constexpr bool HasDeterministicScatterMethod = requires {
+            { self.template as<Value>().scatter(omegaO, omegaI, f) } -> std::same_as<BidirPDF>;
+          };
+          if constexpr (HasDeterministicScatterMethod)
+            return self.template as<Value>().scatter(omegaO, omegaI, f);
+          else
+            return self.template as<Value>().scatter(random, omegaO, omegaI, f);
+        },
+        [](auto &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) -> BidirPDF {
+          constexpr bool AcceptsDeltaFlag = requires {
+            { self.template as<Value>().scatterSample(random, omegaO, omegaI, ratio, isDelta) } -> std::same_as<BidirPDF>;
+          };
+          if constexpr (AcceptsDeltaFlag)
+            return self.template as<Value>().scatterSample(random, omegaO, omegaI, ratio, isDelta);
+          else
+            return self.template as<Value>().scatterSample(random, omegaO, omegaI, ratio);
+        }) {}
+
+public:
+  [[strong_inline]] BidirPDF scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const {
+    return mScatter(*this, random, omegaO, omegaI, f);
+  }
+
+  [[strong_inline]] BidirPDF scatterSample( //
+    Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) const {
+    return mScatterSample(*this, random, omegaO, omegaI, ratio, isDelta);
+  }
+
+public:
+  Scattering &operator*=(Spectrum weight);
+
+  Scattering &operator*=(double weight);
+
+  /// Support transforms.
+  void onTransform(auto &&transform) {
+    auto forwardTransform{transform};
+    auto inverseTransform{inverse(transform)};
+    mScatter = [=, scatter = std::move(mScatter)](auto &self, Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) {
+      return scatter(
+        self,
+        random,                                              //
+        fastNormalize(inverseTransform.applyLinear(omegaO)), //
+        fastNormalize(inverseTransform.applyLinear(omegaI)), f);
+    };
+    mScatterSample =                                  //
+      [=, scatterSample = std::move(mScatterSample)]( //
+        auto &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) {
+        auto density{scatterSample(self, random, fastNormalize(inverseTransform.applyLinear(omegaO)), omegaI, ratio, isDelta)};
+        omegaI = forwardTransform.applyLinear(omegaI);
+        omegaI = fastNormalize(omegaI);
+        return density;
+      };
+  }
+
+private:
+  Scatter mScatter{};
+
+  ScatterSample mScatterSample{};
+};
+
+/// This is a linear mixture of scattering functions which may be weighted by scalar cofficients and configured
+/// with independent sampling probabilities.
+struct MI_RENDER_API ScatteringMixture final {
+public:
+  using bsdf_tag = std::true_type;
+
+  struct Term {
+    double coefficient{1}; ///< The coefficient.
+    double probability{1}; ///< The probability.
+    Scattering scattering; ///< The scattering functions.
+  };
+
+  using Terms = std::vector<Term>;
+
+  ScatteringMixture() noexcept = default;
+
+  ScatteringMixture(Terms terms) : mTerms(std::move(terms)) {
+    // Guarantee the probabilities are normalized.
+    double probabilitySum{0};
+    for (auto &term : mTerms) probabilitySum += term.probability;
+    for (auto &term : mTerms) term.probability /= probabilitySum;
+  }
+
+  BidirPDF scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const;
+
+  BidirPDF scatterSample(Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) const;
+
+private:
+  Terms mTerms;
+};
+
+/// This represents a volume scattering event, which is just a position with optional scattering functions. This
+/// may be returned by the transmission importance sampling routines on participating media.
+struct VolumeScattering final {
+public:
+  /// The position, presumably constructed by evaluating the ray at some transmission distance.
+  Vector3d position{};
+
+  /// The optional scattering functions. These should usually be present and initialized as a phase function, i.e.,
+  /// a normalized scattering density with no surface normal projection term. If not present, the distribution is
+  /// assumed to be a delta function aligned to the direction the ray is already traveling. (Note: This is really
+  /// only useful for modeling pure absorption, and even then it is suboptimal to be terminating paths randomly,
+  /// as it would be better to continue to the surface and scale the path ratio by the transmission term.)
+  std::optional<Scattering> scattering{};
+};
+
+} // namespace mi::render

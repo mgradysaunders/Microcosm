@@ -1,0 +1,57 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Application/SDL/common"
+
+#include <SDL2/SDL_events.h>
+
+namespace mi::SDL {
+
+struct PollEventSentinel {};
+
+struct PollEventIterator {
+public:
+  using value_type = SDL_Event;
+
+  using reference = SDL_Event &;
+
+  using pointer = SDL_Event *;
+
+  using difference_type = ptrdiff_t;
+
+  using iterator_category = std::forward_iterator_tag;
+
+  PollEventIterator() { operator++(); }
+
+  [[nodiscard]] SDL_Event *operator->() noexcept { return &mEvent; }
+
+  [[nodiscard]] SDL_Event &operator*() noexcept { return mEvent; }
+
+  PollEventIterator &operator++() {
+    mEventAvailable = SDL_PollEvent(&mEvent);
+    return *this;
+  }
+
+  PollEventIterator operator++(int) {
+    PollEventIterator copy = *this;
+    operator++();
+    return copy;
+  }
+
+  [[nodiscard]] bool operator==(PollEventSentinel) const noexcept { return !mEventAvailable; }
+
+  [[nodiscard]] bool operator!=(PollEventSentinel) const noexcept { return mEventAvailable; }
+
+  [[nodiscard]] operator bool() const noexcept { return mEventAvailable; }
+
+private:
+  SDL_Event mEvent;
+
+  bool mEventAvailable = false;
+};
+
+[[nodiscard]] inline auto pollEvents() {
+  return IteratorRange<PollEventIterator, PollEventSentinel>(PollEventIterator(), PollEventSentinel());
+}
+
+} // namespace mi::SDL

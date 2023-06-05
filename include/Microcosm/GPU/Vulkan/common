@@ -1,0 +1,131 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/Export.h"
+#include "Microcosm/utility"
+#include "vulkan/vulkan.h"
+
+namespace mi::vk {
+
+/// Result to string.
+///
+/// This just wraps `string_VkResult()` from
+/// `<vulkan/vk_enum_string_helper.h>`.
+///
+MI_VK_API std::string_view to_string(VkResult) noexcept;
+
+/// Throws if the result is an error.
+MI_VK_API VkResult error_check(VkResult, const std::source_location & = std::source_location::current());
+
+/// Helper to wrap enumeration-style calls.
+template <typename Value, std::invocable<uint32_t *, Value *> Func> inline std::vector<Value> enumerate(Func &&func) {
+  uint32_t count = 0;
+  std::invoke(func, &count, nullptr);
+  std::vector<Value> values(count);
+  error_check(std::invoke(func, &count, values.data()));
+  return values;
+}
+
+template <typename Value> inline std::vector<Value> vector_reserve(size_t size) {
+  std::vector<Value> values;
+  values.reserve(size);
+  return values;
+}
+
+/// Temporarily map memory.
+template <std::invocable<void *> Func>
+inline void map_memory(VkDevice device, VkDeviceMemory memory, VkDeviceSize offset, VkDeviceSize size, Func &&func) {
+  void *mem = nullptr;
+  error_check(vkMapMemory(device, memory, offset, size, 0, &mem));
+  { std::invoke(std::forward<Func>(func), mem); }
+  vkUnmapMemory(device, memory);
+}
+
+/// Signify something is move-only.
+struct MoveOnly {
+  constexpr MoveOnly() noexcept = default;
+
+  constexpr MoveOnly(const MoveOnly &) = delete;
+
+  constexpr MoveOnly(MoveOnly &&) noexcept = default;
+
+  constexpr MoveOnly &operator=(const MoveOnly &) = delete;
+
+  constexpr MoveOnly &operator=(MoveOnly &&) noexcept = default;
+};
+
+/// A wrapper to nullify handles on move construction and assignment.
+template <typename Handle> struct NullifyOnMove {
+public:
+  /// Default construct.
+  constexpr NullifyOnMove() noexcept = default;
+
+  constexpr NullifyOnMove(Handle handle) noexcept : handle(handle) {}
+
+  /// Default copy.
+  constexpr NullifyOnMove(const NullifyOnMove &other) noexcept = default;
+
+  /// Nullify on move.
+  constexpr NullifyOnMove(NullifyOnMove &&other) noexcept : handle(steal(other.handle)) {}
+
+  constexpr NullifyOnMove &operator=(Handle other) noexcept {
+    handle = other;
+    return *this;
+  }
+
+  /// Default copy.
+  constexpr NullifyOnMove &operator=(const NullifyOnMove &other) noexcept = default;
+
+  /// Nullify on move.
+  constexpr NullifyOnMove &operator=(NullifyOnMove &&other) noexcept {
+    handle = steal(other.handle);
+    return *this;
+  }
+
+public:
+  /// Implicit usage as `Handle&`.
+  [[nodiscard]] constexpr operator Handle &() noexcept { return handle; }
+
+  /// Implicit usage as `const Handle&`.
+  [[nodiscard]] constexpr operator const Handle &() const noexcept { return handle; }
+
+  /// Implicit usage as `bool`.
+  [[nodiscard]] constexpr operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
+
+  /// Address-of returns the underlying handle.
+  [[nodiscard]] constexpr auto *operator&() noexcept { return &handle; }
+
+  /// Address-of returns the underlying handle.
+  [[nodiscard]] constexpr auto *operator&() const noexcept { return &handle; }
+
+public:
+  Handle handle = VK_NULL_HANDLE;
+};
+
+struct WithDeviceAndAllocator {
+public:
+  [[nodiscard]] operator bool() const noexcept { return device; }
+
+  /// The associated device.
+  NullifyOnMove<VkDevice> device;
+
+  /// The associated allocation callbacks, if any.
+  const VkAllocationCallbacks *allocator{nullptr};
+};
+
+#define MI_VK_DEFAULT_MOVE_ONLY(Class, constructor, destructor)                          \
+  Class() noexcept = default;                                                            \
+  explicit Class(auto &&...args) { constructor(std::forward<decltype(args)>(args)...); } \
+  Class(Class &&) noexcept = default;                                                    \
+  ~Class() { destructor(); }                                                             \
+  Class &operator=(Class &&other) noexcept {                                             \
+    this->~Class(), new (this) Class(std::move(other));                                  \
+    return *this;                                                                        \
+  }
+
+#define MI_VK_DEFAULT_ARRAY_LIKE(member)                             \
+  [[nodiscard]] auto data() noexcept { return member.data(); }       \
+  [[nodiscard]] auto data() const noexcept { return member.data(); } \
+  [[nodiscard]] auto size() const noexcept { return member.size(); }
+
+} // namespace mi::vk

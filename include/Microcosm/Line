@@ -1,0 +1,126 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+template <typename Float, size_t N> struct Line final : ArrayLike<Line<Float, N>> {
+public:
+  constexpr Line() noexcept = default;
+
+  constexpr Line(const Vector<Float, N> &point0, const Vector<Float, N> &point1) noexcept : mPoints{point0, point1} {}
+
+public:
+  MI_ARRAY_LIKE_CONSTEXPR_DATA(&mPoints[0])
+
+  MI_ARRAY_LIKE_STATIC_CONSTEXPR_SIZE(2)
+
+public:
+  /// The center.
+  [[nodiscard]] constexpr Vector<Float, N> center() const noexcept { return (mPoints[0] + mPoints[1]) / 2; }
+
+  /// The edge vector.
+  [[nodiscard]] constexpr Vector<Float, N> vector() const noexcept { return mPoints[1] - mPoints[0]; }
+
+  /// __Only in 2 dimensions!__ The unnormalized edge normal.
+  [[nodiscard]] constexpr Vector<Float, N> normal() const noexcept requires(N == 2) { return hodge(vector()); }
+
+  /// The edge length.
+  [[nodiscard]] Float length() const noexcept { return fastLength(vector()); }
+
+  /// The reverse line segment.
+  [[nodiscard]] constexpr Line<Float, N> reverse() const noexcept { return {mPoints[1], mPoints[0]}; }
+
+  /// __Only in 2 dimensions!__ The perpendicular line segment.
+  [[nodiscard]] constexpr Line<Float, N> perpendicular() const noexcept requires(N == 2) {
+    return {
+      center() + Float(0.5) * normal(), //
+      center() - Float(0.5) * normal()};
+  }
+
+  /// __Only in 2 dimensions!__ The side of the given point, positive (+1) if above and negative (-1) if below.
+  [[nodiscard]] constexpr int sideOf(const Vector<Float, N> &point) const noexcept requires(N == 2) {
+    return dot(normal(), point - mPoints[0]) < 0 ? -1 : +1;
+  }
+
+  /// Calculate the point at the given parameter.
+  [[nodiscard]] constexpr Vector<Float, N> operator()(Float param) const noexcept {
+    return lerp(param, mPoints[0], mPoints[1]);
+  }
+
+  /// Calculate the parameter of the given point.
+  [[nodiscard]] constexpr Float parameterOf(const Vector<Float, N> &point, bool clampToSeg = true) const noexcept {
+    Vector<Float, N> vectorU = point - mPoints[0];
+    Vector<Float, N> vectorV = mPoints[1] - mPoints[0];
+    Float t = dot(vectorU, vectorV) / dot(vectorV, vectorV);
+    if (clampToSeg) {
+      t = max(t, Float(0));
+      t = min(t, Float(1));
+    }
+    return t;
+  }
+
+  struct Nearest {
+    /// The point.
+    Vector<Float, N> point{};
+
+    /// The parameter of the point.
+    Float param{};
+  };
+
+  /// Find the nearest location on the line segment.
+  [[nodiscard]] constexpr Nearest nearestTo(const Vector<Float, N> &point, bool clampToSeg = true) const noexcept {
+    Nearest nearest;
+    nearest.param = parameterOf(point, clampToSeg);
+    nearest.point = operator()(nearest.param);
+    return nearest;
+  }
+
+  struct Intersection {
+    Float paramForLineA{constants::NaN<Float>};
+    Float paramForLineB{constants::NaN<Float>};
+    [[nodiscard]] operator bool() const noexcept {
+      return Float(0) <= paramForLineA && paramForLineA <= Float(1) && //
+             Float(0) <= paramForLineB && paramForLineB <= Float(1);
+    }
+  };
+
+  /// Find the intersection with another line.
+  [[nodiscard]] Intersection intersect(const Line &other) const noexcept requires(N == 2) {
+    Intersection result;
+    try {
+      Matrix<Float, 2, 2> matrix;
+      matrix.col(0).assign(+(this->mPoints[1] - this->mPoints[0]));
+      matrix.col(1).assign(-(other.mPoints[1] - other.mPoints[0]));
+      Vector<Float, 2> params = DecompLU{matrix}.solve(other.mPoints[0] - mPoints[0]);
+      result.paramForLineA = params[0];
+      result.paramForLineB = params[1];
+    } catch (const std::runtime_error &) {
+      /* Do nothing */
+    }
+    return result;
+  }
+
+  void onTransform(auto &&transform) {
+    mPoints[0] = transform.applyAffine(mPoints[0]);
+    mPoints[1] = transform.applyAffine(mPoints[1]);
+  }
+
+private:
+  Vector<Float, N> mPoints[2]{};
+};
+
+template <typename Float> using Line2 = Line<Float, 2>;
+
+template <typename Float> using Line3 = Line<Float, 3>;
+
+using Line2f = Line2<float>;
+
+using Line3f = Line3<float>;
+
+using Line2d = Line2<double>;
+
+using Line3d = Line3<double>;
+
+} // namespace mi

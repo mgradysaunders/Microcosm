@@ -1,0 +1,132 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Timer"
+#include "Microcosm/math"
+
+namespace mi::ui {
+
+struct Clock {
+public:
+  /// Called by `Context::start()`.
+  void start() {
+    int64_t prevTicks = ticks;
+    ticks = timer.microseconds(), deltaTicks = ticks - prevTicks, deltaTime = 1e-6 * deltaTicks;
+    blink = saturate(0.5 * sin(constants::TwoPi<double> * (ticks % 750000) / 750000.0) + 0.5);
+  }
+
+  /// Called by `Context::finish()`.
+  ///
+  /// \param[in] targetTicks
+  /// The target microseconds per frame. If the amount of time elapsed since
+  /// the start of this frame is less than half of the target, then we sleep
+  /// for half of the target. This is approximate, but should prevent enormous
+  /// framerates and keep CPU usage reasonable.
+  ///
+  void finish(int64_t targetTicks = 0) { // Ex: 60FPS => 16667
+    if (targetTicks > 0) {
+      int64_t elapsedTicks = timer.microseconds() - ticks;
+      if (2 * elapsedTicks < targetTicks) sleep(targetTicks / 2000); // Microseconds to milliseconds
+    }
+  }
+
+  [[nodiscard]] double expLerpFraction(double halfLife = 1) const noexcept {
+    return -expm1(-constants::LnTwo<double> / halfLife * deltaTime);
+  }
+
+public:
+  Timer<std::chrono::high_resolution_clock> timer;
+
+  /// The microsecond timestamp. Not entirely useful by itself, but needed to compute `deltaTicks`.
+  int64_t ticks{0};
+
+  /// The microseconds elapsed since the last frame.
+  int64_t deltaTicks{0};
+
+  /// The seconds elapsed since the last frame.
+  double deltaTime{0};
+
+  /// The global blink fraction, so everything that needs to blink is synchronized.
+  double blink{0};
+};
+
+struct Timeline {
+public:
+  constexpr Timeline() noexcept = default;
+
+  constexpr Timeline(std::in_place_t, int64_t ticks) noexcept : mTicks(ticks) {}
+
+  constexpr Timeline(double seconds) noexcept : mTicks(std::llround(1e6 * seconds)) {}
+
+  constexpr void think(const Clock &clock) noexcept { mTicks += clock.deltaTicks; }
+
+  constexpr void think(const Clock &clock, bool reset) {
+    if (reset)
+      mTicks = 0;
+    else
+      mTicks += clock.deltaTicks;
+  }
+
+  [[nodiscard]] constexpr int64_t ticks() const noexcept { return mTicks; }
+
+  /// The timeline position in seconds.
+  [[nodiscard]] constexpr operator double() const noexcept { return 1e-6 * mTicks; }
+
+private:
+  int64_t mTicks{0};
+};
+
+struct BoolTracker {
+public:
+  constexpr BoolTracker() noexcept = default;
+
+  constexpr BoolTracker(bool state, int64_t duration = 100'000) noexcept {
+    mState = state ? 0xFF : 0x00;
+    mTicks = state ? duration : 0;
+    mTickLimit = duration;
+  }
+
+  constexpr void think(const Clock &clock) noexcept { think(clock, mState & 1); }
+
+  constexpr void think(const Clock &clock, uint8_t state) noexcept {
+    mState = (mState << 1) | (state & 1);
+    mTicks = (mState & 1) ? min(mTicks + clock.deltaTicks, mTickLimit) //
+                          : max(mTicks - clock.deltaTicks, 0);
+    mTimeline.think(clock, justTrue() || justFalse());
+  }
+
+  /// The timeline for the current state.
+  [[nodiscard]] constexpr const Timeline &timeline() const noexcept { return mTimeline; }
+
+  /// Is true this frame?
+  [[nodiscard]] constexpr operator bool() const noexcept { return (mState & 1) == 1; }
+
+  /// Is false last frame and true this frame?
+  [[nodiscard]] constexpr bool justTrue() const noexcept { return (mState & 0b11) == 0b01; }
+
+  /// Is true last frame and false this frame?
+  [[nodiscard]] constexpr bool justFalse() const noexcept { return (mState & 0b11) == 0b10; }
+
+  /// The bool fraction.
+  [[nodiscard]] constexpr double fraction(auto easing) const noexcept { return easing(double(mTicks) / double(mTickLimit)); }
+
+  [[nodiscard]] constexpr double fraction() const noexcept { return fraction(ease::Smooth(2)); }
+
+private:
+  /// The state flags.
+  uint8_t mState{0};
+
+  /// The ticks.
+  ///
+  /// - If the state is false, decrements until zero.
+  /// - If the state is true, increments until reaching the tick limit.
+  int32_t mTicks{0};
+
+  /// The tick limit, or the time it takes to transition between states in microseconds.
+  int32_t mTickLimit{100000};
+
+  /// The timeline for the current state. Resets when the state changes.
+  Timeline mTimeline;
+};
+
+} // namespace mi::ui

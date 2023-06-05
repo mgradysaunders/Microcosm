@@ -1,0 +1,139 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/Shader"
+
+namespace mi::gl {
+
+struct Program final : Handle<Program> {
+public:
+  using Handle<Program>::Handle;
+
+  [[nodiscard]] static GLuint allocate() noexcept { return glCreateProgram(); }
+
+  static void deallocate(GLuint handle) noexcept { glDeleteProgram(handle); }
+
+  template <std::convertible_to<GLuint>... Args> requires(sizeof...(Args) > 0) explicit Program(Args &&...shaders) {
+    (attach(std::forward<Args>(shaders)), ...);
+    linkOrThrow();
+  }
+
+public:
+  [[nodiscard]] GLint get(GLenum name) const noexcept {
+    GLint value = 0;
+    glGetProgramiv(mHandle, name, &value);
+    return value;
+  }
+
+  [[nodiscard]] std::string infoLog() const {
+    std::string info;
+    info.resize(get(GL_INFO_LOG_LENGTH) + 1);
+    glGetProgramInfoLog(mHandle, info.size(), nullptr, reinterpret_cast<GLchar *>(info.data()));
+    return info;
+  }
+
+  void attach(GLuint shader) noexcept { glAttachShader(mHandle, shader); }
+
+  [[nodiscard]] bool link() noexcept {
+    glLinkProgram(mHandle);
+    return get(GL_LINK_STATUS) == GL_TRUE;
+  }
+
+  void linkOrThrow() {
+    if (!link()) throw std::runtime_error(infoLog());
+  }
+
+  [[nodiscard]] bool validate() const noexcept {
+    glValidateProgram(mHandle);
+    return get(GL_VALIDATE_STATUS) == GL_TRUE;
+  }
+
+  void use() const noexcept { glUseProgram(mHandle); }
+
+protected:
+  using Handle<Program>::mHandle;
+};
+
+template <concepts::primitive Value> [[strong_inline]] inline void uniform(GLint location, Value value) noexcept {
+  static_assert(concepts::same_as_any<Value, GLint, GLfloat, GLdouble, GLuint>);
+  if constexpr (std::same_as<Value, GLint>) {
+    glUniform1i(location, value);
+  } else if constexpr (std::same_as<Value, GLfloat>) {
+    glUniform1f(location, value);
+  } else if constexpr (std::same_as<Value, GLdouble>) {
+    glUniform1d(location, value);
+  } else if constexpr (std::same_as<Value, GLuint>) {
+    glUniform1ui(location, value);
+  }
+}
+
+template <concepts::primitive Value, size_t N>
+[[strong_inline]] inline void uniform(GLint location, const Tensor<Value, TensorShape<N>> &value) noexcept {
+  static_assert(concepts::same_as_any<Value, GLint, GLfloat, GLdouble, GLuint>);
+  static_assert(N >= 1 && N <= 4);
+  if constexpr (N == 1) {
+    uniform(location, value[0]);
+  } else {
+    if constexpr (std::same_as<Value, GLint>) {
+      if constexpr (N == 2) glUniform2iv(location, 1, &value[0]);
+      if constexpr (N == 3) glUniform3iv(location, 1, &value[0]);
+      if constexpr (N == 4) glUniform4iv(location, 1, &value[0]);
+    } else if constexpr (std::same_as<Value, GLfloat>) {
+      if constexpr (N == 2) glUniform2fv(location, 1, &value[0]);
+      if constexpr (N == 3) glUniform3fv(location, 1, &value[0]);
+      if constexpr (N == 4) glUniform4fv(location, 1, &value[0]);
+    } else if constexpr (std::same_as<Value, GLdouble>) {
+      if constexpr (N == 2) glUniform2dv(location, 1, &value[0]);
+      if constexpr (N == 3) glUniform3dv(location, 1, &value[0]);
+      if constexpr (N == 4) glUniform4dv(location, 1, &value[0]);
+    } else if constexpr (std::same_as<Value, GLuint>) {
+      if constexpr (N == 2) glUniform2uiv(location, 1, &value[0]);
+      if constexpr (N == 3) glUniform3uiv(location, 1, &value[0]);
+      if constexpr (N == 4) glUniform4uiv(location, 1, &value[0]);
+    }
+  }
+}
+
+template <std::floating_point Value, size_t M, size_t N>
+inline void uniform(GLint location, const Tensor<Value, TensorShape<M, N>> &value) noexcept {
+  static_assert(concepts::same_as_any<Value, GLfloat, GLdouble>);
+  static_assert(M >= 1 && M <= 4);
+  static_assert(N >= 1 && N <= 4);
+  if constexpr (M == 1) {
+    uniform(location, value.row(0).execute());
+  } else if constexpr (N == 1) {
+    uniform(location, value.col(0).execute());
+  } else if constexpr (M == 2) {
+    if constexpr (std::same_as<Value, GLfloat>) {
+      if constexpr (N == 2) glUniformMatrix2fv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 3) glUniformMatrix3x2fv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 4) glUniformMatrix4x2fv(location, 1, GL_TRUE, &value[0][0]);
+    } else {
+      if constexpr (N == 2) glUniformMatrix2dv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 3) glUniformMatrix3x2dv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 4) glUniformMatrix4x2dv(location, 1, GL_TRUE, &value[0][0]);
+    }
+  } else if constexpr (M == 3) {
+    if constexpr (std::same_as<Value, GLfloat>) {
+      if constexpr (N == 2) glUniformMatrix2x3fv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 3) glUniformMatrix3fv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 4) glUniformMatrix4x3fv(location, 1, GL_TRUE, &value[0][0]);
+    } else {
+      if constexpr (N == 2) glUniformMatrix2x3dv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 3) glUniformMatrix3dv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 4) glUniformMatrix4x3dv(location, 1, GL_TRUE, &value[0][0]);
+    }
+  } else {
+    if constexpr (std::same_as<Value, GLfloat>) {
+      if constexpr (N == 2) glUniformMatrix2x4fv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 3) glUniformMatrix3x4fv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 4) glUniformMatrix4fv(location, 1, GL_TRUE, &value[0][0]);
+    } else {
+      if constexpr (N == 2) glUniformMatrix2x4dv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 3) glUniformMatrix3x4dv(location, 1, GL_TRUE, &value[0][0]);
+      if constexpr (N == 4) glUniformMatrix4dv(location, 1, GL_TRUE, &value[0][0]);
+    }
+  }
+}
+
+} // namespace mi::gl

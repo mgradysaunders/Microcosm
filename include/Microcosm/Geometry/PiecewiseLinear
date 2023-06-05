@@ -1,0 +1,110 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+
+namespace mi::geometry {
+
+class MI_GEOMETRY_API PiecewiseLinear {
+public:
+  PiecewiseLinear() = default;
+
+  /// Construct directly.
+  template <std::ranges::range Values>
+  explicit PiecewiseLinear(float minCoord, float maxCoord, Values &&values) : minCoord(minCoord), maxCoord(maxCoord) {
+    mValues.insert(mValues.end(), std::ranges::begin(values), std::ranges::end(values));
+    initializeValueInts();
+  }
+
+  /// Construct by sampling a function.
+  template <std::invocable<float> Callback>
+  explicit PiecewiseLinear(float minCoord, float maxCoord, int count, Callback &&callback)
+    : minCoord(minCoord), maxCoord(maxCoord) {
+    if (count >= 1) {
+      mValues.reserve(count + 1);
+      for (int index = 0; index <= count; index++)
+        mValues.emplace_back(callback(lerp(index / float(count), minCoord, maxCoord)));
+      initializeValueInts();
+    }
+  }
+
+  [[nodiscard]] int size() const noexcept { return mValues.size(); }
+
+  [[nodiscard]] float spacing() const noexcept { return (maxCoord - minCoord) / (size() - 1); }
+
+  [[nodiscard]] float value(float coord) const noexcept;
+
+  [[nodiscard]] float integral(float coord) const noexcept;
+
+  [[nodiscard]] float integral(float coordA, float coordB) const noexcept { return integral(coordB) - integral(coordA); }
+
+  [[nodiscard]] float integral() const noexcept { return mValueInts.back(); }
+
+  [[nodiscard]] float average(float coordA, float coordB) const noexcept {
+    if (size() == 0) return 0.0f;
+    if (size() == 1) return mValues.front();
+    if (spacing() * 1e-3f > abs(coordB - coordA))
+      return value(0.5f * (coordA + coordB));
+    else
+      return integral(coordA, coordB) / (coordB - coordA);
+  }
+
+  [[nodiscard]] float minimum(float coordA, float coordB) const noexcept;
+
+  [[nodiscard]] float maximum(float coordA, float coordB) const noexcept;
+
+  [[nodiscard]] float integralInverse(float valueInt) const noexcept;
+
+public:
+  float minCoord = 0;
+
+  float maxCoord = 0;
+
+  Wrap wrapBefore = Wrap::Clamp;
+
+  Wrap wrapAfter = Wrap::Clamp;
+
+private:
+  std::vector<float> mValues;
+
+  std::vector<float> mValueInts;
+
+  bool mValueIntsIncreasing = false;
+
+  bool mValueIntsDecreasing = false;
+
+  /// Initialize the value integrals, used by constructors.
+  void initializeValueInts() {
+    double valueInt = 0;
+    double coeff = spacing() * 0.5;
+    mValueInts.clear();
+    mValueInts.reserve(size());
+    mValueInts.emplace_back(0);
+    for (int index = 1; index < size(); index++) {
+      double value0 = mValues[index - 1];
+      double value1 = mValues[index];
+      valueInt += coeff * (value0 + value1);
+      mValueInts.emplace_back(valueInt);
+    }
+    mValueIntsIncreasing = true;
+    mValueIntsDecreasing = true;
+    for (int index = 1; index < size(); index++) {
+      if (!(mValueInts[index] >= mValueInts[index - 1])) mValueIntsIncreasing = false;
+      if (!(mValueInts[index] <= mValueInts[index - 1])) mValueIntsDecreasing = false;
+    }
+  }
+
+public:
+  void onSerialize(auto &serializer) {
+    serializer <=> wrapBefore;
+    serializer <=> wrapAfter;
+    serializer <=> minCoord;
+    serializer <=> maxCoord;
+    serializer <=> mValues;
+    serializer <=> mValueInts;
+    serializer <=> mValueIntsIncreasing;
+    serializer <=> mValueIntsDecreasing;
+  }
+};
+
+} // namespace mi::geometry

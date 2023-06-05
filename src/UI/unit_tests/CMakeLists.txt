@@ -1,0 +1,9 @@
+microcosm_add_tests(
+  "test_UI"
+  SOURCES
+    "Color.cc"
+    "Rect.cc"
+    "Transform.cc"
+  DEPENDS
+    ${PROJECT_NAME}::UI
+  )

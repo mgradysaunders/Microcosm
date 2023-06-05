@@ -1,0 +1,137 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include <map>
+#include <set>
+
+namespace mi::geometry {
+
+class MI_GEOMETRY_API Delaunator {
+public:
+  using Int = int32_t;
+
+  static constexpr Int None = -1;
+
+  struct Edge {
+    constexpr Edge() noexcept = default;
+
+    constexpr Edge(Int vertA, Int vertB) noexcept : verts{vertA, vertB} {}
+
+    [[nodiscard]] constexpr auto operator<=>(const Edge &other) const noexcept {
+      return std::minmax(verts[0], verts[1]) <=> std::minmax(other.verts[0], other.verts[1]);
+    }
+
+    [[nodiscard]] constexpr bool operator==(const Edge &) const noexcept = default;
+
+    [[nodiscard]] constexpr bool operator!=(const Edge &) const noexcept = default;
+
+    [[nodiscard]] constexpr auto &operator[](size_t i) noexcept { return verts[i]; };
+
+    [[nodiscard]] constexpr auto &operator[](size_t i) const noexcept { return verts[i]; }
+
+    Int verts[2] = {None, None};
+  };
+
+  struct Face {
+    constexpr Face() noexcept = default;
+
+    constexpr Face(Int vertA, Int vertB, Int vertC) noexcept : verts{vertA, vertB, vertC} {}
+
+    [[nodiscard]] constexpr Int opposite(Edge edge) const noexcept {
+      for (Int vert : verts)
+        if (vert != edge[0] && vert != edge[1]) return vert;
+      return None;
+    }
+
+    constexpr void cycle() noexcept {
+      Int vert0 = verts[0];
+      verts[0] = verts[1];
+      verts[1] = verts[2];
+      verts[2] = vert0;
+    }
+
+    constexpr void flipWinding() noexcept { std::swap(verts[1], verts[2]); }
+
+    [[nodiscard]] constexpr auto &operator[](size_t i) noexcept { return verts[i]; }
+
+    [[nodiscard]] constexpr auto &operator[](size_t i) const noexcept { return verts[i]; }
+
+    Int verts[3] = {None, None, None};
+  };
+
+  struct FacePair {
+    constexpr FacePair() noexcept = default;
+
+    constexpr FacePair(Int faceF, Int faceG) noexcept : faces{faceF, faceG} {}
+
+    [[nodiscard]] constexpr bool empty() const noexcept { return faces[0] == None && faces[1] == None; }
+
+    [[nodiscard]] constexpr bool full() const noexcept { return faces[0] != None && faces[1] != None; }
+
+    constexpr void push(Int faceF) noexcept { faces[faces[0] == None ? 0 : 1] = faceF; }
+
+    constexpr void replace(Int faceF, Int faceG) noexcept { faces[faces[0] == faceF ? 0 : 1] = faceG; }
+
+    [[nodiscard]] constexpr auto &operator[](size_t i) noexcept { return faces[i]; }
+
+    [[nodiscard]] constexpr auto &operator[](size_t i) const noexcept { return faces[i]; }
+
+    Int faces[2] = {None, None};
+  };
+
+  using EdgeIterator = typename std::map<Edge, FacePair>::const_iterator;
+
+public:
+  Delaunator() noexcept = default;
+
+  template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
+  explicit Delaunator(Iterator from, Sentinel to) {
+    verts.reserve(64);
+    while (from != to) verts.push_back(*from++);
+    build();
+  }
+
+  template <std::ranges::input_range Range>
+  explicit Delaunator(Range &&range) : Delaunator(std::ranges::begin(range), std::ranges::end(range)) {}
+
+  Delaunator(const Delaunator &) = default;
+
+  Delaunator(Delaunator &&) noexcept = default;
+
+  Delaunator &operator=(const Delaunator &) = default;
+
+  Delaunator &operator=(Delaunator &&) noexcept = default;
+
+  void clear() noexcept;
+
+  void build();
+
+  void build(std::vector<Vector2f> newPoints) {
+    verts = std::move(newPoints);
+    build();
+  }
+
+  [[nodiscard]] float signedArea(Face face) const noexcept;
+
+  [[nodiscard]] float oppositeAngle(Face face, Edge edge) const noexcept;
+
+  [[nodiscard]] bool delaunayCondition(Edge edge) const noexcept;
+
+  [[nodiscard]] bool delaunayCondition(EdgeIterator edge) const noexcept;
+
+public:
+  /// Verts.
+  std::vector<Vector2f> verts;
+
+  /// Faces.
+  std::vector<Face> faces;
+
+  /// Face pair for each edge.
+  std::map<Edge, FacePair> facesForEdge;
+
+  /// Boundary edges.
+  std::set<Edge> boundaryEdges;
+};
+
+} // namespace mi::geometry

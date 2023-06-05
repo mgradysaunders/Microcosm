@@ -1,0 +1,86 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Scattering"
+
+namespace mi::render {
+
+struct MI_RENDER_API HomogeneousMedium final {
+public:
+  using medium_tag = std::true_type;
+
+  using ScatteringProvider = std::function<Scattering(Vector3d point)>;
+
+  HomogeneousMedium() noexcept = default;
+
+  HomogeneousMedium(Spectrum sigmaS, Spectrum sigmaA, ScatteringProvider scatteringProvider = {})
+    : mSigmaS(std::move(sigmaS)), mSigmaT(mSigmaS + std::move(sigmaA)), mScatteringProvider(std::move(scatteringProvider)) {}
+
+  HomogeneousMedium(Spectrum sigmaS, Spectrum sigmaA, Scattering scattering)
+    : mSigmaS(std::move(sigmaS)), mSigmaT(mSigmaS + std::move(sigmaA)),
+      mScatteringProvider([scattering = std::move(scattering)](Vector3d) -> Scattering { return scattering; }) {}
+
+public:
+  void transmission(Random &random, Ray3d ray, Spectrum &tr) const;
+
+  [[nodiscard]] std::optional<VolumeScattering> transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const;
+
+private:
+  /// \name Volume parameters
+  ///
+  /// We keep track of the scattering and extinction coefficients for the medium, with the extinction being the sum
+  /// of scattering and absorption coefficients. These all have units of inverse distance, and are functionally rate
+  /// parameters for an exponential distribution. That is to say that each may also be thought of as the reciprocal
+  /// of the Mean Free Path (MFP), which is the average distance between interactions in the volume.
+  ///
+  /// \{
+
+  /// The scattering coefficient.
+  Spectrum mSigmaS{};
+
+  /// The extinction coefficient.
+  Spectrum mSigmaT{};
+
+  /// \}
+
+  /// The scattering provider, which may vary the phase function with position (and of course independently of
+  /// the scattering and absorption parameters that are constant in a homogeneous medium).
+  ScatteringProvider mScatteringProvider{};
+};
+
+struct MI_RENDER_API HeterogeneousDeltaTrackingMedium final {
+public:
+  using medium_tag = std::true_type;
+
+  using SigmaProvider = std::function<void(Vector3d point, Vector3d omega, Spectrum &sigmaS, Spectrum &sigmaA)>;
+
+  using ScatteringProvider = std::function<Scattering(Vector3d point)>;
+
+  HeterogeneousDeltaTrackingMedium() noexcept = default;
+
+  HeterogeneousDeltaTrackingMedium(
+    BoundBox3d boundBox, double maxSigmaT, SigmaProvider sigmaProvider, ScatteringProvider scatteringProvider) noexcept
+    : mBoundBox(boundBox), mMaxSigmaT(maxSigmaT), mSigmaProvider(std::move(sigmaProvider)),
+      mScatteringProvider(std::move(scatteringProvider)) {}
+
+public:
+  void transmission(Random &random, Ray3d ray, Spectrum &tr) const;
+
+  [[nodiscard]] std::optional<VolumeScattering> transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const;
+
+private:
+  /// The bounding box.
+  BoundBox3d mBoundBox{};
+
+  /// The upper bound on the extinction coefficient. (Must greater than or equal to the implicit maximum value of
+  /// the extinction, or the sum of the scattering and absorption coefficients.)
+  double mMaxSigmaT{};
+
+  /// The scattering and absorption coefficient provider.
+  SigmaProvider mSigmaProvider{};
+
+  /// The scattering provider, which may vary the phase function with position.
+  ScatteringProvider mScatteringProvider{};
+};
+
+} // namespace mi::render

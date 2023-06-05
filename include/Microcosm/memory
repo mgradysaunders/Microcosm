@@ -1,0 +1,13 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./hidden@/memory/DeepPtr.h"
+#include "./hidden@/memory/GrowableHeap.h"
+#include "./hidden@/memory/GrowableStack.h"
+#include "./hidden@/memory/IntrusivePoolVector.h"
+#include "./hidden@/memory/MemoryArena.h"
+#include "./hidden@/memory/MemoryPool.h"
+#include "./hidden@/memory/RefPtr.h"
+#include "./hidden@/memory/StaticQueue.h"
+#include "./hidden@/memory/StaticStack.h"
+#include "./hidden@/memory/StaticString.h"

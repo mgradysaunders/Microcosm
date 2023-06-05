@@ -1,0 +1,23 @@
+microcosm_add_tests(
+  "test_common"
+  SOURCES
+    "Bezier.cc"
+    "Differentiable.cc"
+    "Json.cc"
+    "math.cc"
+    "memory.cc"
+    "miniz.cc"
+    "Noise.cc"
+    "Quadrature.cc"
+    "Quaternion.cc"
+    "Pcg.cc"
+    "Serializer.cc"
+    "Tensor.cc"
+    "Timer.cc"
+    "utility.cc"
+  DEPENDS
+    ${PROJECT_NAME}::Json
+    ${PROJECT_NAME}::miniz
+    ${PROJECT_NAME}::Quadrature
+    ${PROJECT_NAME}::Serializer
+  )

@@ -1,0 +1,268 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Pcg"
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+template <typename F> class Noise;
+
+template <typename X, typename Y> class Noise<Y(X)> {
+public:
+  using Coordinate = X;
+
+  using Value = Y;
+
+  Noise() noexcept = default;
+
+  Noise(Y value) : mValue([value](X) -> Y { return value; }) {}
+
+  template <typename F> requires(std::invocable<F, X> && !std::same_as<std::decay_t<F>, Noise>)
+  Noise(F &&func) : mValue(std::forward<F>(func)) {}
+
+  [[nodiscard, strong_inline]] Y operator()(X coord) const { return mValue(coord); }
+
+  template <typename W> [[nodiscard, strong_inline]] Noise<Y(W)> operator()(Noise<X(W)> other) const & {
+    return [noiseA = mValue, noiseB = std::move(other)](W coord) -> Y { return noiseA(noiseB(coord)); };
+  }
+
+  template <typename W> [[nodiscard, strong_inline]] Noise<Y(W)> operator()(Noise<X(W)> other) const && {
+    return [noiseA = std::move(mValue), noiseB = std::move(other)](W coord) -> Y { return noiseA(noiseB(coord)); };
+  }
+
+  std::function<Y(X)> mValue = [](X) -> Y { return Y(); };
+};
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator+(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+  return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) + noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator-(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+  return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) - noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator*(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+  return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) * noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator/(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+  return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) / noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator+(Noise<A(X)> noiseA, B valueB) {
+  return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) + valueB; };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator-(Noise<A(X)> noiseA, B valueB) {
+  return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) - valueB; };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator*(Noise<A(X)> noiseA, B valueB) {
+  return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) * valueB; };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator/(Noise<A(X)> noiseA, B valueB) {
+  return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) / valueB; };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator+(A valueA, Noise<B(X)> noiseB) {
+  return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA + noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator-(A valueA, Noise<B(X)> noiseB) {
+  return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA - noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator*(A valueA, Noise<B(X)> noiseB) {
+  return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA * noiseB(coord); };
+}
+
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
+[[nodiscard, strong_inline]] inline Noise<C(X)> operator/(A valueA, Noise<B(X)> noiseB) {
+  return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA / noiseB(coord); };
+}
+
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator+=(Noise<Y(X)> &noise, auto &&other) {
+  return noise = (std::move(noise) + auto_forward(other));
+}
+
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator-=(Noise<Y(X)> &noise, auto &&other) {
+  return noise = (std::move(noise) - auto_forward(other));
+}
+
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator*=(Noise<Y(X)> &noise, auto &&other) {
+  return noise = (std::move(noise) * auto_forward(other));
+}
+
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator/=(Noise<Y(X)> &noise, auto &&other) {
+  return noise = (std::move(noise) / auto_forward(other));
+}
+
+namespace noise_generators {
+
+template <typename Float> [[nodiscard]] inline Noise<Vector<Float, 2>(Vector<Float, 1>)> Circle() {
+  return [](Vector<Float, 1> coord) -> Vector<Float, 2> { return {cos(coord[0]), sin(coord[0])}; };
+}
+
+template <typename Float> [[nodiscard]] inline Noise<Vector<Float, 4>(Vector<Float, 2>)> CliffordTorus() {
+  return [](Vector<Float, 2> coord) -> Vector<Float, 4> {
+    return {cos(coord[0]), sin(coord[0]), cos(coord[1]), sin(coord[1])};
+  };
+}
+
+template <typename Value, size_t N, typename Easing>
+[[nodiscard]] inline Noise<Value(Vector<Value, N>)> Simplex(uint64_t seed, Easing easing) {
+  using Float = to_float_t<Value>;
+  return [=](Vector<Value, N> position) -> Value {
+    auto SurroundingCorners = [seed](Vector<Float, N> position) noexcept {
+      constexpr uint32_t GradientGranularity = 16;
+      static const Float CoeffF = (1.0 / N) * (sqrt(N + 1) - 1.0);
+      static const Float CoeffG = (1.0 / N) * (1.0 - 1.0 / sqrt(N + 1));
+      position += CoeffF * position.sum(); // Skew
+
+      // Put into descending order.
+      Vector<int, N> order{};
+      Vector<int, N> index = fastFloor(position);
+      position -= index;
+      for (size_t i = 0; i < N; i++) order[i] = i;
+      if constexpr (N == 2) order[0] = position[0] < position[1], order[1] = !order[0];
+      if constexpr (N >= 3) std::sort(order.begin(), order.end(), [&](int iA, int iB) { return position[iA] > position[iB]; });
+
+      // Assemble corners.
+      Pcg32 random;
+      int indexSum = index.sum();
+      struct Corner {
+        Vector<Float, N> position; ///< The position.
+        Vector<Float, N> gradient; ///< The gradient associated with this corner.
+      };
+      std::array<Corner, N + 1> corners{};
+      for (size_t i = 0; i <= N; i++) {
+        Corner &corner = corners[i];
+        corner.position = index - CoeffG * indexSum; // Unskew
+
+        // Obtain a random sequence by seeding a permuted-congruential generator (PCG) with
+        // the murmur hash (first 64-bits for the seed, second 64-bits for the stream) of the
+        // corner index, then discard an enormous prime number of elements just to be extra
+        // safe.
+        //
+        // NOTE: Initializing the random number generator effectively is critical to
+        // the overall quality of the noise. For a long time, the implementation was
+        // not so careful and the noise often featured yucky correlated patterns.
+        random = Pcg32(murmurHash3(seed, index.size() * sizeof(int), &index[0]));
+        random.discard(10657331232548839);
+        for (Float &gradientValue : corner.gradient)
+          gradientValue = 2 * random(GradientGranularity) / Float(GradientGranularity - 1) - 1;
+
+        // Step to the next corner.
+        if (i != N) ++index[order[i]], ++indexSum;
+      }
+      return corners;
+    };
+    Value result{0};
+    for (const auto &corner : SurroundingCorners(position)) {
+      Vector<Value, N> offset{position - corner.position};
+      if (Value distSq{lengthSquare(offset)}; distSq < Float(0.5)) {
+        result += (1 - easing(sqrt(2 * distSq))) * dot(corner.gradient, offset);
+      }
+    }
+    result *= 2;
+    return result;
+  };
+}
+
+template <typename Value, size_t N> [[nodiscard]] inline Noise<Value(Vector<Value, N>)> Simplex(uint64_t seed = 0) {
+  return Simplex<Value, N>(seed, ease::Feed(ease::SmoothStop(2), ease::SmoothStart(2)));
+}
+
+/* octaves = 6.73
+   lacunarity = 2.16
+   diminution = 0.53
+   offset = 0.67
+   gain = 1.4 */
+
+template <typename X, typename Y>
+[[nodiscard]] inline Noise<Y(X)> MusgraveFractal( //
+  Noise<Y(X)> noise, auto octaves, auto lacunarity, auto diminution) {
+  return [noise = std::move(noise), octaves, maxOctave = fastFloor(octaves), //
+          amplitudeRatio = pow(lacunarity, -diminution),                     //
+          frequencyRatio = lacunarity](X coord) -> Y {
+    Y result{};
+    std::remove_const_t<decltype(amplitudeRatio)> amplitude{1};
+    std::remove_const_t<decltype(frequencyRatio)> frequency{1};
+    Pcg32 shift{39916801};
+    for (int octave = 0; octave <= maxOctave; octave++) {
+      if (octave == maxOctave && !((amplitude *= octaves - maxOctave) > 0)) [[unlikely]]
+        break;
+      result += amplitude * noise(frequency * (coord + 2 * randomize<X>(shift) - 1));
+      amplitude *= amplitudeRatio;
+      frequency *= frequencyRatio;
+    }
+    return result;
+  };
+}
+
+template <typename X, typename Y>
+[[nodiscard]] inline Noise<Y(X)> MusgraveHybridMultifractal( //
+  Noise<Y(X)> noise, auto octaves, auto lacunarity, auto diminution, auto offset) {
+  return [noise = std::move(noise), octaves, maxOctave = fastFloor(octaves), //
+          amplitudeRatio = pow(lacunarity, -diminution),                     //
+          frequencyRatio = lacunarity, offset](X coord) -> Y {
+    Y result{0};
+    Y weight{1};
+    std::remove_const_t<decltype(amplitudeRatio)> amplitude{1};
+    std::remove_const_t<decltype(frequencyRatio)> frequency{1};
+    Pcg32 shift{39916801};
+    for (int octave = 0; octave <= maxOctave; octave++) {
+      if (octave == maxOctave && !((amplitude *= octaves - maxOctave) > 0)) [[unlikely]]
+        break;
+      weight *= amplitude * (noise(frequency * (coord + 2 * randomize<X>(shift) - 1)) + offset);
+      result += weight;
+      amplitude *= amplitudeRatio;
+      frequency *= frequencyRatio;
+      if (weight > 1) weight = 1;
+    }
+    return result;
+  };
+}
+
+template <typename X, typename Y>
+[[nodiscard]] inline Noise<Y(X)> MusgraveRidgedMultifractal( //
+  Noise<Y(X)> noise, auto octaves, auto lacunarity, auto diminution, auto offset, auto gain) {
+  return [noise = std::move(noise), octaves, maxOctave = fastFloor(octaves), //
+          amplitudeRatio = pow(lacunarity, -diminution),                     //
+          frequencyRatio = lacunarity, offset, gain](X coord) -> Y {
+    Y result{0};
+    Y weight{1};
+    std::remove_const_t<decltype(amplitudeRatio)> amplitude{1};
+    std::remove_const_t<decltype(frequencyRatio)> frequency{1};
+    Pcg32 shift{39916801};
+    for (int octave = 0; octave <= maxOctave; octave++) {
+      if (octave == maxOctave && !((amplitude *= octaves - maxOctave) > 0)) [[unlikely]]
+        break;
+      weight *= sqr(offset - abs(noise(frequency * (coord + 2 * randomize<X>(shift) - 1))));
+      result += amplitude * weight;
+      amplitude *= amplitudeRatio;
+      frequency *= frequencyRatio;
+      weight *= gain;
+      if (weight < 0) weight = 0;
+      if (weight > 1) weight = 1;
+    }
+    return result;
+  };
+}
+
+} // namespace noise_generators
+
+} // namespace mi

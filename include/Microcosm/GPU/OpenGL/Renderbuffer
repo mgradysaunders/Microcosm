@@ -1,0 +1,29 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/gl3w"
+
+namespace mi::gl {
+
+struct Renderbuffer final : Handle<Renderbuffer> {
+public:
+  using Handle<Renderbuffer>::Handle;
+
+  [[nodiscard]] static GLuint allocate() noexcept {
+    GLuint handle = 0;
+    glCreateRenderbuffers(1, &handle);
+    return handle;
+  }
+
+  static void deallocate(GLuint handle) noexcept { glDeleteRenderbuffers(1, &handle); }
+
+public:
+  void storage(GLenum format, GLsizei width, GLsizei height) noexcept {
+    glNamedRenderbufferStorage(mHandle, format, width, height);
+  }
+
+protected:
+  using Handle<Renderbuffer>::mHandle;
+};
+
+} // namespace mi::gl

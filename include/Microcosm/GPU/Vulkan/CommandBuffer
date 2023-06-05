@@ -1,0 +1,42 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/common"
+
+namespace mi::vk {
+
+struct MI_VK_API CommandBuffer final : MoveOnly {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(CommandBuffer, allocate, deallocate)
+
+  void allocate(VkDevice device, VkCommandPool pool, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
+
+  void deallocate();
+
+  void begin(VkCommandBufferUsageFlags flags, const VkCommandBufferInheritanceInfo *inheritanceInfo = nullptr);
+
+  void begin(VkCommandBufferUsageFlags flags, const VkCommandBufferInheritanceInfo &inheritanceInfo) {
+    begin(flags, &inheritanceInfo);
+  }
+
+  void end() { vkEndCommandBuffer(commandBuffer); }
+
+  void flush(VkQueue queue);
+
+  /// Implicit usage as `VkCommandBuffer`.
+  [[nodiscard]] operator VkCommandBuffer() const noexcept { return commandBuffer; }
+
+  /// Implicit usage as `bool`.
+  [[nodiscard]] operator bool() const noexcept { return commandBuffer; }
+
+  /// The associated device.
+  NullifyOnMove<VkDevice> device;
+
+  /// The associated command pool.
+  NullifyOnMove<VkCommandPool> commandPool;
+
+  /// The command buffer.
+  NullifyOnMove<VkCommandBuffer> commandBuffer;
+};
+
+} // namespace mi::vk

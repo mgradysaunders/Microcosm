@@ -1,0 +1,107 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Manifold"
+
+namespace mi::render {
+
+template <typename Value>
+concept is_shape = std::same_as<typename std::decay_t<Value>::shape_tag, std::true_type>;
+
+struct MI_RENDER_API Shape final : public Any {
+public:
+  /// The ray intersection routine.
+  using Intersect = std::function<std::optional<double>(const Shape &self, Ray3d ray, Manifold &manifold)>;
+
+  /// The nearest-point finding routine.
+  using NearestTo = std::function<std::optional<double>(const Shape &self, Vector3d referencePoint, Manifold &manifold)>;
+
+  Shape() noexcept = default;
+
+  explicit Shape(std::in_place_t, std::any any, BoundBox3d box, Intersect intersect, NearestTo nearestTo) noexcept
+    : Any(std::move(any)),              //
+      mBox(std::move(box)),             //
+      mIntersect(std::move(intersect)), //
+      mNearestTo(std::move(nearestTo)) {}
+
+  template <typename Value> requires is_shape<Value> Shape(Value &&value)
+    : Shape(
+        std::in_place, std::any(std::forward<Value>(value)), BoundBox3d(),
+        [](auto &self, Ray3d ray, Manifold &manifold) -> std::optional<double> {
+          return self.template as<Value>().intersect(ray, manifold);
+        },
+        [](auto &self, Vector3d referencePoint, Manifold &manifold) -> std::optional<double> {
+          return self.template as<Value>().nearestTo(referencePoint, manifold);
+        }) {
+    mBox = this->template as<Value>().box();
+  }
+
+public:
+  [[nodiscard, strong_inline]] const BoundBox3d &box() const { return mBox; }
+
+  [[nodiscard, strong_inline]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const {
+    return mIntersect(*this, ray, manifold);
+  }
+
+  [[nodiscard, strong_inline]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const {
+    return mNearestTo(*this, referencePoint, manifold);
+  }
+
+  void onTransform(auto &&transform) {
+    auto forwardTransform{transform};
+    auto inverseTransform{inverse(transform)};
+    mBox >>= forwardTransform;
+    mIntersect = [=, intersect = std::move(mIntersect)]( //
+                   const Shape &self, Ray3d ray, Manifold &manifold) -> std::optional<double> {
+      if (auto param = intersect(self, (ray >>= inverseTransform), manifold)) {
+        manifold >>= forwardTransform;
+        return param;
+      } else {
+        return {};
+      }
+    };
+    mNearestTo = [=, nearestTo = std::move(mNearestTo)](
+                   const Shape &self, Vector3d referencePoint, Manifold &manifold) -> std::optional<double> {
+      if (auto param = nearestTo(self, inverseTransform.applyAffine(referencePoint), manifold)) {
+        manifold >>= forwardTransform;
+        return param;
+      } else {
+        return {};
+      }
+    };
+  }
+
+private:
+  BoundBox3d mBox{};
+
+  Intersect mIntersect{};
+
+  NearestTo mNearestTo{};
+};
+
+/// This is a straightforward group, which delegates interesection and nearest-point queries
+/// down to multiple shapes. The implementation does not construct any sort of internal Bounding
+/// Volume Hierarchy (BVH), but does check for early-out conditions on shape bounding boxes. That is,
+/// the intersection call only invokes the children whose bounding boxes pass the ray intersection
+/// test, and the nearest-point call only invokes the children whose bounding boxes indicate that
+/// they stand a chance of producing a closer point. As such, this structure may be used recursively to
+/// build up a very generic but also very bulky BVH.
+struct MI_RENDER_API ShapeGroup final {
+public:
+  using shape_tag = std::true_type;
+
+  ShapeGroup() noexcept = default;
+
+  ShapeGroup(std::vector<Shape> shapes) noexcept : mShapes(std::move(shapes)) {}
+
+  [[nodiscard]] BoundBox3d box() const;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const;
+
+private:
+  std::vector<Shape> mShapes;
+};
+
+} // namespace mi::render

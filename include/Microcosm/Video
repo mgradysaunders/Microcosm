@@ -1,0 +1,71 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <bit>
+#include <cstdint>
+#include <cstdlib>
+#include <string>
+
+#include "Microcosm/Video_Export.h"
+
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavutil/error.h>
+#include <libavutil/opt.h>
+#include <libavutil/pixfmt.h>
+#include <libavutil/rational.h>
+#include <libswscale/swscale.h>
+}
+
+namespace mi {
+
+/// A direct and minimalistic video frontend to FFMPEG (libav).
+///
+/// The user can specify the width, height, frame rate, source and target pixel formats, and
+/// the constant rate factor (CRF). Encoding is H.264. This covers the overwhelming majority of
+/// use cases for writing out a simple video.
+///
+class MI_VIDEO_API Video {
+public:
+  struct Params {
+    /// The frame rate in frames per second.
+    double frameRate{30};
+
+    /// The source pixel format.
+    AVPixelFormat sourceFormat{AV_PIX_FMT_RGBA};
+
+    /// The target pixel format.
+    AVPixelFormat targetFormat{AV_PIX_FMT_YUV420P};
+
+    /// The constant rate factor (CRF). Valid range is <51, where 0 is lossless.
+    uint32_t constantRateFactor{15};
+  };
+
+  void open(const std::string &filename, int width, int height, const Params &params);
+
+  /// Write next frame, given the pointer to the frame buffer and the number of bytes between
+  /// adjacent lines or rows. If lineSize is zero, it defaults to four times the width for convenience,
+  /// since this is generally correct for 8-bit color formats.
+  void write(const unsigned char *frame, int lineSize = 0);
+
+  void flush();
+
+  void close();
+
+private:
+  AVFormatContext *mFormatContext{nullptr};
+
+  AVCodecContext *mCodecContext{nullptr};
+
+  SwsContext *mSwsContext{nullptr};
+
+  AVStream *mStream{nullptr};
+
+  AVFrame *mFrame{nullptr};
+
+  AVCodec *mCodec{nullptr};
+
+  uint32_t mFrameIndex{0};
+};
+
+} // namespace mi

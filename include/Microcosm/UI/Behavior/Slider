@@ -1,0 +1,96 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./ClickToMove"
+
+namespace mi::ui {
+
+struct SliderBehavior final : ClickToMoveBehavior {
+protected:
+  using ClickToMoveBehavior::think;
+
+public:
+  MI_UI_DECLARE_WITH(withFraction, fraction);
+  MI_UI_DECLARE_WITH(withHoverRadius, hoverRadius);
+
+  [[strong_inline]] SliderBehavior &withLayout(Vector2d pos0, Vector2d pos1) noexcept {
+    position0 = pos0;
+    position1 = pos1;
+    return *this;
+  }
+
+  /// Set the layout in X (horizontal).
+  ///
+  /// \param[in] anchorEnum
+  /// The anchor enum. Must be `Anchor::Center`, `Anchor::E`, or `Anchor::W`.
+  ///
+  /// \param[in] anchorPoint
+  /// The anchor point.
+  ///
+  /// \param[in] extent
+  /// The extent in X.
+  ///
+  [[strong_inline]] SliderBehavior &withLayoutInX(Anchor anchorEnum, Vector2d anchorPoint, double extent) noexcept {
+    Vector2d offset = {extent, 0};
+    switch (anchorEnum) {
+    case Anchor::Center: withLayout(anchorPoint - offset / 2, anchorPoint + offset / 2); break;
+    case Anchor::E: withLayout(anchorPoint - offset, anchorPoint); break;
+    case Anchor::W: withLayout(anchorPoint, anchorPoint + offset); break;
+    default: assert(false); break;
+    }
+    return *this;
+  }
+
+  /// Set the layout in Y (vertical).
+  ///
+  /// \param[in] anchorEnum
+  /// The anchor enum. Must be `Anchor::Center`, `Anchor::N`, or `Anchor::S`.
+  ///
+  /// \param[in] anchorPoint
+  /// The anchor point.
+  ///
+  /// \param[in] extent
+  /// The extent in Y.
+  ///
+  [[strong_inline]] SliderBehavior &withLayoutInY(Anchor anchorEnum, Vector2d anchorPoint, double extent) noexcept {
+    Vector2d offset = {0, extent};
+    switch (anchorEnum) {
+    case Anchor::Center: withLayout(anchorPoint - offset / 2, anchorPoint + offset / 2); break;
+    case Anchor::N: withLayout(anchorPoint - offset, anchorPoint); break;
+    case Anchor::S: withLayout(anchorPoint, anchorPoint + offset); break;
+    default: assert(false); break;
+    }
+    return *this;
+  }
+
+public:
+  /// Update.
+  void think(Context &ctx, bool ignorePress = false, bool ignoreHover = false) noexcept {
+    Vector2d mousePosition = ctx.mousePosition();
+    Vector2d slidePosition = position();
+    bool isInputTriggered = ctx.mouse.isJustDown(Mouse::Button::L) && !ignorePress;
+    bool isInputSustained = ctx.mouse.isDown(Mouse::Button::L);
+    bool isHovered =
+      fastLength(ctx.modelToCanvas().applyAffine(slidePosition) - ctx.mouse.position) < hoverRadius && !ignoreHover;
+    if (ClickToMoveBehavior::think(ctx, isInputTriggered, isInputSustained, isHovered, mousePosition, slidePosition))
+      fraction = Line2d(position0, position1).parameterOf(slidePosition, true);
+    if (pressed || hovered) ctx.mouse.cursorIcon = Mouse::CursorIcon::Hand;
+  }
+
+public:
+  /// The hover radius in points (72pt = 1in on screen).
+  double hoverRadius{4.0};
+
+  /// The position corresponding to fraction=0.
+  Vector2d position0{-1.0, 0.0};
+
+  /// The position corresponding to fraction=1.
+  Vector2d position1{+1.0, 0.0};
+
+  /// The fraction between 0 and 1.
+  double fraction{};
+
+  [[nodiscard]] constexpr Vector2d position() const noexcept { return lerp(fraction, position0, position1); }
+};
+
+} // namespace mi::ui

@@ -1,0 +1,40 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Color"
+
+namespace mi::ui {
+
+/*
+    Accent Colors
+      - Groups: Primary, Secondary, Tertiary, Neutral, Neutral-Variant, Error
+      - Colors (Light): Key (40), On-Key (100), Container (90), On-Container (10)
+      - Colors (Dark):  Key (80), On-Key (20),  Container (30), On-Container (90)
+
+    Surface Levels
+      +1  -->  Surface Tint @  5% opacity
+      +2  -->  Surface Tint @  8% opacity
+      +3  -->  Surface Tint @ 11% opacity
+      +4  -->  Surface Tint @ 12% opacity
+      +5  -->  Primary      @ 14% opacity
+ */
+
+class MI_UI_API Theme {
+public:
+  Theme();
+
+  struct ColorFamily : ArrayLike<ColorFamily, /*NegativeFromBack=*/true> {
+    void initialize(const Color &referenceColor);
+    void initialize(const Vector3f &valueLCH0, const Vector3f &valueLCH1);
+    MI_ARRAY_LIKE_CONSTEXPR_DATA(colors.data())
+    MI_ARRAY_LIKE_CONSTEXPR_SIZE(colors.size())
+    std::array<Color, 10> colors;
+  };
+
+  ColorFamily neutral;
+  ColorFamily neutralVariant;
+  ColorFamily primary;
+  ColorFamily secondary;
+};
+
+} // namespace mi::ui

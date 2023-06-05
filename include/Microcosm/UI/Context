@@ -1,0 +1,181 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Clock"
+#include "Microcosm/UI/Font"
+#include "Microcosm/UI/Keyboard"
+#include "Microcosm/UI/Mouse"
+#include "Microcosm/UI/Screen"
+#include "Microcosm/UI/Theme"
+#include "Microcosm/UI/Transform"
+
+namespace mi::ui {
+
+template <typename...> struct ContextInit;
+
+struct MI_UI_API Context {
+public:
+  Context() {
+    states.reserve(32);
+    states.emplace_back();
+
+    auto textPtr{std::make_shared<std::string>()};
+    getClipboardText = [textPtr]() { return *textPtr; };
+    setClipboardText = [textPtr](std::string text) { *textPtr = std::move(text); };
+  }
+
+  template <typename... Args> requires(sizeof...(Args) > 0) Context(Args &&...args) : Context() {
+    ContextInit<Args...>()(*this, std::forward<Args>(args)...);
+  }
+
+  Context(const Context &) = delete;
+
+  Context(Context &&) = delete;
+
+  /// \name Main Loop
+  /// \{
+
+  /// Should be called at the beginning of each frame.
+  void start() {
+    states.clear();
+    states.emplace_back();
+    clock.start(), mouse.start(), keyboard.start(), screen.start();
+  }
+
+  /// Should be called after start.
+  void input() {
+    doInput();
+    screen.afterInput(), mouse.afterInput(clock, screen), keyboard.afterInput(clock);
+  }
+
+  /// Should be called at the end of the frame.
+  void finish(int64_t targetTicks = 0) { clock.finish(targetTicks); }
+
+  /// \}
+
+public:
+  /// \name State
+  /// \{
+  struct State {
+    /// The scissor rectangle in canvas space.
+    std::optional<Rect> scissor{};
+
+    /// The current Z-layer.
+    int32_t layer{0};
+
+    /// The current texture.
+    UserData texture{};
+
+    /// The tint color to multiply.
+    Vector4f tintGain{1, 1, 1, 1};
+
+    /// The tint color to add.
+    Vector4f tintBias{0, 0, 0, 0};
+
+    /// The transform from view space to canvas space.
+    Transform view;
+
+    /// The transform from local model space to view space.
+    Transform model;
+
+    /// The transform from local model space to canvas space.
+    [[nodiscard]] constexpr Transform modelView() const noexcept { return view * model; }
+
+    /// The current font.
+    const Font *font{nullptr};
+  };
+
+  [[nodiscard, strong_inline]] auto &state() noexcept { return states.back(); }
+
+  [[nodiscard, strong_inline]] auto &state() const noexcept { return states.back(); }
+
+  [[nodiscard, strong_inline]] auto *operator->() noexcept { return &state(); }
+
+  [[nodiscard, strong_inline]] auto *operator->() const noexcept { return &state(); }
+
+  [[strong_inline]] Context &push() {
+    states.push_back(states.back());
+    return *this;
+  }
+
+  [[strong_inline]] Context &pop() {
+    assert(states.size() > 1);
+    states.pop_back();
+    return *this;
+  }
+
+  [[strong_inline]] Context &useTexture(UserData texture) noexcept {
+    state().texture = texture;
+    return *this;
+  }
+
+  [[strong_inline]] Context &useFont(const Font *font) noexcept {
+    state().font = font;
+    return *this;
+  }
+
+  /// \}
+
+public:
+  // TODO Really rethink these
+
+  /// The transform from local space to canvas coordinates.
+  [[nodiscard]] Transform modelToCanvas() const noexcept { return state().modelView(); }
+
+  /// The transform from canvas coordinates to local space.
+  [[nodiscard]] Transform canvasToModel() const noexcept { return state().modelView().inverse(); }
+
+  /// The transform from local space to device coordinates.
+  [[nodiscard]] Transform modelToDevice() const noexcept { return screen.canvasToDevice() * modelToCanvas(); }
+
+  /// The transform from device coordinates to local space.
+  [[nodiscard]] Transform deviceToModel() const noexcept { return canvasToModel() * screen.deviceToCanvas(); }
+
+  // mousePosition(Space space) ?
+  // mouseVelocity(Space space) ?
+
+  /// The mouse position in local space.
+  [[nodiscard]] Vector2f mousePosition() const noexcept { return canvasToModel().applyAffine(mouse.position); }
+
+  /// The mouse velocity in local space.
+  [[nodiscard]] Vector2f mouseVelocity() const noexcept { return canvasToModel().applyLinear(mouse.velocity); }
+
+#if 0
+  /// The mouse drag offset in local space.
+  [[nodiscard]] Vector2f mouseDragOffset(Mouse::Button btn = Mouse::Button::L) const noexcept;
+
+  /// The mouse distance to the given local position in canvas space.
+  [[nodiscard]] float mouseDistanceOnCanvas(Vector2f localPosition) const noexcept;
+
+  /// The mouse distance to the given local line segment in canvas space.
+  [[nodiscard]] float mouseDistanceOnCanvas(Line2f localLine) const noexcept;
+#endif
+
+  [[nodiscard]] operator const Clock &() const noexcept { return clock; }
+
+  [[nodiscard]] operator const Font &() const noexcept {
+    assert(state().font);
+    return *state().font;
+  }
+
+public:
+  std::vector<State> states;
+
+  Theme theme{};
+
+  Clock clock{};
+
+  Mouse mouse{};
+
+  Keyboard keyboard{};
+
+  Screen screen{};
+
+  std::function<void()> doInput = [] {};
+
+  std::function<std::string()> getClipboardText;
+
+  std::function<void(std::string)> setClipboardText;
+};
+
+} // namespace mi::ui

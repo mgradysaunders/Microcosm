@@ -1,0 +1,208 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/Export.h"
+#include "Microcosm/math"
+#include "Microcosm/Tensor"
+#include "gl3w.h"
+
+namespace mi::gl {
+
+MI_GL_API void initOrExit();
+
+template <typename Subclass, typename... Args> struct Handle {
+public:
+  constexpr Handle(std::nullptr_t) noexcept : mHandle(0) {}
+
+  Handle(Args... args) noexcept : mHandle(Subclass::allocate(args...)) {}
+
+  Handle(const Handle &) = delete;
+
+  Handle(Handle &&other) noexcept : mHandle(steal(other.mHandle)) {}
+
+  Handle &operator=(const Handle &) = delete;
+
+  Handle &operator=(Handle &&other) noexcept {
+    destroy();
+    mHandle = steal(other.mHandle);
+    return *this;
+  }
+
+  ~Handle() noexcept { destroy(); }
+
+  void destroy() noexcept {
+    Subclass::deallocate(mHandle);
+    mHandle = 0;
+  }
+
+  [[nodiscard]] constexpr operator GLuint() const noexcept { return mHandle; }
+
+  [[nodiscard]] constexpr operator bool() const noexcept { return mHandle != 0; }
+
+protected:
+  GLuint mHandle = 0;
+};
+
+template <typename Value> [[nodiscard]] constexpr GLenum enumFor() noexcept {
+  if constexpr (std::same_as<Value, GLubyte>) {
+    return GL_UNSIGNED_BYTE;
+  } else if constexpr (std::same_as<Value, GLbyte>) {
+    return GL_BYTE;
+  } else if constexpr (std::same_as<Value, GLushort>) {
+    return GL_UNSIGNED_SHORT;
+  } else if constexpr (std::same_as<Value, GLshort>) {
+    return GL_SHORT;
+  } else if constexpr (std::same_as<Value, GLuint>) {
+    return GL_UNSIGNED_INT;
+  } else if constexpr (std::same_as<Value, GLint>) {
+    return GL_INT;
+  } else if constexpr (std::same_as<Value, GLfloat>) {
+    return GL_FLOAT;
+  } else if constexpr (std::same_as<Value, Half>) {
+    return GL_HALF_FLOAT;
+  } else {
+    static_assert(!sizeof(Value *), "Unsupported type!");
+  }
+}
+
+namespace detail {
+
+template <typename Value> [[strong_inline]] inline void get(GLenum name, Value *value) noexcept {
+  if constexpr (std::same_as<Value, GLint>) {
+    glGetIntegerv(name, value);
+  } else if constexpr (std::same_as<Value, GLfloat>) {
+    glGetFloatv(name, value);
+  } else if constexpr (std::same_as<Value, GLdouble>) {
+    glGetDoublev(name, value);
+  } else if constexpr (std::same_as<Value, GLboolean>) {
+    glGetBooleanv(name, value);
+  } else {
+    static_assert(!sizeof(Value *), "Unsupported type!");
+  }
+}
+
+template <typename Value> [[nodiscard, strong_inline]] inline Value get(GLenum name) noexcept {
+  Value value = {};
+  if constexpr (concepts::tensor<Value>) {
+    get(name, &value[0]);
+  } else {
+    get(name, &value);
+  }
+  return value;
+}
+
+} // namespace detail
+
+[[nodiscard]] inline bool getBoolean(GLenum name) noexcept { return detail::get<GLboolean>(name); }
+
+[[nodiscard]] inline GLint getInteger(GLenum name) noexcept { return detail::get<GLint>(name); }
+
+[[nodiscard]] inline Vector2i getInteger2(GLenum name) noexcept { return detail::get<Vector2<GLint>>(name); }
+
+[[nodiscard]] inline Vector4i getInteger4(GLenum name) noexcept { return detail::get<Vector4<GLint>>(name); }
+
+[[nodiscard]] inline GLfloat getFloat(GLenum name) noexcept { return detail::get<GLfloat>(name); }
+
+[[nodiscard]] inline Vector2f getFloat2(GLenum name) noexcept { return detail::get<Vector2<GLfloat>>(name); }
+
+[[nodiscard]] inline Vector4f getFloat4(GLenum name) noexcept { return detail::get<Vector4<GLfloat>>(name); }
+
+inline void enable(auto... args) noexcept { (glEnable(args), ...); }
+
+inline void disable(auto... args) noexcept { (glDisable(args), ...); }
+
+template <size_t N> struct BackupEnabled {
+  struct Backup {
+  public:
+    Backup(GLenum what) noexcept : mWhat(what), mEnabled(glIsEnabled(mWhat)) {}
+    ~Backup() {
+      if (mEnabled == GL_TRUE) glEnable(mWhat);
+      if (mEnabled == GL_FALSE) glDisable(mWhat);
+    }
+
+  private:
+    GLenum mWhat{};
+    GLboolean mEnabled{};
+  };
+
+  template <typename... Args> BackupEnabled(Args... args) noexcept : mBackups{Backup(args)...} {}
+  Backup mBackups[N]{};
+};
+
+template <typename... Args> BackupEnabled(Args...) -> BackupEnabled<sizeof...(Args)>;
+
+struct BackupBlendState {
+public:
+  BackupBlendState() noexcept
+    : mSrcRgb(getInteger(GL_BLEND_SRC_RGB)),           //
+      mDstRgb(getInteger(GL_BLEND_DST_RGB)),           //
+      mSrcAlpha(getInteger(GL_BLEND_SRC_ALPHA)),       //
+      mDstAlpha(getInteger(GL_BLEND_DST_ALPHA)),       //
+      mEquationRgb(getInteger(GL_BLEND_EQUATION_RGB)), //
+      mEquationAlpha(getInteger(GL_BLEND_EQUATION_ALPHA)) {}
+  ~BackupBlendState() {
+    glBlendEquationSeparate(mEquationRgb, mEquationAlpha);
+    glBlendFuncSeparate(mSrcRgb, mDstRgb, mSrcAlpha, mDstAlpha);
+  }
+
+private:
+  GLenum mSrcRgb{};
+  GLenum mDstRgb{};
+  GLenum mSrcAlpha{};
+  GLenum mDstAlpha{};
+  GLenum mEquationRgb{};
+  GLenum mEquationAlpha{};
+};
+
+/// An OpenGL-flavor look-at matrix.
+///
+/// \param[in] source  The source location.
+/// \param[in] target  The target location.
+/// \param[in] up      The up vector.
+///
+/// The returned matrix is a local-to-world coordinate system looking down
+/// the negative Z-axis, such that the Z-axis column of the matrix is aligned to
+/// the vector from the target location to the source location. The Y-axis is in
+/// the plane spanned by the Z-axis and the given up vector.
+///
+[[nodiscard]] inline Matrix4f lookAt(Vector3f source, Vector3f target, Vector3f up = {0, 1, 0}) noexcept {
+  return Matrix4f::lookAt(source, target, up);
+}
+
+[[nodiscard]] inline Matrix4f perspective(float fov, float aspect, float near = 0.1f, float far = 100.0f) noexcept {
+  float focalLength = 1.0f / tan(0.5f * fov);
+  float scaleX = focalLength / aspect;
+  float scaleY = focalLength;
+  return {
+    {scaleX, 0.0f, 0.0f, 0.0f},
+    {0.0f, scaleY, 0.0f, 0.0f},
+    {0.0f, 0.0f, -(far + near) / (far - near), -2 * far * near / (far - near)},
+    {0.0f, 0.0f, -1.0f, 0.0f}};
+}
+
+[[nodiscard]] inline Matrix4f infinitePerspective(float fov, float aspect, float near = 0.1f) noexcept {
+  // From the GDC07 slides by Eric Lengyel on Projection Matrix Tricks.
+  float focalLength = 1.0f / tan(0.5f * fov);
+  float scaleX = focalLength / aspect;
+  float scaleY = focalLength;
+  float eps = nextFloat(2 * constants::Eps<float>);
+  return {
+    {scaleX, 0.0f, 0.0f, 0.0f},
+    {0.0f, scaleY, 0.0f, 0.0f},
+    {0.0f, 0.0f, -1.0f + eps, (-2.0f + eps) * near},
+    {0.0f, 0.0f, -1.0f, 0.0f}};
+}
+
+/// Wrapper for `glClearColor()` to accept an RGB color, setting alpha to 1 by default.
+template <typename Expr> requires(concepts::tensor_with_shape<Expr, 3>)
+[[strong_inline]] inline void clearColor(Expr &&expr) noexcept {
+  glClearColor(expr[0], expr[1], expr[2], 1.0);
+}
+
+/// Wrapper for `glClearColor()` to accept an RGBA color.
+template <typename Expr> requires(concepts::tensor_with_shape<Expr, 4>)
+[[strong_inline]] inline void clearColor(Expr &&expr) noexcept {
+  glClearColor(expr[0], expr[1], expr[2], expr[3]);
+}
+
+} // namespace mi::gl

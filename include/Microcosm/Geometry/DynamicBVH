@@ -1,0 +1,159 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/memory"
+
+namespace mi::geometry {
+
+/// A dynamic bounding box tree.
+///
+/// \note
+/// This is based on the dynamic tree implementation in Box2D, which
+/// is in turn based on the dynamic tree implementation in Bullet3D.
+///
+template <size_t N> class MI_GEOMETRY_API DynamicBVH {
+  static_assert(N == 2 || N == 3);
+
+public:
+  using Point = Vector<float, N>;
+  using Box = BoundBox<float, N>;
+  using Int = int32_t;
+
+  static constexpr Int None = -1;
+
+  struct Node {
+    Box box;
+    Int parent = None;
+    Int childA = None;
+    Int childB = None;
+    Int height = -1;
+    bool userflag = false;
+    UserData userdata = {};
+
+    [[nodiscard]] constexpr bool isLeaf() const noexcept { return childA == None; }
+    [[nodiscard]] constexpr bool isBranch() const noexcept { return childA != None; }
+  };
+
+  using Nodes = IntrusivePoolVector<Int, Node, &Node::parent>;
+
+public:
+  DynamicBVH() noexcept = default;
+
+  DynamicBVH(const DynamicBVH &) = default;
+
+  DynamicBVH(DynamicBVH &&) noexcept = default;
+
+  DynamicBVH &operator=(const DynamicBVH &) = default;
+
+  DynamicBVH &operator=(DynamicBVH &&) noexcept = default;
+
+public:
+  [[nodiscard]] size_t size() const noexcept { return mNodes.numActive(); }
+
+  [[nodiscard]] bool empty() const noexcept { return mRoot == None; }
+
+  void clear() noexcept {
+    mNodes.clear();
+    mRoot = None;
+  }
+
+  [[nodiscard]] auto &operator[](Int node) noexcept { return mNodes[node]; }
+
+  [[nodiscard]] auto &operator[](Int node) const noexcept { return mNodes[node]; }
+
+  [[nodiscard]] Int maxHeight() const { return mRoot == None ? 0 : mNodes[mRoot].height; }
+
+  [[nodiscard]] Int maxImbalance() const {
+    Int imbalance = 0;
+    for (const Node &nodeRef : mNodes) {
+      if (nodeRef.height < 2) continue;
+      Int height0 = mNodes[nodeRef.childA].height;
+      Int height1 = mNodes[nodeRef.childB].height;
+      maximize(imbalance, std::abs(height1 - height0));
+    }
+    return imbalance;
+  }
+
+  [[nodiscard]] float quality() const {
+    if (empty()) return 0.0f;
+    float numer = 0.0f;
+    float denom = mNodes[mRoot].box.hyperArea();
+    for (const Node &node : mNodes)
+      if (node.height >= 0) numer += node.box.hyperArea();
+    return finiteOrZero(numer / denom);
+  }
+
+  Int insert(const Box &box, UserData userdata = {}) {
+    Int node = mNodes.allocate();
+    Node &nodeRef = mNodes[node];
+    nodeRef.box = box;
+    nodeRef.height = 0;
+    nodeRef.userflag = false;
+    nodeRef.userdata = userdata;
+    privateInsert(node);
+    return node;
+  }
+
+  void remove(Int node) {
+    privateRemove(node);
+    mNodes[node].height = -1;
+    mNodes.deallocate(node);
+  }
+
+  void update(Int node, const Box &box) {
+    privateRemove(node);
+    mNodes[node].box = box;
+    privateInsert(node);
+  }
+
+  template <std::invocable<const Box &> Test, std::invocable<Int> Visitor> void visit(Test &&test, Visitor &&visitor) {
+    GrowableStack<Int> todo;
+    if (mRoot != None) todo.push(mRoot);
+    while (!todo.empty()) {
+      Int node = todo.pop();
+      if (node < 0) continue;
+      Node &nodeRef = mNodes[node];
+      const Box &box = nodeRef.box;
+      if (!std::invoke(std::forward<Test>(test), box)) continue;
+      if (nodeRef.isBranch()) {
+        todo.push(nodeRef.childA);
+        todo.push(nodeRef.childB);
+      } else if (!std::invoke(std::forward<Visitor>(visitor), node))
+        return;
+    }
+  }
+
+  template <std::invocable<Int> Visitor> void visitOverlaps(const Box &box, Visitor &&visitor) {
+    visit([=](const Box &other) { return box.overlaps(other); }, std::forward<Visitor>(visitor));
+  }
+
+  template <std::invocable<Int> Visitor> void visitContains(const Box &box, Visitor &&visitor) {
+    visit([=](const Box &other) { return box.contains(other); }, std::forward<Visitor>(visitor));
+  }
+
+  void shift(const Point &offset) {
+    for (Node &node : mNodes)
+      if (node.height >= 0) {
+        node.box[0] += offset;
+        node.box[1] += offset;
+      }
+  }
+
+private:
+  Nodes mNodes;
+
+  Int mRoot = None;
+
+private:
+  void privateInsert(Int leaf);
+
+  void privateRemove(Int leaf);
+
+  Int privateBalance(Int node);
+};
+
+using DynamicBVH2 = DynamicBVH<2>;
+using DynamicBVH3 = DynamicBVH<3>;
+
+} // namespace mi::geometry

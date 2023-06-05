@@ -1,0 +1,6 @@
+build/
+.rake_tasks~
+*.swp
+compile_commands.json
+.cache/
+.todos.json

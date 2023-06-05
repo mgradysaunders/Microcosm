@@ -1,0 +1,101 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+
+namespace mi::geometry {
+
+template <size_t N> struct MinkowskiDifference {
+public:
+  static_assert((N == 2) || (N == 3) || (N == 4));
+
+  struct Support {
+    Vector<float, N> normalDir; ///< The normal direction.
+    Vector<float, N> pointA;    ///< The point in shape A.
+    Vector<float, N> pointB;    ///< The point in shape B.
+    Vector<float, N> v;         ///< The difference vector `v = pointA - pointB`.
+  };
+
+  /// The center support.
+  [[nodiscard, strong_inline]] Support center() const noexcept { return {{}, centerA, centerB, centerA - centerB}; }
+
+  /// The support for the given direction.
+  [[nodiscard, strong_inline]] Support support(Vector<float, N> normalDir) const noexcept {
+    Vector<float, N> pointA = supportFunctionA(+normalDir);
+    Vector<float, N> pointB = supportFunctionB(-normalDir);
+    return {normalDir, pointA, pointB, pointA - pointB};
+  }
+
+public:
+  Vector<float, N> centerA;                                           ///< The center of shape A.
+  Vector<float, N> centerB;                                           ///< The center of shape B.
+  std::function<Vector<float, N>(Vector<float, N>)> supportFunctionA; ///< The support function for shape A.
+  std::function<Vector<float, N>(Vector<float, N>)> supportFunctionB; ///< The support function for shape B.
+};
+
+using MinkowskiDifference2 = MinkowskiDifference<2>;
+using MinkowskiDifference3 = MinkowskiDifference<3>;
+using MinkowskiDifference4 = MinkowskiDifference<4>;
+
+namespace support_functions {
+
+/// The support function for an axis-aligned box.
+template <size_t N> struct Box {
+public:
+  static_assert((N == 2) || (N == 3) || (N == 4));
+  /// The center of the box.
+  Vector<float, N> center{0.0f};
+  /// The extent. This is the *full* extent, such that we add and subtract half of this to the center.
+  Vector<float, N> extent{1.0f};
+
+public:
+  [[nodiscard, strong_inline]] Vector<float, N> operator()(Vector<float, N> normalDir) const noexcept {
+    return center + copysign(0.5f * extent, normalDir);
+  }
+};
+
+using Box2 = Box<2>;
+using Box3 = Box<3>;
+using Box4 = Box<4>;
+
+/// The support function for an axis-aligned ellipsoid.
+template <size_t N> struct Ellipsoid {
+public:
+  static_assert((N == 2) || (N == 3) || (N == 4));
+  /// The center of the ellipsoid.
+  Vector<float, N> center{0.0f};
+  /// The radius of the ellipsoid, which may be different in each axis.
+  Vector<float, N> radius{1.0f};
+
+public:
+  [[nodiscard, strong_inline]] Vector<float, N> operator()(Vector<float, N> normalDir) const noexcept {
+    return center + fastNormalize(normalDir * radius) * radius;
+  }
+};
+
+using Ellipsoid2 = Ellipsoid<2>;
+using Ellipsoid3 = Ellipsoid<3>;
+using Ellipsoid4 = Ellipsoid<4>;
+
+template <size_t N, typename Func> struct LinearTransform {
+public:
+  static_assert((N == 2) || (N == 3) || (N == 4));
+  constexpr LinearTransform(const Matrix<float, N, N> &localToWorld, auto &&supportFunction) noexcept
+    : localToWorld(localToWorld), supportFunction(auto_forward(supportFunction)) {}
+  /// The local-to-world transform matrix.
+  Matrix<float, N, N> localToWorld;
+  /// The support function.
+  Func supportFunction;
+
+public:
+  [[nodiscard, strong_inline]] Vector<float, N> operator()(Vector<float, N> normalDir) const noexcept {
+    return dot(localToWorld, supportFunction(fastNormalize(dot(transpose(localToWorld), normalDir))));
+  }
+};
+
+template <typename Expr, typename Func>
+LinearTransform(Expr &&, Func &&) -> LinearTransform<tensor_size_v<Expr, 0>, std::decay_t<Func>>;
+
+} // namespace support_functions
+
+} // namespace mi::geometry

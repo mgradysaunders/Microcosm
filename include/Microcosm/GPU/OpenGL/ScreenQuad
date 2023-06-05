@@ -1,0 +1,25 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/Program"
+#include "Microcosm/GPU/OpenGL/VertexArray"
+
+namespace mi::gl {
+
+struct MI_GL_API ScreenQuad {
+public:
+  ScreenQuad();
+  ScreenQuad(GLuint fragShader);
+
+  [[strong_inline]] void draw() {
+    mProgram.use();
+    mVertexArray.bind();
+    glDrawArrays(GL_TRIANGLES, 0, 3);
+  }
+
+private:
+  Program mProgram;
+  VertexArray mVertexArray;
+};
+
+} // namespace mi::gl

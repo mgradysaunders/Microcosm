@@ -1,0 +1,68 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+struct MI_RENDER_API Microflake final {
+public:
+  Microflake() noexcept = default;
+
+  Microflake(const Matrix3d &matrix);
+
+  [[nodiscard]] double projectedArea(Vector3d omegaO) const noexcept {
+    return finiteOrZero(sqrt(dot(omegaO, mMatrix, omegaO)));
+  }
+
+  [[nodiscard]] double normalPDF(Vector3d omegaM) const noexcept {
+    return finiteOrZero(OneOverPi / (sqrt(mMatrixDet) * sqr(dot(omegaM, mMatrixInv, omegaM))));
+  }
+
+  [[nodiscard]] double visibleNormalPDF(Vector3d omegaO, Vector3d omegaM) const noexcept {
+    return finiteOrZero(normalPDF(omegaM) * max(dot(omegaO, omegaM), 0.0) / projectedArea(omegaO));
+  }
+
+  [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO) const noexcept;
+
+private:
+  Matrix3d mMatrix{Matrix3d::identity()};
+
+  Matrix3d mMatrixInv{Matrix3d::identity()};
+
+  double mMatrixDet{1};
+};
+
+struct MI_RENDER_API SpecularMicroflakePhase final {
+public:
+  using bsdf_tag = std::true_type;
+
+  SpecularMicroflakePhase() noexcept = default;
+
+  SpecularMicroflakePhase(Microflake microflake) noexcept : mMicroflake(microflake) {}
+
+  BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept;
+
+  BidirPDF scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio) const noexcept;
+
+private:
+  Microflake mMicroflake;
+};
+
+struct MI_RENDER_API DiffuseMicroflakePhase final {
+public:
+  using bsdf_tag = std::true_type;
+
+  DiffuseMicroflakePhase() noexcept = default;
+
+  DiffuseMicroflakePhase(Microflake microflake) noexcept : mMicroflake(microflake) {}
+
+  BidirPDF scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept;
+
+  BidirPDF scatterSample(Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio) const noexcept;
+
+private:
+  Microflake mMicroflake;
+};
+
+} // namespace mi::render

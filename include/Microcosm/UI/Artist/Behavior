@@ -1,0 +1,23 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "../Behavior/Button"
+#include "../Behavior/Slider"
+#include "./Icon"
+#include "./common"
+
+namespace mi::ui {
+
+// TODO
+struct MI_UI_API BehaviorArtist final : Artist {
+public:
+  using Artist::Artist;
+  using IconFunc = IconArtist &(IconArtist::*)();
+  BehaviorArtist &drawButton(const ButtonBehavior &behavior);
+  BehaviorArtist &drawButtonIcon(const ButtonBehavior &behavior, IconFunc iconFunc);
+  BehaviorArtist &drawToggleButtonCheckbox(const ToggleButtonBehavior &behavior);
+  BehaviorArtist &drawToggleButtonSwitch(const ToggleButtonBehavior &behavior);
+  BehaviorArtist &drawSlider(const SliderBehavior &behavior);
+};
+
+} // namespace mi::ui

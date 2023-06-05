@@ -1,0 +1,52 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/common"
+
+namespace mi::vk {
+
+struct MI_VK_API Semaphore final : MoveOnly, WithDeviceAndAllocator {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Semaphore, create, destroy)
+
+  /// Create the semaphore.
+  ///
+  /// \param[in] device     The device.
+  /// \param[in] flags      The create flags.
+  /// \param[in] allocator  The allocation callbacks.
+  ///
+  void create(VkDevice device, VkSemaphoreCreateFlags flags = {}, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the semaphore.
+  void destroy();
+
+  /// Implicit usage as `VkSemaphore`.
+  [[nodiscard]] operator VkSemaphore() const noexcept { return semaphore; }
+
+  /// The associated semaphore.
+  NullifyOnMove<VkSemaphore> semaphore;
+};
+
+struct MI_VK_API Semaphores final : MoveOnly, WithDeviceAndAllocator, ArrayLike<Semaphores> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Semaphores, create, destroy)
+  MI_VK_DEFAULT_ARRAY_LIKE(semaphores)
+
+  /// Create the semaphores.
+  ///
+  /// \param[in] device     The device.
+  /// \param[in] count      The number of semaphores to create.
+  /// \param[in] flags      The create flags (applied to all semaphores).
+  /// \param[in] allocator  The allocation callbacks.
+  ///
+  void
+  create(VkDevice device, uint32_t count, VkSemaphoreCreateFlags flags = {}, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the semaphores.
+  void destroy();
+
+  /// The semaphores.
+  std::vector<VkSemaphore> semaphores;
+};
+
+} // namespace mi::vk

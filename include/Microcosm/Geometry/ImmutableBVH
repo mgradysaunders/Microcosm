@@ -1,0 +1,178 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/memory"
+
+namespace mi::geometry {
+
+/// An immutable bounding volume hierarchy.
+template <size_t N> class MI_GEOMETRY_API ImmutableBVH final : public ArrayLike<ImmutableBVH<N>> {
+  static_assert(N == 2 || N == 3);
+
+public:
+  using Box = BoundBox<float, N>;
+  using Point = Vector<float, N>;
+
+  struct Node {
+    /// Is leaf?
+    [[nodiscard, strong_inline]] constexpr bool isLeaf() const noexcept { return count != 0; }
+
+    /// Is branch?
+    [[nodiscard, strong_inline]] constexpr bool isBranch() const noexcept { return count == 0; }
+
+    /// Bound box.
+    Box box;
+
+    union {
+      /// __For branch nodes!__ The offset of the right child in the final node array.
+      ///
+      /// It may be helpful to note that we do not need to store the offset of the left child, because
+      /// it is guaranteed to be the very next node. In pseudocode, leftChildIndex = thisIndex + 1 and
+      /// rightChildIndex = thisIndex + right.
+      uint32_t right;
+
+      /// __For leaf nodes!__ The index of the first value in the values array, which is
+      /// maintained by the user. Each leaf node may contain many values.
+      uint32_t first;
+    };
+
+    /// The number of values contained, which is also distinguishing factor between leaf nodes (count != 0)
+    /// and branch nodes (count == 0).
+    uint8_t count;
+
+    /// The splitting axis.
+    uint8_t split;
+
+    void onSerialize(auto &serializer) { serializer <=> box <=> right <=> count <=> split; }
+  };
+
+  struct Item {
+    /// The original index. (The process of building the bounding box tree involves reordering the items.)
+    uint32_t index{};
+
+    /// The bounding box.
+    Box box;
+
+    /// The bounding box center, precomputed from box.center().
+    Point boxCenter;
+  };
+
+  using Nodes = std::vector<Node>;
+
+  using Items = std::vector<Item>;
+
+public:
+  MI_ARRAY_LIKE_DATA(nodes.data())
+
+  MI_ARRAY_LIKE_SIZE(nodes.size())
+
+public:
+  /// Build the bounding box tree.
+  ///
+  /// \param[in,out] range
+  /// The range to organize. As part of the build algorithm, the range
+  /// are spatially sorted. So, this must be mutable, and in general will be
+  /// reordered by the implementation.
+  ///
+  /// \param[in] leafLimit
+  /// The maximum number of range per leaf node.
+  ///
+  /// \note
+  /// This assumes the value type is implicitly convertible to the
+  /// bounding box type. If this is not the case, a non-trivial cast
+  /// predicate may be passed to the overload of this function.
+  ///
+  template <std::ranges::forward_range Range> void build(int leafLimit, Range &&range) {
+    build(leafLimit, std::forward<Range>(range), [](auto &value) constexpr { return Box(value); });
+  }
+
+  /// \overload
+  ///
+  /// \param[in] cast
+  /// The predicate function to cast the value type to
+  /// its bounding box.
+  ///
+  template <std::ranges::forward_range Range, std::invocable<std::ranges::range_reference_t<Range>> Cast>
+  void build(int leafLimit, Range &&range, Cast &&cast) {
+    Items items;
+    items.reserve(std::ranges::size(range));
+    for (auto &value : range) {
+      Item &item = items.emplace_back();
+      item.index = items.size() - 1;
+      item.box = std::invoke(std::forward<Cast>(cast), value);
+      item.boxCenter = item.box.center();
+    }
+    build(leafLimit, items);
+
+    // Reorder.
+    std::vector<std::ranges::range_value_t<Range>> tmp;
+    tmp.reserve(items.size());
+    auto item = items.begin();
+    for (auto &value : range) tmp.emplace_back(std::move(value));
+    for (auto &value : range) value = std::move(tmp[(*item++).index]);
+  }
+
+  void build(int leafLimit, Items &items);
+
+  void clear() noexcept { nodes.clear(); }
+
+  enum class Priority : int {
+    Left, ///< Visit the left child first.
+    Right ///< Visit the right child first.
+  };
+
+  [[strong_inline]] void visit(
+    std::invocable<const Box &> auto &&test, std::invocable<const Node &> auto &&visitor,
+    std::invocable<const Node &> auto &&orderer) const {
+    GrowableStack<const Node *> todo;
+    if (!nodes.empty()) todo.push(&nodes[0]);
+    while (!todo.empty()) {
+      const Node *node{todo.pop()};
+      if (!std::invoke(auto_forward(test), node->box)) continue;
+      if (node->isBranch()) {
+        // We're going to visit A first. Left by default.
+        // We're going to visit B second. Right by default.
+        const Node *childA{node + 1};
+        const Node *childB{node + node->right};
+        if (std::invoke(auto_forward(orderer), *node) == Priority::Right) {
+          std::swap(childA, childB);
+        }
+        // Now, perhaps confusingly, we have to push them in reverse order because we're dealing with
+        // stack Last-In-First-Out (LIFO) order here.
+        todo.push(childB);
+        todo.push(childA);
+      } else if (!std::invoke(auto_forward(visitor), *node)) {
+        return;
+      }
+    }
+  }
+
+  [[strong_inline]] void visit(std::invocable<const Box &> auto &&test, std::invocable<const Node &> auto &&visitor) const {
+    visit(auto_forward(test), auto_forward(visitor), [](const Node &) constexpr { return Priority::Left; });
+  }
+
+  /// Visit each leaf the given box overlaps.
+  [[strong_inline]] void visitOverlaps(const Box &box, auto &&...visitor) const {
+    visit([&](const Box &other) { return box.overlaps(other); }, auto_forward(visitor)...);
+  }
+
+  /// Visit each leaf the given box contains.
+  [[strong_inline]] void visitContains(const Box &box, auto &&...visitor) const {
+    visit([&](const Box &other) { return box.contains(other); }, auto_forward(visitor)...);
+  }
+
+  template <std::floating_point Float> [[strong_inline]] void visitRayCast(const Ray<Float, N> &ray, auto &&visitor) const {
+    return visit(
+      [&](const auto &each) { return BoundBox<Float, N>(each).rayCast(ray).has_value(); }, auto_forward(visitor),
+      [&](const auto &node) { return ray.direction[node.split] < 0 ? Priority::Right : Priority::Left; });
+  }
+
+public:
+  Nodes nodes;
+};
+
+using ImmutableBVH2 = ImmutableBVH<2>;
+using ImmutableBVH3 = ImmutableBVH<3>;
+
+} // namespace mi::geometry

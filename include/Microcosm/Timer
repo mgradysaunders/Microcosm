@@ -1,0 +1,87 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <chrono>
+#include <cstdint>
+#include <functional>
+#include <thread>
+
+#include "Microcosm/hidden@/utility/common.h"
+
+namespace mi {
+
+/// A timer.
+template <typename Clock = std::chrono::system_clock> struct Timer final {
+public:
+  Timer() noexcept = default;
+
+  void reset() noexcept { *this = Timer(); }
+
+  [[nodiscard, strong_inline]] auto elapsed() const noexcept { return Clock::now() - mStart; }
+
+  template <typename Rep, typename Ratio> //
+  [[nodiscard, strong_inline]] Rep read() const noexcept {
+    return std::chrono::duration_cast<std::chrono::duration<Rep, Ratio>>(elapsed()).count();
+  }
+
+  template <typename Rep = int64_t> [[nodiscard, strong_inline]] Rep nanoseconds() const noexcept {
+    return read<Rep, std::nano>();
+  }
+
+  template <typename Rep = int64_t> [[nodiscard, strong_inline]] Rep microseconds() const noexcept {
+    return read<Rep, std::micro>();
+  }
+
+  template <typename Rep = double> [[nodiscard, strong_inline]] Rep milliseconds() const noexcept {
+    return read<Rep, std::milli>();
+  }
+
+  template <typename Rep = double> [[nodiscard, strong_inline]] Rep seconds() const noexcept {
+    return read<Rep, std::ratio<1>>();
+  }
+
+  struct HumanReadable {
+    /// The number of hours.
+    int64_t hours{};
+    
+    /// The number of minutes into the current hour.
+    int64_t minutes{};
+
+    /// The number of seconds into the current minute.
+    double seconds{};
+  };
+
+  [[nodiscard, strong_inline]] HumanReadable humanReadable() const noexcept {
+    constexpr int64_t NanosecPerSecond{1000000000LL};
+    constexpr int64_t NanosecPerMinute{NanosecPerSecond * 60LL};
+    constexpr int64_t NanosecPerHour{NanosecPerMinute * 60LL};
+    int64_t nanosec = nanoseconds();
+    return {
+      (nanosec / NanosecPerHour),                    //
+      (nanosec % NanosecPerHour) / NanosecPerMinute, //
+      (nanosec % NanosecPerMinute) / double(NanosecPerSecond)};
+  }
+
+  [[nodiscard, strong_inline]] static double benchmark(double duration, auto &&prepare, auto &&run) {
+    int64_t counter{0};
+    int64_t nanosec{0};
+    while (nanosec * 1e-9 < duration) {
+      std::invoke(auto_forward(prepare));
+      {
+        Timer timer;
+        std::invoke(auto_forward(run));
+        nanosec += timer.nanoseconds();
+      }
+      counter++;
+    }
+    return duration / counter;
+  }
+
+private:
+  /// Time point at construction.
+  std::chrono::time_point<Clock> mStart = Clock::now();
+};
+
+inline void sleep(uint64_t ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+
+} // namespace mi

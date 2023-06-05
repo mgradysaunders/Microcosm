@@ -1,0 +1,54 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/gl3w"
+
+namespace mi::gl {
+
+struct Shader final : Handle<Shader, GLenum> {
+public:
+  using Handle<Shader, GLenum>::Handle;
+
+  [[nodiscard]] static GLuint allocate(GLenum type) noexcept { return glCreateShader(type); }
+
+  static void deallocate(GLuint handle) noexcept { glDeleteShader(handle); }
+
+  explicit Shader(GLenum type, std::string_view code) : Handle(type) {
+    source(code);
+    compileOrThrow();
+  }
+
+public:
+  [[nodiscard]] GLint get(GLenum name) const noexcept {
+    GLint value = 0;
+    glGetShaderiv(mHandle, name, &value);
+    return value;
+  }
+
+  [[nodiscard]] std::string infoLog() const {
+    std::string info;
+    info.resize(get(GL_INFO_LOG_LENGTH) + 1);
+    glGetShaderInfoLog(mHandle, info.size(), nullptr, reinterpret_cast<GLchar *>(info.data()));
+    return info;
+  }
+
+  void source(std::string_view code) noexcept {
+    auto string0 = reinterpret_cast<const GLchar *>(code.data());
+    auto length0 = GLint(code.size());
+    glShaderSource(mHandle, 1, &string0, &length0);
+  }
+
+  bool compile() noexcept {
+    glCompileShader(mHandle);
+    return get(GL_COMPILE_STATUS) == GL_TRUE;
+  }
+
+  void compileOrThrow() {
+    if (!compile()) throw std::runtime_error(infoLog());
+  }
+
+protected:
+  using Handle<Shader, GLenum>::mHandle;
+};
+
+} // namespace mi::gl

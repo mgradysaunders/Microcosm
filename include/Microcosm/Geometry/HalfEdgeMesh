@@ -1,0 +1,943 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/ImmutableBVH"
+#include "Microcosm/Geometry/ImmutableKDTree"
+#include "Microcosm/Geometry/Mesh"
+#include "Microcosm/Geometry/SparseMatrix"
+#include "Microcosm/Geometry/common"
+#include "Microcosm/memory"
+#include "Microcosm/utility"
+#include <map>
+#include <set>
+
+namespace mi::geometry {
+
+class MI_GEOMETRY_API HalfEdgeMesh {
+public:
+  HalfEdgeMesh() = default;
+
+  HalfEdgeMesh(const HalfEdgeMesh &) = delete;
+
+  HalfEdgeMesh(const Mesh &mesh) { initialize(mesh); }
+
+  void initialize(const Mesh &mesh);
+
+  /// Recache all geometric quantities stored on the verts, edges, and faces.
+  void cache();
+
+  void clear() noexcept { mElems.clear(); }
+
+  explicit operator Mesh() const;
+
+public:
+  using Matrix2x2f = Matrix<float, 2, 2>;
+
+  using Matrix3x3f = Matrix<float, 3, 3>;
+
+  using Matrix3x2f = Matrix<float, 3, 2>;
+
+  using Matrix3xNf = Matrix<float, 3, Dynamic, /*SmallSize=*/16>;
+
+  using MatrixNx2f = Matrix<float, Dynamic, 2, /*SmallSize=*/16>;
+
+  using MatrixNx3f = Matrix<float, Dynamic, 3, /*SmallSize=*/16>;
+
+  using MatrixNxNf = Matrix<float, Dynamic, Dynamic, /*SmallSize=*/16>;
+
+  /// Build an arbitrary tangent space. This is a 3x2 matrix where the columns are orthogonal to the given normal vector.
+  [[nodiscard]] static Matrix3x2f arbitraryTangentSpace(const Vector3f &vectorN) noexcept {
+    return Matrix3x3f::orthonormalBasisDiscontinuous(vectorN).col(Slice<0, 2>());
+  }
+
+  struct Edge;
+
+  struct MI_GEOMETRY_API Vert final : DoublyLinked<Vert> {
+  public:
+    Edge *edge{nullptr};
+
+    /// The position.
+    Vector3f position{0.0f};
+
+    /// The normal (weighted average of the adjacent face normals).
+    Vector3f normal{0.0f};
+
+    /// The tangent space.
+    Matrix3x2f tangentSpace{};
+
+    /// The index in the vert list.
+    int32_t index{-1};
+
+  public:
+    /// The valence, or number of edges.
+    [[nodiscard]] size_t valence() noexcept;
+
+    /// Is on the boundary?
+    [[nodiscard]] bool isBoundary() noexcept;
+
+    /// Is regular? (Is not on boundary and has valence equal to 4?)
+    [[nodiscard]] bool isRegular() noexcept { return !isBoundary() && valence() == 4; }
+
+    /// Is pole? (Is not on boundary and is not regular?)
+    [[nodiscard]] bool isPole() noexcept { return !isBoundary() && valence() != 4; }
+
+    /// Look up edge by index, with wrapping.
+    [[nodiscard]] Edge *edgeByIndex(int i) noexcept;
+
+    /// Look up vert by index, with wrapping.
+    [[nodiscard]] Vert *vertByIndex(int i) noexcept { return edgeByIndex(i)->twin->vert; }
+
+    /// The angle defect in radians.
+    ///
+    /// The angle defect measures the difference (or defect) between the
+    /// sum of interior angles around from vert versus the expected sum if
+    /// the edges around the vert were completely flat. The expected sum is
+    /// two pi if not on the boundary and pi if on the boundary.
+    ///
+    [[nodiscard]] float angleDefect() noexcept;
+
+    /// Apply local-to-world transformation with tangent space matrix.
+    [[nodiscard]] Vector3f localToWorld(const Vector2f &vector) noexcept { return dot(tangentSpace, vector); }
+
+    /// Apply world-to-local transformation with tangent space matrix.
+    [[nodiscard]] Vector2f worldToLocal(const Vector3f &vector) noexcept { return dot(vector, tangentSpace); }
+
+    /// The average texture coordinate of the associated edges.
+    [[nodiscard]] Vector2f averageUV() noexcept;
+
+    /// Cache vert information.
+    void cache() noexcept;
+  };
+
+  struct MI_GEOMETRY_API Face final : DoublyLinked<Face> {
+  public:
+    /// An associated half edge.
+    Edge *edge{nullptr};
+
+    /// The center, or the average of vert positions.
+    Vector3f center{};
+
+    /// The normal, or directional part of vector area.
+    Vector3f normal{};
+
+    /// The tangent space.
+    Matrix3x2f tangentSpace{};
+
+    /// The area, or scalar part of vector area.
+    float area{0};
+
+    /// The edge/vert count.
+    int32_t count{0};
+
+    /// The index in the face list.
+    int32_t index{-1};
+
+    /// The index of the associated island (see `findIslands()`).
+    int32_t islandIndex{-1};
+
+  public:
+    /// Is on the boundary?
+    [[nodiscard]] bool isBoundary() noexcept;
+
+    /// Look up edge by index, with wrapping.
+    [[nodiscard]] Edge *edgeByIndex(int i) noexcept;
+
+    /// Look up vert by index, with wrapping.
+    [[nodiscard]] Vert *vertByIndex(int i) noexcept { return edgeByIndex(i)->vert; }
+
+    /// The matrix of vert positions.
+    [[nodiscard]] MatrixNx3f vertPositions() noexcept;
+
+    /// The matrix of vert normals.
+    [[nodiscard]] MatrixNx3f vertNormals() noexcept;
+
+    /// The gradient operator.
+    [[nodiscard]] Matrix3xNf gradient() noexcept;
+
+    /// The sharp operator.
+    [[nodiscard]] Matrix3xNf sharp() noexcept;
+
+    /// The flat operator.
+    [[nodiscard]] MatrixNx3f flat() noexcept;
+
+    /// The inner product operator.
+    [[nodiscard]] MatrixNxNf innerProduct(float lambda = 1) noexcept;
+
+    /// The Laplacian operator.
+    [[nodiscard]] MatrixNxNf laplacian(float lambda = 1) noexcept;
+
+    /// The vector Laplacian operator. (Actually of size 2N x 2N).
+    [[nodiscard]] MatrixNxNf vectorLaplacian(float lambda = 1) noexcept;
+
+    /// The shape operator.
+    [[nodiscard]] Matrix2x2f shape() noexcept;
+
+    /// The Gaussian curvature.
+    [[nodiscard]] float gaussianCurvature() noexcept { return determinant(shape()); }
+
+    /// The mean curvature.
+    [[nodiscard]] float meanCurvature() noexcept { return trace(shape()) / 2; }
+
+    struct PrincipalCurvatures {
+      /// The minimum curvature.
+      float minValue{};
+
+      /// The maximum curvature.
+      float maxValue{};
+
+      /// The direction of minimum curvature in local coordinates.
+      Vector2f minDirection{};
+
+      /// The direction of maximum curvature in local coordinates.
+      Vector2f maxDirection{};
+    };
+
+    /// The principal curvatures.
+    [[nodiscard]] PrincipalCurvatures principalCurvatures() noexcept;
+
+    /// Apply local-to-world transformation with tangent space matrix.
+    [[nodiscard]] Vector3f localToWorld(const Vector2f &vector) noexcept { return dot(tangentSpace, vector); }
+
+    /// Apply world-to-local transformation with tangent space matrix.
+    [[nodiscard]] Vector2f worldToLocal(const Vector3f &vector) noexcept { return dot(vector, tangentSpace); }
+
+    /// The perimeter.
+    [[nodiscard]] float perimeter() noexcept;
+
+    /// Cache face information.
+    void cache() noexcept;
+  };
+
+  struct MI_GEOMETRY_API Edge final : DoublyLinked<Edge> {
+  public:
+    /// The face-loop links.
+    DoublyLinked<Edge> loop;
+
+    /// The twin edge.
+    Edge *twin{nullptr};
+
+    /// The associated vert.
+    Vert *vert{nullptr};
+
+    /// The associated face.
+    Face *face{nullptr};
+
+    /// The texture coordinate.
+    Vector2f texcoord{0.0f};
+
+  public:
+    /// Is boundary when circulating a vert counter-clockwise?
+    [[nodiscard]] bool isBoundaryCCW() noexcept { return !face; }
+
+    /// Is boundary when circulating a vert clockwise?
+    [[nodiscard]] bool isBoundaryCW() noexcept { return !twin->face; }
+
+    /// Is boundary at all?
+    [[nodiscard]] bool isBoundary() noexcept { return !face || !twin->face; }
+
+    /// The number of edges in the boundary.
+    [[nodiscard]] size_t boundaryLength() noexcept;
+
+    /// The position of the associated vert.
+    [[nodiscard]] Vector3f position() noexcept { return vert->position; }
+
+    /// The vector from the associated vert to the twin associated vert.
+    [[nodiscard]] Vector3f vector() noexcept { return (twin->position() - this->position()); }
+
+    /// The center.
+    [[nodiscard]] Vector3f center() noexcept { return (this->position() + twin->position()) * 0.5f; }
+
+    /// The normal (weighted average of adjacent face normals).
+    [[nodiscard]] Vector3f normal() noexcept {
+      Vector3f normalA = this->face ? this->face->normal * this->face->area : Vector3f();
+      Vector3f normalB = twin->face ? twin->face->normal * twin->face->area : Vector3f();
+      return normalize(normalA + normalB);
+    }
+
+    /// The gradient operator used by `Face::gradient()`.
+    [[nodiscard]] Vector3f gradient() noexcept {
+      return 0.5f / face->area * cross(face->normal, loop.prev->position() - loop.next->position());
+    }
+
+    /// The sharp operator used by `Face::sharp()`.
+    [[nodiscard]] Vector3f sharp() noexcept { return 1.0f / face->area * cross(face->normal, center() - face->center); }
+
+    /// The flat operator used by `Face::flat()`.
+    [[nodiscard]] Vector3f flat() noexcept { return vector() - dot(vector(), face->normal) * face->normal; }
+
+    /// The interior angle in radians.
+    [[nodiscard]] float interiorAngle() noexcept {
+      Vector3f vectorN = face ? face->normal : twin->face->normal;
+      Vector3f vectorU = loop.prev->position() - position();
+      Vector3f vectorV = loop.next->position() - position();
+      Vector3f vectorW = cross(vectorV, vectorU);
+      float angle = std::atan2(copysign(length(vectorW), dot(vectorW, vectorN)), dot(vectorU, vectorV));
+      if (!(angle >= 0)) angle += constants::TwoPi<float>;
+      return angle;
+    }
+
+    /// The exterior angle in radians.
+    [[nodiscard]] float exteriorAngle() noexcept { return constants::Pi<float> - interiorAngle(); }
+  };
+
+  /// The discrete Levi-Civita connection from vert to face (assumes the vert is part of the face).
+  [[nodiscard]] static Matrix2x2f leviCivitaConnection(Vert *vert, Face *face) noexcept;
+
+  /// The discrete Levi-Civita connection from face to vert (assumes the vert is part of the face).
+  [[nodiscard]] static Matrix2x2f leviCivitaConnection(Face *face, Vert *vert) noexcept;
+
+private:
+  template <typename... Elements> struct ElementsContainer {
+  public:
+    template <typename Element> [[nodiscard]] auto allocate(auto... args) {
+      return listOf<Element>().append(mPool.allocate<Element>(args...));
+    }
+
+    template <typename Element> void deallocate(Element *elem) {
+      elem = listOf<Element>().extract(elem);
+      elem->~Element();
+      mPool.deallocate(elem);
+    }
+
+    template <typename Element> void deallocate() {
+      auto &list = listOf<Element>();
+      for (auto itr = list.begin(); itr != list.end();) deallocate(*itr++);
+    }
+
+    void clear() noexcept {
+      mLists = {};
+      mPool.clear();
+    }
+
+    template <typename Element> [[nodiscard, strong_inline]] constexpr auto &listOf() noexcept {
+      return std::get<DoublyLinkedList<Element>>(mLists);
+    }
+
+    template <typename Element> [[nodiscard, strong_inline]] constexpr auto &listOf() const noexcept {
+      return std::get<DoublyLinkedList<Element>>(mLists);
+    }
+
+  private:
+    std::tuple<DoublyLinkedList<Elements>...> mLists;
+
+    MemoryPool<> mPool;
+  };
+
+  using Elements = ElementsContainer<Vert, Face, Edge>;
+
+public:
+  /// The number of verts.
+  [[nodiscard]] auto numVerts() const noexcept { return mElems.listOf<Vert>().size(); }
+
+  /// The number of (half) edges.
+  [[nodiscard]] auto numEdges() const noexcept { return mElems.listOf<Edge>().size(); }
+
+  /// The number of faces.
+  [[nodiscard]] auto numFaces() const noexcept { return mElems.listOf<Face>().size(); }
+
+  /// The range of all verts.
+  [[nodiscard, strong_inline]] auto allVerts() const noexcept { return IteratorRange(mElems.listOf<Vert>()); }
+
+  /// The range of all (half) edges.
+  [[nodiscard, strong_inline]] auto allEdges() const noexcept { return IteratorRange(mElems.listOf<Edge>()); }
+
+  /// The range of all faces.
+  [[nodiscard, strong_inline]] auto allFaces() const noexcept { return IteratorRange(mElems.listOf<Face>()); }
+
+private:
+  /// \name Topology
+  /// \{
+
+  [[gnu::nonnull]] static void linkTwin(Edge *edge, Edge *twin) noexcept { edge->twin = twin, twin->twin = edge; }
+
+  [[gnu::nonnull]] static void linkLoop(Edge *edge0, Edge *edge1) noexcept {
+    edge0->loop.next = edge1;
+    edge1->loop.prev = edge0;
+  }
+
+  [[gnu::nonnull]] static void linkLoop(Edge *edge0, Edge *edge1, Edge *edge2) noexcept {
+    linkLoop(edge0, edge1);
+    linkLoop(edge1, edge2);
+  }
+
+  static void assignFaceToLoop(Face *face, Edge *edge0) noexcept {
+    if (face) face->edge = edge0;
+    Edge *edge = edge0;
+    do {
+      edge->face = face;
+    } while ((edge = edge->loop.next) != edge0);
+  }
+
+  struct IteratorTypes {
+    using Sentinel = nothing;
+
+    template <auto Step, auto Dereference> struct Iterator {
+    public:
+      using difference_type = ptrdiff_t;
+
+      using reference = decltype(Dereference(std::declval<Edge *&>()));
+
+      using pointer = void;
+
+      using value_type = std::decay_t<reference>;
+
+      using iterator_category = std::bidirectional_iterator_tag;
+
+      constexpr Iterator() noexcept = default;
+
+      constexpr Iterator(Edge *edge) noexcept : firstEdge(edge), edge(edge), step(0) {}
+
+      constexpr Iterator(Vert *vert) noexcept : Iterator(vert ? vert->edge : nullptr) {}
+
+      constexpr Iterator(Face *face) noexcept : Iterator(face ? face->edge : nullptr) {}
+
+      /// Pre-increment operator.
+      [[strong_inline]] constexpr Iterator &operator++() noexcept {
+        ++step;
+        edge = Step.increment(edge);
+        return *this;
+      }
+
+      /// Pre-decrement operator.
+      [[strong_inline]] constexpr Iterator &operator--() noexcept {
+        --step;
+        edge = Step.decrement(edge);
+        return *this;
+      }
+
+      /// Post-increment operator.
+      [[strong_inline]] constexpr Iterator operator++(int) noexcept {
+        Iterator copy = *this;
+        operator++();
+        return copy;
+      }
+
+      /// Post-decrement operator.
+      [[strong_inline]] constexpr Iterator operator--(int) noexcept {
+        Iterator copy = *this;
+        operator--();
+        return copy;
+      }
+
+      [[nodiscard, strong_inline]] constexpr bool operator==(Sentinel) const noexcept {
+        return !edge || (edge == firstEdge && step != 0);
+      }
+
+      [[nodiscard, strong_inline]] constexpr bool operator!=(Sentinel) const noexcept { return !operator==(Sentinel()); }
+
+      [[nodiscard, strong_inline]] constexpr reference operator*() const noexcept {
+        return Dereference(const_cast<Edge *&>(edge));
+      }
+
+      [[nodiscard, strong_inline]] constexpr operator bool() const noexcept { return operator!=(Sentinel()); }
+
+      [[nodiscard, strong_inline]] constexpr bool complete() const noexcept { return edge == firstEdge && step != 0; }
+
+    public:
+      Edge *firstEdge{nullptr};
+
+      Edge *edge{nullptr};
+
+      ptrdiff_t step{0};
+    };
+
+    /// Edge of vert incrementer.
+    struct EdgeOfVert {
+      /// Step through the edges around a vert counter-clockwise.
+      [[nodiscard]] constexpr Edge *increment(Edge *edge) const noexcept { return edge->loop.prev->twin; }
+
+      /// Step through the edges around a vert clockwise.
+      [[nodiscard]] constexpr Edge *decrement(Edge *edge) const noexcept { return edge->twin->loop.next; }
+    };
+
+    /// Edge of face incrementer.
+    struct EdgeOfFace {
+      /// Step through the edges in a face counter-clockwise.
+      [[nodiscard]] constexpr Edge *increment(Edge *edge) const noexcept { return edge->loop.next; }
+
+      /// Step through the edges in a face clockwise.
+      [[nodiscard]] constexpr Edge *decrement(Edge *edge) const noexcept { return edge->loop.prev; }
+    };
+
+    /// Edge of edge loop incrementer.
+    ///
+    /// This recognizes two kinds of edge loops:
+    /// - The edge loop across quadrilaterals, where faces and verts have four neighbors each.
+    /// - The edge loop formed by a boundary or hole.
+    ///
+    struct EdgeOfEdgeLoop {
+      [[nodiscard]] Edge *increment(Edge *edge) const noexcept {
+        if (!edge->face) {
+          return edge->loop.next; // If boundary, circulate as face.
+        } else if (edge->twin->vert->isRegular()) {
+          return edge->loop.next->twin->loop.next;
+        } else {
+          return nullptr; // Stop at boundary or pole.
+        }
+      }
+
+      [[nodiscard]] Edge *decrement(Edge *edge) const noexcept {
+        if (!edge->face) {
+          return edge->loop.prev; // If boundary, circulate as face.
+        } else if (edge->vert->isRegular()) {
+          return edge->loop.prev->twin->loop.prev;
+        } else {
+          return nullptr; // Stop at boundary or pole.
+        }
+      }
+    };
+
+    /// Dereference an edge as itself.
+    struct DereferenceEdge {
+      [[nodiscard]] constexpr Edge *&operator()(Edge *&edge) const noexcept { return edge; }
+    };
+
+    /// Dereference an edge as its vert.
+    struct DereferenceVert {
+      [[nodiscard]] constexpr Vert *&operator()(Edge *&edge) const noexcept { return edge->vert; }
+    };
+
+    /// Dereference an edge as its face.
+    struct DereferenceFace {
+      [[nodiscard]] constexpr Face *&operator()(Edge *&edge) const noexcept { return edge->face; }
+    };
+
+    /// Dereference an edge as its twin vert.
+    struct DereferenceTwinVert {
+      [[nodiscard]] constexpr Vert *&operator()(Edge *&edge) const noexcept { return edge->twin->vert; }
+    };
+
+    /// Dereference an edge as its twin face.
+    struct DereferenceTwinFace {
+      [[nodiscard]] constexpr Face *&operator()(Edge *&edge) const noexcept { return edge->twin->face; }
+    };
+
+    using EdgeOfVertIterator = Iterator<EdgeOfVert{}, DereferenceEdge{}>;
+
+    using EdgeOfFaceIterator = Iterator<EdgeOfFace{}, DereferenceEdge{}>;
+
+    using VertOfVertIterator = Iterator<EdgeOfVert{}, DereferenceTwinVert{}>;
+
+    using VertOfFaceIterator = Iterator<EdgeOfFace{}, DereferenceVert{}>;
+
+    using FaceOfVertIterator = Iterator<EdgeOfVert{}, DereferenceFace{}>;
+
+    using FaceOfFaceIterator = Iterator<EdgeOfFace{}, DereferenceTwinFace{}>;
+
+    using EdgeOfEdgeLoopIterator = Iterator<EdgeOfEdgeLoop{}, DereferenceEdge{}>;
+  };
+
+public:
+  using Sentinel = typename IteratorTypes::Sentinel;
+
+  using EdgeOfVertIterator = typename IteratorTypes::EdgeOfVertIterator;
+
+  using EdgeOfFaceIterator = typename IteratorTypes::EdgeOfFaceIterator;
+
+  using VertOfVertIterator = typename IteratorTypes::VertOfVertIterator;
+
+  using VertOfFaceIterator = typename IteratorTypes::VertOfFaceIterator;
+
+  using FaceOfVertIterator = typename IteratorTypes::FaceOfVertIterator;
+
+  using FaceOfFaceIterator = typename IteratorTypes::FaceOfFaceIterator;
+
+  using EdgeOfEdgeLoopIterator = typename IteratorTypes::EdgeOfEdgeLoopIterator;
+
+  using EdgesOfVert = IteratorRange<EdgeOfVertIterator, Sentinel>;
+
+  using EdgesOfFace = IteratorRange<EdgeOfFaceIterator, Sentinel>;
+
+  using VertsOfVert = IteratorRange<VertOfVertIterator, Sentinel>;
+
+  using VertsOfFace = IteratorRange<VertOfFaceIterator, Sentinel>;
+
+  using FacesOfVert = IteratorRange<FaceOfVertIterator, Sentinel>;
+
+  using FacesOfFace = IteratorRange<FaceOfFaceIterator, Sentinel>;
+
+  using EdgesOfEdgeLoop = IteratorRange<EdgeOfEdgeLoopIterator, Sentinel>;
+
+  /// Edges of vert. Loops over the outgoing edges of the vert.
+  [[nodiscard, strong_inline]] static auto edgesOf(Vert *vert) noexcept { return EdgesOfVert(vert); }
+
+  /// Edges of face. Loops over the interior edges of the face.
+  [[nodiscard, strong_inline]] static auto edgesOf(Face *face) noexcept { return EdgesOfFace(face); }
+
+  /// Verts of vert. Loops over the opposite verts associated with `edgesOf(vert)`.
+  [[nodiscard, strong_inline]] static auto vertsOf(Vert *vert) noexcept { return VertsOfVert(vert); }
+
+  /// Verts of face. Loops over the verts associated with `edgesOf(face)`.
+  [[nodiscard, strong_inline]] static auto vertsOf(Face *face) noexcept { return VertsOfFace(face); }
+
+  /// Faces of vert. Be careful, some may be nullptr if vert is on boundary!
+  [[nodiscard, strong_inline]] static auto facesOf(Vert *vert) noexcept { return FacesOfVert(vert); }
+
+  /// Faces of face. Be careful, some may be nullptr if face is on boundary!
+  [[nodiscard, strong_inline]] static auto facesOf(Face *face) noexcept { return FacesOfFace(face); }
+
+  /// Find an edge connecting the given faces, return null if none exists.
+  [[nodiscard]] static Edge *findEdge(Face *faceA, Face *faceB) noexcept {
+    return edgesOf(faceA).findIfOrElse(nullptr, [faceB](Edge *edge) { return edge->twin->face == faceB; });
+  }
+
+  /// Find an edge connecting the given verts, return null if none exists.
+  [[nodiscard]] static Edge *findEdge(Vert *vertA, Vert *vertB) noexcept {
+    return edgesOf(vertA).findIfOrElse(nullptr, [vertB](Edge *edge) { return edge->twin->vert == vertB; });
+  }
+
+  /// Find a face connecting the given verts, return null if none exists.
+  [[nodiscard]] static Face *findFace(Vert *vertA, Vert *vertB) noexcept {
+    return facesOf(vertA).findIfOrElse(nullptr, [vertB](Face *face) { return vertsOf(face).contains(vertB); });
+  }
+
+  /// Find boundary around vert by walking counter-clockwise, return null if none exists.
+  [[nodiscard]] static Edge *findBoundaryAroundVertCCW(Edge *first) noexcept {
+    for (EdgeOfVertIterator walk{first}; walk; ++walk) {
+      if ((*walk)->isBoundaryCCW()) {
+        return *walk;
+      }
+    }
+    return nullptr;
+  }
+
+  /// Find boundary around vert by walking clockwise, return null if none exists.
+  [[nodiscard]] static Edge *findBoundaryAroundVertCW(Edge *first) noexcept {
+    for (EdgeOfVertIterator walk{first}; walk; --walk) {
+      if ((*walk)->isBoundaryCW()) {
+        return *walk;
+      }
+    }
+    return nullptr;
+  }
+
+  /// \}
+
+public:
+  /// \name Edit
+  /// \{
+
+  /// If the given face is invalid, remove it and return true.
+  bool removeFaceIfInvalid(Face *face);
+
+  /// Collapse edge.
+  ///
+  /// Collapses the given edge onto the *source* vertex associated with it. Then deallocates the edge, its twin, and the
+  /// opposite, or *target*, vertex. If either face originally associated with the edge is left with less than three edges,
+  /// then it is deallocated as well and the local topology is repaired. Returns the source vertex.
+  ///
+  /// \throw std::runtime_error If the operation would result in non-manifold topology.
+  ///
+  Vert *collapseEdgeMergeVerts(Edge *edge);
+
+  /// Dissolve edge.
+  ///
+  /// Dissolves the given edge in order to merge the opposite, or *target*, face into the *source* face. First, reduces the
+  /// associated edge chain if necessary, using `reduceEdgeChain()`. An edge chain is an individual "logical" edge that forms
+  /// the boundary between two neighboring faces, but which is effectively subdivided with interior vertexes. Dissolving
+  /// just one of those would result in gross non-manifold topology, so the implementation assumes that you want to
+  /// dissolve the entire logical edge. Then deallocates the target face and expands the source face. Returns the
+  /// source face.
+  ///
+  /// \throw std::runtime_error If the operation would result in non-manifold topology.
+  ///
+  Face *dissolveEdgeMergeFaces(Edge *edge);
+
+  /// Reduce edge chain.
+  ///
+  /// Iteratively collapses all valence-2 verts on the boundary between the faces associated with the given edge.
+  /// Returns the remaining edge.
+  ///
+  Edge *reduceEdgeChain(Edge *edge);
+
+  /// Split an edge.
+  ///
+  /// If relative, the factor is an interpolation fraction between source and target vertex positions, such that 0
+  /// is the source and 1 is the target. Otherwise, the factor is an absolute distance from the source vertex position.
+  /// A negative factor is interpreted as the complement with respect to source/target ordering. Returns the new edge,
+  /// which is inserted after the given edge and is associated with the new vertex.
+  ///
+  Edge *splitEdgeInsertVert(Edge *edge, float factor = 0.5f, bool relative = true);
+
+  struct SplitFaceResult {
+    /// The input face shared by the given pair of verts.
+    Face *inputFace{nullptr};
+
+    /// The output face created during the operation.
+    Face *outputFace{nullptr};
+
+    /// The output edge created during the operation.
+    ///
+    /// \note
+    /// - The vert associated with this edge is `vert0`.
+    /// - The face associated with this edge in `input_face`.
+    /// - The face associated with the twin of this edge is `output_face`.
+    ///
+    Edge *outputEdge{nullptr};
+
+    /// Implicit conversion to output face.
+    [[nodiscard]] operator Face *() const noexcept { return outputFace; }
+
+    /// Implicit conversion to output edge.
+    [[nodiscard]] operator Edge *() const noexcept { return outputEdge; }
+
+    /// Success?
+    [[nodiscard]] operator bool() const noexcept { return outputFace && outputEdge; }
+  };
+
+  /// Split a face into two faces.
+  ///
+  /// The source and target verts must share exactly 1 face
+  /// and must not be adjacent in this face.
+  ///
+  SplitFaceResult splitFaceInsertEdge(Vert *vertA, Vert *vertB);
+
+  /// Spin edge.
+  Edge *spinEdge(Edge *edge);
+
+  enum class InsertEdgeLoopMode {
+    AcrossQuad, ///< Insert edge loop by walking across quads.
+    AroundVert  ///< Insert edge loop by walking around vert.
+  };
+
+  struct InsertEdgeLoopResult {
+    /// Is the edge loop closed?
+    bool closed{false};
+
+    /// The output edges created during the operation.
+    std::vector<Edge *> outputEdges;
+
+    /// The output faces created during the operation.
+    std::vector<SplitFaceResult> outputFaces;
+  };
+
+  /// Insert edge loop.
+  ///
+  /// This inserts an edge loop by collecting a set of edges to
+  /// split, starting at the initial `edge` and then walking around
+  /// accordinate to `mode`, then splitting the edges with `factor`
+  /// and `relative`, and finally splitting the faces with the
+  /// new vertices.
+  ///
+  InsertEdgeLoopResult insertEdgeLoop(
+    Edge *first, float factor = 0.5f, bool relative = true, InsertEdgeLoopMode mode = InsertEdgeLoopMode::AcrossQuad);
+
+  /// Select edge loop by naturally continuing through regular verts.
+  [[nodiscard]] std::vector<Edge *> selectEdgeLoop(Edge *first);
+
+  struct SeparateAtVertResult {
+    /// The input vert.
+    Vert *inputVert{nullptr};
+
+    /// The output vert created during the operation.
+    Vert *outputVert{nullptr};
+
+    /// Implicit conversion to output vert.
+    [[nodiscard]] constexpr operator Vert *() const noexcept { return outputVert; }
+
+    /// Success?
+    [[nodiscard]] constexpr operator bool() const noexcept { return inputVert && outputVert; }
+  };
+
+  /// Separate at vert.
+  SeparateAtVertResult separateAtVert(Edge *edgeA, Edge *edgeB);
+
+  /// \overload
+  SeparateAtVertResult separateAtVert(Vert *vertA, Vert *vertX, Vert *vertB) {
+    Edge *edgeA = findEdge(vertX, vertA); // X -> A
+    Edge *edgeB = findEdge(vertX, vertB); // X -> B
+    return separateAtVert(edgeA, edgeB);
+  }
+
+  /// Separate along edge loop.
+  ///
+  /// Separate along the given (assumed contiguous) directed edge loop.
+  ///
+  std::vector<SeparateAtVertResult> separate(const std::vector<Edge *> &edgeLoop);
+
+  /// Separate along edge loop, identified by the verts in the edge loop.
+  std::vector<SeparateAtVertResult> separate(const std::vector<Vert *> &edgeLoopVerts);
+
+  /// Triangulate face.
+  std::vector<Face *> triangulate(Face *face);
+
+  /// Triangulate all faces.
+  void triangulate();
+
+  struct MI_GEOMETRY_API Island {
+  public:
+    /// The area of all faces.
+    [[nodiscard]] float area() const;
+
+    /// The center of all vert positions.
+    [[nodiscard]] Vector3f center() const;
+
+    /// The bound box of all vert positions.
+    [[nodiscard]] BoundBox3f boundBox() const {
+      return BoundBox3f(verts, [](auto vert) { return vert->position; });
+    }
+
+    /// The bound box of all texture coordinates.
+    [[nodiscard]] BoundBox2f boundBoxUV() const {
+      return BoundBox2f(edges, [](auto edge) { return edge->texcoord; });
+    }
+
+    /// Center and align texture coordinates.
+    void centerAndAlignUV() const;
+
+  public:
+    /// The verts in the island.
+    std::vector<Vert *> verts;
+
+    /// The faces in the island.
+    std::vector<Face *> faces;
+
+    /// The edges in the island (interior only).
+    std::vector<Edge *> edges;
+
+    /// The holes in the island (one edge on the boundary of each hole).
+    std::vector<Edge *> holes;
+  };
+
+  /// Find island connected to the given face.
+  [[nodiscard]] Island findIsland(Face *face) const;
+
+  /// Find islands.
+  [[nodiscard]] std::vector<Island> findIslands() const;
+
+  /// \}
+
+public:
+  /// \name Laplacian
+  /// \{
+
+  using ScalarFunction = std::function<float(const Vert *)>;
+
+  using VectorFunction = std::function<Vector2f(const Vert *)>;
+
+  using ScalarConstraints = std::map<const Vert *, float>;
+
+  using VectorConstraints = std::map<const Vert *, Vector2f>;
+
+  /// Construct the matrix of vert positions.
+  [[nodiscard]] MatrixNx3f vertPositions() const;
+
+  /// Construct the matrix of vert normals.
+  [[nodiscard]] MatrixNx3f vertNormals() const;
+
+  /// Construct the Laplacian matrix.
+  [[nodiscard]] SparseMatrix laplacian() const;
+
+  /// Construct the Laplacian matrix for tangent-space vector fields.
+  [[nodiscard]] SparseMatrix vectorLaplacian() const;
+
+  /// Discretize a scalar function at each vertex.
+  [[nodiscard]] Vectorf discretize(const ScalarFunction &func) const;
+
+  /// Discretize a vector function at each vertex.
+  [[nodiscard]] Vectorf discretize(const VectorFunction &func) const;
+
+  /// Solve the scalar Laplace equation subject to the given constraints.
+  [[nodiscard]] Vectorf solveLaplaceEquation(const ScalarConstraints &constraints) const;
+
+  /// Solve the vector Laplace equation subject to the given constraints.
+  [[nodiscard]] Vectorf solveLaplaceEquation(const VectorConstraints &constraints) const;
+
+  /// Evolve by curvature flow.
+  void evolveByCurvatureFlow(float tau = 0.1f, int numIterations = 10);
+
+  // TODO
+#if 0
+  void parameterizeByConformalEnergy();
+
+  void parameterizePackRectangles(const std::vector<Island> &islands);
+#endif
+
+  /// \}
+
+public:
+  /// \name A-star
+  /// \{
+
+  struct FindPathOptions {
+    /// The maximum length.
+    ///
+    /// The maximum allowed path length, after which to give up.
+    /// The default of zero means no maximum.
+    ///
+    int maxLength = 0;
+
+    /// The expected length.
+    ///
+    /// The expected path length, for use with the `epsilon` term
+    /// for dynamically weighting the cost function to accelerate
+    /// the search.
+    ///
+    int expectedLength = 0;
+
+    /// The epsilon term.
+    float epsilon = 0;
+
+    /// Exit as soon as possible?
+    bool exitAsSoonAsPossible = false;
+  };
+
+  /// Find a path of verts connected by edges.
+  [[nodiscard]] std::vector<Vert *>
+  findPath(Vert *source, Vert *target, const FindPathOptions &options = {0, 0, 0, false}) const;
+
+  /// Find a path of faces connected by edges.
+  [[nodiscard]] std::vector<Face *>
+  findPath(Face *source, Face *target, const FindPathOptions &options = {0, 0, 0, false}) const;
+
+  /// \}
+
+public:
+  /// \name Query
+  /// \{
+
+  /// A vert query helper.
+  struct MI_GEOMETRY_API VertQuery {
+  public:
+    VertQuery(const HalfEdgeMesh &mesh) : mMesh(mesh) { build(); }
+
+    VertQuery(const VertQuery &) = delete;
+
+    /// Build or rebuild.
+    void build();
+
+    struct Nearest {
+      /// The nearest vert.
+      Vert *vert = nullptr;
+
+      /// The nearest vert distance.
+      float dist = constants::Inf<float>;
+    };
+
+    /// Find the nearest vert to the given position.
+    [[nodiscard]] Nearest nearestTo(const Vector3f &position) const {
+      if (auto [node, dist] = mKDTree.nearestTo(position); node) return {mVerts[node->index], dist};
+      return {};
+    }
+
+  private:
+    /// The associated mesh.
+    const HalfEdgeMesh &mMesh;
+
+    /// The verts (for fast index lookup).
+    std::vector<Vert *> mVerts;
+
+    /// The k-d tree.
+    ImmutableKDTree3 mKDTree;
+  };
+
+  /// Build a vert query helper.
+  [[nodiscard]] VertQuery vertQuery() const { return VertQuery(*this); }
+
+  /// \}
+
+private:
+  Elements mElems;
+};
+
+} // namespace mi::geometry

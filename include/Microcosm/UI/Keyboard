@@ -1,0 +1,239 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <string>
+
+#include "Microcosm/UI/common"
+
+namespace mi::ui {
+
+struct Clock;
+
+enum class Key : uint32_t {
+  A,
+  B,
+  C,
+  D,
+  E,
+  F,
+  G,
+  H,
+  I,
+  J,
+  K,
+  L,
+  M,
+  N,
+  O,
+  P,
+  Q,
+  R,
+  S,
+  T,
+  U,
+  V,
+  W,
+  X,
+  Y,
+  Z,
+  Num0,
+  Num1,
+  Num2,
+  Num3,
+  Num4,
+  Num5,
+  Num6,
+  Num7,
+  Num8,
+  Num9,
+  Numpad0,
+  Numpad1,
+  Numpad2,
+  Numpad3,
+  Numpad4,
+  Numpad5,
+  Numpad6,
+  Numpad7,
+  Numpad8,
+  Numpad9,
+  F1,
+  F2,
+  F3,
+  F4,
+  F5,
+  F6,
+  F7,
+  F8,
+  F9,
+  F10,
+  F11,
+  F12,
+  Esc,
+  Tab,
+  LCtrl,
+  RCtrl,
+  LAlt,
+  RAlt,
+  LGui,
+  RGui,
+  LShift,
+  RShift,
+  Up,
+  Down,
+  Left,
+  Right,
+  Grave,
+  Minus,
+  Equals,
+  Backspace,
+  LeftBrack,
+  RightBrack,
+  Backslash,
+  Semicolon,
+  Apostrophe,
+  Return,
+  Comma,
+  Period,
+  Slash,
+  Space,
+  Delete,
+  Home,
+  PageUp,
+  PageDown,
+  End,
+  size ///< The number of key enums.
+};
+
+enum class Keymod {
+  Ctrl,
+  Alt,
+  Gui,
+  Shift,
+};
+
+[[nodiscard]] constexpr bool operator==(Keymod keymod, Key key) noexcept {
+  switch (keymod) {
+  case Keymod::Ctrl: return key == Key::LCtrl || key == Key::RCtrl;
+  case Keymod::Alt: return key == Key::LAlt || key == Key::RAlt;
+  case Keymod::Gui: return key == Key::LGui || key == Key::RGui;
+  case Keymod::Shift: return key == Key::LShift || key == Key::RShift;
+  default: break;
+  }
+  return false;
+}
+
+[[nodiscard]] constexpr bool operator!=(Keymod keymod, Key key) noexcept { return !(keymod == key); }
+
+namespace detail {
+
+template <typename Arg> constexpr auto lastOf(Arg arg) noexcept { return arg; }
+
+template <typename Arg, typename... Args> constexpr auto lastOf(Arg, Args... args) noexcept { return lastOf(args...); }
+
+} // namespace detail
+
+struct MI_UI_API Keyboard {
+  constexpr Keyboard() noexcept = default;
+
+  struct KeyState {
+    constexpr void set(bool flag) noexcept { down = (down & 0b1111'1110) | uint8_t(flag); }
+
+    /// Is down this frame?
+    [[nodiscard]] constexpr bool isDown() const noexcept { return down & 1; }
+
+    /// Is down this frame and not down last frame?
+    [[nodiscard]] constexpr bool isJustDown() const noexcept { return (down & 0b11) == 0b01; }
+
+    /// Is down this frame and not down last frame? with simulated repeat events when holding the key down.
+    [[nodiscard]] constexpr bool isJustDownWithRepeats() const noexcept { return isJustDown() || repeat; }
+
+    /// Is down last frame and not down this frame?
+    [[nodiscard]] constexpr bool isJustUp() const noexcept { return (down & 0b11) == 0b10; }
+
+    uint8_t down{0};
+
+    uint8_t repeat{0};
+
+    int32_t repeatTimer{0};
+  };
+
+  [[nodiscard]] constexpr auto &operator[](Key key) noexcept { return keys[uint32_t(key)]; }
+
+  [[nodiscard]] constexpr auto &operator[](Key key) const noexcept { return keys[uint32_t(key)]; }
+
+  void clear() noexcept;
+
+  void start() noexcept;
+
+  void afterInput(const Clock &clock) noexcept;
+
+  /// Is down this frame?
+  [[nodiscard]] constexpr bool isDown(Key key) const noexcept { return operator[](key).isDown(); }
+
+  /// \overload
+  [[nodiscard]] constexpr bool isDown(Keymod keymod) const noexcept {
+    switch (keymod) {
+    case Keymod::Ctrl: return isDown(Key::LCtrl) || isDown(Key::RCtrl);
+    case Keymod::Alt: return isDown(Key::LAlt) || isDown(Key::RAlt);
+    case Keymod::Gui: return isDown(Key::LGui) || isDown(Key::RGui);
+    case Keymod::Shift: return isDown(Key::LShift) || isDown(Key::RShift);
+    default: break;
+    }
+    return false;
+  }
+
+  /// Is down this frame and not down last frame?
+  [[nodiscard, strong_inline]] constexpr bool isJustDown(Key key) const noexcept { return operator[](key).isJustDown(); }
+
+  /// Is down this frame and not down last frame? with simulated repeat events when holding the key down.
+  [[nodiscard, strong_inline]] constexpr bool isJustDownWithRepeats(Key key) const noexcept {
+    return operator[](key).isJustDownWithRepeats();
+  }
+
+  /// Is down last frame and not down this frame?
+  [[nodiscard, strong_inline]] constexpr bool isJustUp(Key key) const noexcept { return operator[](key).isJustUp(); }
+
+  template <concepts::same_as_any<Key, Keymod>... Args>
+  [[nodiscard, strong_inline]] constexpr bool isAnyDown(Args... args) const noexcept {
+    return (isDown(args) | ...);
+  }
+
+  template <concepts::same_as_any<Key, Keymod>... Args>
+  [[nodiscard, strong_inline]] constexpr bool isAllDown(Args... args) const noexcept {
+    return (isDown(args) & ...);
+  }
+
+  template <concepts::same_as_any<Key, Keymod>... Args>
+  [[nodiscard, strong_inline]] constexpr bool isAllDownExclusive(Args... args) const noexcept {
+    if (!isAllDown(args...)) {
+      return false;
+    }
+    for (auto &key : keys) {
+      if (key.isDown() && !((args == Key(&key - &keys[0])) || ...)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Is hot key activated this frame?
+  ///
+  /// \note
+  /// We consider a hot key sequence to be activated by the `isJustDown` event
+  /// of the last key in the sequence. All other keys must held at the time
+  /// of this event, but could have been pressed in any order.
+  ///
+  template <concepts::same_as_any<Key, Keymod>... Args>
+  [[nodiscard]] constexpr bool isHotKeyActivated(Args... args) const noexcept {
+    return isAllDownExclusive(args...) && isJustDown(detail::lastOf(args...));
+  }
+
+public:
+  KeyState keys[uint32_t(Key::size)] = {};
+
+  std::string inputText = {};
+};
+
+} // namespace mi::ui

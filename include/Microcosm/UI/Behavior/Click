@@ -1,0 +1,45 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "../Context"
+
+namespace mi::ui {
+
+/// The fundamental behavior to click something.
+struct ClickBehavior {
+public:
+  /// Update.
+  ///
+  /// \param[in] clock
+  /// The clock, which may be implicitly converted from the context.
+  ///
+  /// \param[in] isInputTriggered
+  /// Is the input needed to trigger the pressed state down this frame and not last frame?
+  ///
+  /// \param[in] isInputSustained
+  /// Is the input needed to sustain the pressed state down this frame?
+  ///
+  /// \param[in] isHovered
+  /// Is the relevant region hovered by the mouse this frame?
+  ///
+  /// \note
+  /// The input needed to trigger the pressed state may not be exactly the same as
+  /// the input needed to sustain the pressed state. For example, Alt+LMB might be needed
+  /// to trigger the pressed state, but only holding LMB is needed to sustain it.
+  ///
+  [[strong_inline]] void think(const Clock &clock, bool isInputTriggered, bool isInputSustained, bool isHovered) noexcept {
+    pressed.think(clock, isInputTriggered ? isHovered : isInputSustained ? bool(pressed) : false);
+    hovered.think(clock, isHovered);
+  }
+
+  /// Is pressed?
+  BoolTracker pressed;
+
+  /// Is hovered?
+  BoolTracker hovered;
+
+  /// Is clicked? This is true when the pressed state transitions from true to false and the item of interest is hovered.
+  [[nodiscard]] bool clicked() const noexcept { return hovered && pressed.justFalse(); }
+};
+
+} // namespace mi::ui

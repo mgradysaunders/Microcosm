@@ -1,0 +1,68 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/common"
+
+namespace mi::vk {
+
+struct MI_VK_API Fence final : MoveOnly, WithDeviceAndAllocator {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Fence, create, destroy)
+
+  /// Create the fence.
+  ///
+  /// \param[in] device     The device.
+  /// \param[in] flags      The create flags.
+  /// \param[in] allocator  The allocation callbacks.
+  ///
+  void create(VkDevice device, VkFenceCreateFlags flags = {}, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the fence.
+  void destroy();
+
+  /// Wait for the fence.
+  ///
+  /// \param[in] timeout  The maximum time to wait in nanoseconds.
+  ///
+  [[nodiscard]] VkResult wait(uint64_t timeout = UINT64_MAX) const {
+    return error_check(vkWaitForFences(device, 1, &fence, VK_TRUE, timeout));
+  }
+
+  /// Implicit usage as `VkFence`.
+  [[nodiscard]] operator VkFence() const noexcept { return fence; }
+
+  /// The fence.
+  NullifyOnMove<VkFence> fence;
+};
+
+struct MI_VK_API Fences final : MoveOnly, WithDeviceAndAllocator, ArrayLike<Fences> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Fences, create, destroy)
+  MI_VK_DEFAULT_ARRAY_LIKE(fences)
+
+  /// Create the fences.
+  ///
+  /// \param[in] device     The device.
+  /// \param[in] count      The number of fences to create.
+  /// \param[in] flags      The create flags (applied to all fences).
+  /// \param[in] allocator  The allocation callbacks.
+  ///
+  void create(VkDevice device, uint32_t count, VkFenceCreateFlags flags = {}, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the fences.
+  void destroy();
+
+  /// Wait for the fences.
+  ///
+  /// \param[in] all      The waiting mode, all if true or any if false.
+  /// \param[in] timeout  The maximum time to wait in nanoseconds.
+  ///
+  [[nodiscard]] VkResult wait(bool all = true, uint64_t timeout = UINT64_MAX) const {
+    return error_check(vkWaitForFences(device, fences.size(), fences.data(), all ? VK_TRUE : VK_FALSE, timeout));
+  }
+
+  /// The fences.
+  std::vector<VkFence> fences;
+};
+
+} // namespace mi::vk

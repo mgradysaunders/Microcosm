@@ -1,0 +1,357 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/FileOBJ"
+#include "Microcosm/Geometry/FilePLY"
+#include "Microcosm/Geometry/common"
+#include "Microcosm/Quaternion"
+#include "Microcosm/utility"
+
+namespace mi::geometry {
+
+class MI_GEOMETRY_API Mesh {
+public:
+  Mesh() = default;
+
+  Mesh(const FileOBJ &file);
+
+  Mesh(const FilePLY &file);
+
+  explicit operator FileOBJ() const;
+
+  explicit operator FilePLY() const;
+
+  struct Face {
+    /// The offset of the first vertex.
+    uint32_t first{0};
+
+    /// The vertex count.
+    uint32_t count{0};
+
+    struct Metadata {
+      /// The material.
+      int16_t material{-1};
+
+      /// The object.
+      int16_t object{-1};
+    } metadata{};
+
+    [[nodiscard]] uint32_t operator[](uint32_t i) const noexcept { return first + i % count; }
+  };
+
+  using Faces = std::vector<Face>;
+
+  template <typename Value, auto Name> struct Property final : ArrayLike<Property<Value, Name>> {
+  public:
+    [[nodiscard]] static constexpr const char *name() noexcept { return Name.c_str(); }
+
+    MI_ARRAY_LIKE_DATA(v.data())
+
+    MI_ARRAY_LIKE_SIZE(v.size())
+
+    void clear() noexcept { v.clear(), f.clear(); }
+
+    using ArrayLike<Property<Value, Name>>::operator[];
+
+    [[nodiscard]] auto &operator()(Face face, uint32_t i) noexcept { return eachValue(face)[i % face.count]; }
+
+    [[nodiscard]] auto &operator()(Face face, uint32_t i) const noexcept { return eachValue(face)[i % face.count]; }
+
+    [[nodiscard]] auto eachIndex(Face face) noexcept { return IteratorRange(&f[face.first], face.count); }
+
+    [[nodiscard]] auto eachIndex(Face face) const noexcept { return IteratorRange(&f[face.first], face.count); }
+
+    [[nodiscard]] auto eachValue(Face face) noexcept {
+      return eachIndex(face) | std::views::transform([&](auto i) noexcept -> auto & { return v[i]; });
+    }
+
+    [[nodiscard]] auto eachValue(Face face) const noexcept {
+      return eachIndex(face) | std::views::transform([&](auto i) noexcept -> auto & { return v[i]; });
+    }
+
+    void reverse(Face face) noexcept { std::reverse(f.begin() + face.first, f.begin() + face.first + face.count); }
+
+    void fixInvalid() {
+      bool found{false};
+      for (uint32_t &i : f)
+        if (i >= v.size()) i = v.size(), found = true;
+      if (found) v.emplace_back();
+    }
+
+    void discardUnused() {
+      std::vector<bool> isUsed(v.size());
+      for (auto &i : f) isUsed[i] = true;
+      auto newV = reservedVectorSTL<Value>(v.size());
+      auto mapF = reservedVectorSTL<uint32_t>(v.size());
+      for (size_t i = 0; i < v.size(); i++) {
+        if (isUsed[i]) {
+          mapF.push_back(newV.size()), newV.push_back(v[i]);
+        } else {
+          mapF.push_back(uint32_t(-1));
+        }
+      }
+      for (auto &i : f) i = mapF[i];
+      v = std::move(newV);
+    }
+
+    [[nodiscard]] operator bool() const noexcept { return !v.empty(); }
+
+  public:
+    std::vector<Value> v;
+
+    std::vector<uint32_t> f;
+  };
+
+  using PositionsProperty = Property<Vector3f, "positions"_constant>;
+
+  using TexcoordsProperty = Property<Vector2f, "texcoords"_constant>;
+
+  using NormalsProperty = Property<Vector3f, "normals"_constant>;
+
+  void clear() noexcept {
+    positions.clear();
+    texcoords.clear();
+    normals.clear();
+    faces.clear();
+  }
+
+  void reserve(uint32_t numVerts, uint32_t numFaces) {
+    positions.v.reserve(numVerts), positions.f.reserve(numFaces);
+    texcoords.v.reserve(numVerts), texcoords.f.reserve(numFaces);
+    faces.reserve(numFaces);
+  }
+
+  Face pushFace(uint32_t);
+
+  [[nodiscard]] uint32_t capacityOfFace(Faces::const_iterator face) const {
+    return face + 1 < faces.end() ? (face + 1)->first - face->first : indexCount - face->first;
+  }
+
+  void reserveFace(Faces::iterator face, uint32_t count);
+
+  void resizeFace(Faces::iterator face, uint32_t count) { reserveFace(face, count), face->count = count; }
+
+  [[nodiscard]] const auto &indexPerPosition() const { return positions.f; }
+
+  [[nodiscard]] const auto &indexPerTexcoord() const { return texcoords.f; }
+
+  [[nodiscard]] const auto &indexPerNormal() const { return normals.f; }
+
+  [[nodiscard]] auto indexPerFace() const {
+    std::vector<uint32_t> f{indexCount};
+    for (auto &face : faces)
+      std::fill(f.begin() + face.first, f.begin() + face.first + face.count, uint32_t(&face - &faces[0]));
+    return f;
+  }
+
+  void append(const Mesh &other);
+
+  void reverse(Face face) {
+    positions.reverse(face);
+    texcoords.reverse(face);
+    normals.reverse(face);
+  }
+
+  void reverse() {
+    for (auto &face : faces) reverse(face);
+  }
+
+  void triangulate();
+
+  void consolidate();
+
+  void validate() const;
+
+  /// Calculate the bound box of the given face.
+  [[nodiscard]] BoundBox3f boundBox(Face face) const { return BoundBox3f(positions.eachValue(face)); }
+
+  /// Calculate the bound box of all faces.
+  [[nodiscard]] BoundBox3f boundBox() const { return BoundBox3f(positions); }
+
+  /// Calculate the vector area of the given face.
+  [[nodiscard]] Vector3f vectorArea(Face face) const;
+
+  /// Calculate the area of the given face.
+  [[nodiscard]] float area(Face face) const { return length(vectorArea(face)); }
+
+  /// Calculate the area of all faces.
+  [[nodiscard]] float area() const {
+    double areaSum = 0;
+    for (auto &face : faces) areaSum += double(area(face));
+    return areaSum;
+  }
+
+  /// Calculate the one-side projected area of all faces.
+  [[nodiscard]] float oneSideProjectedArea(Vector3f axis) const {
+    axis = normalize(axis);
+    double areaSum = 0;
+    for (auto &face : faces) areaSum += double(max(dot(axis, vectorArea(face)), 0));
+    return areaSum;
+  }
+
+  /// Calculate the two-side projected area of all faces.
+  [[nodiscard]] float twoSideProjectedArea(Vector3f axis) const {
+    axis = normalize(axis);
+    double areaSum = 0;
+    for (auto &face : faces) areaSum += double(abs(dot(axis, vectorArea(face))));
+    return areaSum;
+  }
+
+  /// Calculate the volume of the solid region represented by the mesh.
+  ///
+  /// \note
+  /// The implementation implicitly assumes the mesh encloses a well-defined
+  /// region. If it does not, there are no guarantees about the validity or
+  /// interpretation of the result.
+  ///
+  [[nodiscard]] float volume() const;
+
+  struct MI_GEOMETRY_API MassData {
+  public:
+    /// Decompose the inertia tensor.
+    ///
+    /// This diagonalizes the inertia tensor to obtain the principal
+    /// axes of the body and the corresponding moments of inertia. The
+    /// columns of the resulting matrix are the axes, the elements of the
+    /// resulting vector are the moments. The moments are sorted in decreasing
+    /// order.
+    ///
+    [[nodiscard]] std::pair<Matrix3f, Vector3f> principalInertia() const;
+
+    void rotate(const Matrix3f &amount);
+
+    void rotate(float theta, const Vector3f &axis) { rotate(Quaternionf::rotate(theta, axis)); }
+
+    void rotateX(float theta) { rotate(theta, Vector3f::unitX()); }
+
+    void rotateY(float theta) { rotate(theta, Vector3f::unitY()); }
+
+    void rotateZ(float theta) { rotate(theta, Vector3f::unitZ()); }
+
+  public:
+    /// The mass.
+    float mass{0};
+
+    /// The center of mass.
+    Vector3f center{};
+
+    /// The inertia tensor about the center of mass.
+    Matrix3f inertia{};
+  };
+
+  /// Calculate the mass data of the solid region represented by the mesh.
+  ///
+  /// \note
+  /// The implementation implicitly assumes the mesh encloses a well-defined
+  /// region. If it does not, there are no guarantees about the validity or
+  /// interpretation of the result.
+  ///
+  [[nodiscard]] MassData massData(float density = 1) const;
+
+  void calculateNormals(bool perPosition = true);
+
+  void normalizeNormals() {
+    for (auto &normal : normals) normal = normalize(normal);
+  }
+
+  void subdivide();
+
+  void subdivide(int levels) {
+    while (levels-- > 0) subdivide();
+  }
+
+  void displace(float amount, const std::function<float(Vector3f, Vector2f)> &func);
+
+  void transform(const DualQuaternionf &amount);
+
+  void transform(const Quaternionf &amount);
+
+  void transform(const Matrix3f &matrix);
+
+  void transform(const Matrix4f &matrix);
+
+  void translate(const Vector3f &amount);
+
+  void rotate(float theta, const Vector3f &axis) { transform(Quaternionf::rotate(theta, axis)); }
+
+  void rotateX(float theta) { rotate(theta, Vector3f::unitX()); }
+
+  void rotateY(float theta) { rotate(theta, Vector3f::unitY()); }
+
+  void rotateZ(float theta) { rotate(theta, Vector3f::unitZ()); }
+
+  void scale(const Vector3f &amount);
+
+  void scale(float amount);
+
+public:
+  Faces faces;
+
+  PositionsProperty positions;
+
+  TexcoordsProperty texcoords;
+
+  NormalsProperty normals;
+
+  uint32_t indexCount = 0;
+
+public:
+  [[nodiscard]] static Mesh makeCube();
+
+  struct Surface {
+    struct Params final : ArrayLike<Params> {
+      Params() {
+        params.reserve(16);
+        params.push_back(0.0f);
+        params.push_back(1.0f);
+      }
+      MI_ARRAY_LIKE_DATA(params.data())
+      MI_ARRAY_LIKE_SIZE(params.size())
+      void set(std::vector<float> s) { params = std::move(s); }
+      void set(float from, float to, uint32_t numSubdivs) {
+        params.clear();
+        params.reserve(numSubdivs + 2);
+        for (float value : linspace(numSubdivs + 2, from, to)) params.emplace_back(value);
+      }
+      std::vector<float> params;
+    };
+
+    std::function<Vector3f(float, float)> func;
+    Params paramsU;
+    Params paramsV;
+  };
+
+  [[nodiscard]] static Mesh makeSurface(const Surface &surface);
+
+  /// Make a plane.
+  ///
+  /// \param[in] numSubdivsU  The number of subdivisions in U.
+  /// \param[in] numSubdivsV  The number of subdivisions in V.
+  /// \param[in] vectorU      The basis vector for U.
+  /// \param[in] vectorV      The basis vector for V.
+  ///
+  [[nodiscard]] static Mesh makePlane(
+    uint32_t subdivsU, //
+    uint32_t subdivsV, const Vector3f &vectorU = {1, 0, 0}, const Vector3f &vectorV = {0, 1, 0});
+
+  /// Make a planar disk (triangle fan surrounding a central vertex).
+  ///
+  /// \param[in] countR    The number of subdivisions in the radius.
+  /// \param[in] countPhi  The number of subdivisions in the azimuth angle.
+  /// \param[in] vectorX   The basis vector for the X components.
+  /// \param[in] vectorY   The basis vector for the Y components.
+  ///
+  [[nodiscard]] static Mesh makePlaneDisk(
+    uint32_t countR, //
+    uint32_t countPhi, const Vector3f &vectorX = {1, 0, 0}, const Vector3f &vectorY = {0, 1, 0});
+
+  [[nodiscard]] static Mesh makeSphere(uint32_t subdivsU, uint32_t subdivsV, float radius = 1);
+
+  [[nodiscard]] static Mesh makeSphube(uint32_t levels = 4, float radius = 1);
+
+  [[nodiscard]] static Mesh makeCylinder(
+    uint32_t subdivsU, //
+    uint32_t subdivsV, float radius = 1.0f, float minZ = -1.0f, float maxZ = +1.0f);
+};
+
+} // namespace mi::geometry

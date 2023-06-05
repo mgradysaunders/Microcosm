@@ -1,0 +1,207 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/memory"
+
+namespace mi::geometry {
+
+template <size_t N> class StaticKDTree;
+
+template <size_t N> class MI_GEOMETRY_API DynamicKDTree {
+  static_assert(N == 2 or N == 3);
+
+public:
+  using Point = Vector<float, N>;
+  using Box = BoundBox<float, N>;
+  using Int = int32_t;
+
+  static constexpr Int None = -1;
+
+  struct Node {
+    Point point;
+
+    Int parent{None};
+
+    Int childA{None};
+
+    Int childB{None};
+
+    Int height : 16 {-1};
+
+    Int axis : 8 {-1};
+
+    Int dead : 8 {0};
+
+    UserData userData{};
+
+    [[nodiscard]] constexpr auto threshold() const noexcept { return point[axis]; }
+
+    [[nodiscard]] constexpr bool isLeaf() const noexcept { return childA == None && childB == None; }
+
+    [[nodiscard]] constexpr bool isBranch() const noexcept { return childA != None || childB != None; }
+
+    [[nodiscard]] constexpr auto operator<=>(const Point &other) const noexcept { return point[axis] <=> other[axis]; }
+  };
+
+  using Nodes = IntrusivePoolVector<Int, Node, &Node::parent>;
+
+public:
+  DynamicKDTree() noexcept = default;
+
+  template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
+  explicit DynamicKDTree(Iterator from, Sentinel to) {
+    while (from != to) insert(*from++);
+    rebalance();
+  }
+
+  template <std::ranges::input_range Range>
+  explicit DynamicKDTree(Range &&range) : DynamicKDTree(std::ranges::begin(range), std::ranges::end(range)) {}
+
+  DynamicKDTree(const DynamicKDTree &) = default;
+
+  DynamicKDTree(DynamicKDTree &&) noexcept = default;
+
+  DynamicKDTree &operator=(const DynamicKDTree &) = default;
+
+  DynamicKDTree &operator=(DynamicKDTree &&) noexcept = default;
+
+public:
+  void clear() noexcept {
+    mNodes.clear();
+    mRoot = None;
+    mNodeCount = 0;
+    mDeadCount = 0;
+    mRebalanceCount = 0;
+    mBox = {};
+  }
+
+  [[nodiscard]] bool empty() const noexcept { return mRoot == None; }
+
+  [[nodiscard]] auto &operator[](Int node) noexcept { return mNodes[node]; }
+
+  [[nodiscard]] auto &operator[](Int node) const noexcept { return mNodes[node]; }
+
+  [[nodiscard]] bool automaticRebalance() const noexcept { return mAutomaticRebalance; }
+
+  bool automaticRebalance(bool flag) noexcept { return std::exchange(mAutomaticRebalance, flag); }
+
+  [[nodiscard]] Int maxHeight() const noexcept { return mRoot == None ? 0 : mNodes[mRoot].height; }
+
+  [[nodiscard]] Int maxImbalance() const noexcept {
+    Int imbalance = 0;
+    for (const Node &nodeRef : mNodes) {
+      if (
+        nodeRef.height < 2 || //
+        nodeRef.childA == None || nodeRef.childB == None)
+        continue;
+      Int height0 = mNodes[nodeRef.childA].height;
+      Int height1 = mNodes[nodeRef.childB].height;
+      maximize(imbalance, std::abs(height1 - height0));
+    }
+    return imbalance;
+  }
+
+  [[nodiscard]] Int nodeCount() const noexcept { return mNodeCount; }
+
+  [[nodiscard]] Int deadCount() const noexcept { return mDeadCount; }
+
+  [[nodiscard]] Int rebalanceCount() const noexcept { return mRebalanceCount; }
+
+  Int insert(const Point &point, UserData userData = {}) {
+    Int node = mNodes.allocate();
+    Node &nodeRef = mNodes[node];
+    nodeRef.point = point;
+    nodeRef.height = 0;
+    nodeRef.userData = userData;
+    privateInsert(node);
+    mNodeCount++;
+    return node;
+  }
+
+  void remove(Int node) {
+    if (privateRemove(node)) {
+      mNodes[node].height = -1;
+      mNodes.deallocate(node);
+      mNodeCount--;
+    }
+  }
+
+  void rebalance() { privateRebalance(); }
+
+  // TODO void update(Int node, const Point& point);
+
+public:
+  [[nodiscard]] Box region(Int node) const;
+
+  /// Visit all nodes in box.
+  template <std::invocable<Int> Visitor> void visit(const Box &box, Visitor &&visitor) {
+    GrowableStack<Int> todo;
+    if (mRoot != None) todo.push(mRoot);
+    while (!todo.empty()) {
+      Int node = todo.pop();
+      Node &nodeRef = mNodes[node];
+      if (!nodeRef.dead && !std::invoke(std::forward<Visitor>(visitor), node)) return;
+      Int axis = nodeRef.axis;
+      Int childA = nodeRef.childA;
+      Int childB = nodeRef.childB;
+      if (childA != None && nodeRef.point[axis] > box.min(axis)) todo.push(childA);
+      if (childB != None && nodeRef.point[axis] < box.max(axis)) todo.push(childB);
+    }
+  }
+
+  /// Visit all nodes in sphere.
+  template <std::invocable<Int> Visitor> void visit(const Point &center, float radius, Visitor &&visitor) {
+    float radSqr = radius * radius;
+    Point minPoint = center - Point(std::abs(radius));
+    Point maxPoint = center + Point(std::abs(radius));
+    visit(Box(minPoint, maxPoint), [&](Int node) {
+      return !(distanceSquare(mNodes[node].point, center) < radSqr) || std::invoke(std::forward<Visitor>(visitor), node);
+    });
+  }
+
+  struct Nearest {
+    Int node{None};
+
+    float dist{constants::Inff};
+
+    constexpr auto operator<=>(const Nearest &other) const noexcept { return dist <=> other.dist; }
+
+    constexpr operator bool() const noexcept { return node != None; }
+  };
+
+  [[nodiscard]] Nearest nearestTo(Point point) const;
+
+  void nearestTo(Point point, IteratorRange<Nearest *> near) const;
+
+private:
+  Nodes mNodes;
+
+  Int mRoot{None};
+
+  Int mNodeCount{0};
+
+  Int mDeadCount{0};
+
+  Int mRebalanceCount{0};
+
+  bool mAutomaticRebalance{false};
+
+  Box mBox;
+
+private:
+  Int privateSelectAxis(Int node);
+
+  void privateInsert(Int node);
+
+  bool privateRemove(Int node);
+
+  void privateRebalance();
+
+  Int privateRebalance(IteratorRange<Int *> nodes);
+};
+
+using DynamicKDTree2 = DynamicKDTree<2>;
+using DynamicKDTree3 = DynamicKDTree<3>;
+
+} // namespace mi::geometry

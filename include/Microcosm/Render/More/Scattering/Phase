@@ -1,0 +1,107 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+struct MI_RENDER_API IsotropicPhaseWithOneParameter {
+public:
+  using bsdf_tag = std::true_type;
+
+  using Phase = std::function<double(double param, double cosTheta)>;
+
+  using PhaseSample = std::function<double(double param, double sampleU)>;
+
+  IsotropicPhaseWithOneParameter() noexcept = default;
+
+  IsotropicPhaseWithOneParameter(Spectrum param, Phase phase, PhaseSample phaseSample) noexcept
+    : mParam(std::move(param)), mPhase(std::move(phase)), mPhaseSample(std::move(phaseSample)) {}
+
+public:
+  BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const;
+
+  BidirPDF scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio) const;
+
+private:
+  Spectrum mParam;
+
+  Phase mPhase;
+
+  PhaseSample mPhaseSample;
+};
+
+struct MI_RENDER_API HenyeyGreensteinPhase final : IsotropicPhaseWithOneParameter {
+public:
+  HenyeyGreensteinPhase() noexcept = default;
+
+  HenyeyGreensteinPhase(Spectrum meanCosTheta) noexcept
+    : IsotropicPhaseWithOneParameter(std::move(meanCosTheta), &phase, &phaseSample) {}
+
+  [[nodiscard]] static double phase(double meanCosTheta, double cosTheta) noexcept {
+    if (abs(meanCosTheta) > 0.00001) {
+      double coeffA{1 - sqr(meanCosTheta)};
+      double coeffB{1 + sqr(meanCosTheta) - 2 * meanCosTheta * cosTheta};
+      return OneOverFourPi * coeffA / (coeffB * sqrt(abs(coeffB)));
+    } else {
+      return OneOverFourPi;
+    }
+  }
+
+  [[nodiscard]] static double phaseSample(double meanCosTheta, double sampleU) noexcept {
+    if (abs(meanCosTheta) > 0.00001) {
+      return saturateSigned(
+        (1 + sqr(meanCosTheta) - sqr((1 - sqr(meanCosTheta)) / (1 - meanCosTheta + 2 * meanCosTheta * sampleU))) /
+        (2 * meanCosTheta));
+    } else {
+      return saturateSigned(2 * sampleU - 1);
+    }
+  }
+};
+
+struct MI_RENDER_API RayleighPhase final : IsotropicPhaseWithOneParameter {
+public:
+  // Note: ratio ==> depolarization ratio
+
+  RayleighPhase() noexcept = default;
+
+  RayleighPhase(Spectrum ratio) noexcept : IsotropicPhaseWithOneParameter(std::move(ratio), &phase, &phaseSample) {}
+
+  [[nodiscard]] static double phase(double ratio, double cosTheta) noexcept {
+    double gamma{ratio / (2 - ratio)};
+    return OneOverPi * 0.1875 * (1 + 3 * gamma + (1 - gamma) * sqr(cosTheta)) / (1 + 2 * gamma);
+  }
+
+  [[nodiscard]] static double phaseSample(double ratio, double sampleU) noexcept {
+    double xi0{(1 + ratio) / (1 - ratio)};
+    double xi1{(1 + 3 * xi0) * (2 * sampleU - 1) / 2};
+    double cbrtTerm{cbrt(xi1 + sqrt(sqr(xi1) + sqr(xi0) * xi0))};
+    double cosTheta{cbrtTerm - xi0 / cbrtTerm};
+    return saturateSigned(cosTheta);
+  }
+};
+
+struct MI_RENDER_API VonMisesFisherPhase final : IsotropicPhaseWithOneParameter {
+public:
+  VonMisesFisherPhase() noexcept = default;
+
+  VonMisesFisherPhase(Spectrum kappa) noexcept : IsotropicPhaseWithOneParameter(std::move(kappa), &phase, &phaseSample) {}
+
+  [[nodiscard]] static double phase(double kappa, double cosTheta) noexcept {
+    if (abs(kappa) > 0.00001) {
+      return kappa * exp(kappa * min(0, cosTheta - 1)) / (TwoPi * (1 - exp(-2 * kappa)));
+    } else {
+      return OneOverFourPi;
+    }
+  }
+
+  [[nodiscard]] static double phaseSample(double kappa, double sampleU) noexcept {
+    if (abs(kappa) > 0.00001) {
+      return saturateSigned(1 + log(lerp(sampleU, exp(-2 * kappa), 1.0)) / kappa);
+    } else {
+      return saturateSigned(2 * sampleU - 1);
+    }
+  }
+};
+
+} // namespace mi::render

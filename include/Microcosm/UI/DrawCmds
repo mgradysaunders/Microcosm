@@ -1,0 +1,244 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Context"
+#include "Microcosm/UI/Text"
+#include "Microcosm/UI/Transform"
+#include "Microcosm/memory"
+#include <deque>
+
+namespace mi::ui {
+
+struct Text;
+
+struct Vtx {
+public:
+  constexpr Vtx() noexcept = default;
+
+  constexpr Vtx(float positionX, float positionY) noexcept : position{positionX, positionY} {}
+
+  constexpr Vtx(const Vector2f &position, const Vector2f &texcoord = {}, const Vector4b &color = Vector4b(0xFF)) noexcept
+    : position(position), texcoord(texcoord), color(color) {}
+
+  MI_UI_DECLARE_WITH_COMPONENTS_2(withPosition, position, X, Y);
+
+  MI_UI_DECLARE_WITH_COMPONENTS_2(withTexcoord, texcoord, X, Y);
+
+  MI_UI_DECLARE_WITH_COMPONENTS_4(withColor, color, R, G, B, A);
+
+  MI_UI_DECLARE_WITH(withFontFactor, fontFactor);
+
+  /// The position (X, Y).
+  Vector2f position{};
+
+  /// The texcoord (U, V).
+  Vector2f texcoord{};
+
+  /// The color (R, G, B, A).
+  Vector4b color{0xFF, 0xFF, 0xFF, 0xFF};
+
+  /// The font factor, to avoid switching GPU state when rendering text versus non-text.
+  float fontFactor{};
+};
+
+using Idx = uint32_t;
+
+struct Cmd {
+  /// The scissor rectangle in window coordinates.
+  Rect scissor{};
+
+  /// The current Z-layer.
+  int32_t layer{0};
+
+  /// The texture handle.
+  UserData texture{};
+
+  /// The tint color to multiply.
+  Vector4f tintGain{1, 1, 1, 1};
+
+  /// The tint color to add.
+  Vector4f tintBias{0, 0, 0, 0};
+
+  /// The current model-view matrix.
+  Transform modelView{};
+
+  /// The first vertex.
+  uint32_t firstVtx{0};
+
+  /// The first index.
+  uint32_t firstIdx{0};
+
+  /// The number of indexes to draw.
+  uint32_t count{0};
+};
+
+struct MI_UI_API DrawCmds {
+public:
+  DrawCmds() {
+    mVtxBuffer.reserve(32);
+    mIdxBuffer.reserve(32);
+    mCmdItr = mCmdBuffer.end();
+  }
+
+  DrawCmds(const DrawCmds &) = delete;
+
+  void clear() noexcept {
+    mCmdBuffer.clear();
+    mVtxBuffer.clear();
+    mIdxBuffer.clear();
+    mFirstVtx = 0;
+    mFirstIdx = 0;
+    mCmdItr = mCmdBuffer.end();
+  }
+
+  [[nodiscard, strong_inline]] auto &vtxBuffer() noexcept { return mVtxBuffer; }
+
+  [[nodiscard, strong_inline]] auto &idxBuffer() noexcept { return mIdxBuffer; }
+
+  [[nodiscard, strong_inline]] auto &vtxBuffer() const noexcept { return mVtxBuffer; }
+
+  [[nodiscard, strong_inline]] auto &idxBuffer() const noexcept { return mIdxBuffer; }
+
+  [[nodiscard, strong_inline]] auto &cmds() const noexcept { return mCmdBuffer; }
+
+  void commit(const Context &ctx);
+
+  void commit(auto &ctx, auto &&func) {
+    ctx.push();
+    std::invoke(auto_forward(func));
+    commit(ctx);
+    ctx.pop();
+  }
+
+public:
+  /// Next vertex index.
+  [[nodiscard, strong_inline]] Idx next() const noexcept { return mVtxBuffer.size(); }
+
+  /// Emit vertex.
+  [[strong_inline]] Idx emit(Vtx vtx) {
+    Idx result = mVtxBuffer.size();
+    mVtxBuffer.emplace_back(vtx);
+    return result;
+  }
+
+  /// Emit index.
+  [[strong_inline]] void emit(Idx idx) { mIdxBuffer.emplace_back(idx); }
+
+  /// Emit multiple things at once for convenience.
+  [[strong_inline]] void emit(auto... args) requires(sizeof...(args) > 1) { (emit(args), ...); }
+
+  /// Emit an index triangle fan.
+  [[strong_inline]] void emitTriFan(Idx idx0, IteratorRange<const Idx *> idxs) {
+    for (int i = 0; i + 1 < idxs.size(); i++) emit(idx0, idxs[i], idxs[i + 1]);
+  }
+
+  /// Emit an index triangle fan for the next `count` vertices.
+  [[strong_inline]] void emitTriFan(Idx idx0, int count) {
+    for (int i = 1; i + 1 < count; i++) emit(idx0, idx0 + i, idx0 + i + 1);
+  }
+
+  /// Emit a convex shape as a triangle fan.
+  template <std::convertible_to<Vtx>... Vtxs>
+  [[strong_inline]] void emitConvex(const Vtxs &...vtxs) requires(sizeof...(Vtxs) > 2) {
+    emitTriFan(mVtxBuffer.size(), sizeof...(Vtxs));
+    emit(Vtx(vtxs)...);
+  }
+
+  void emitText(const Context &ctx, const Text &text);
+
+  void emitTextCursor(const Context &ctx, const Text &text, const Text::Letter *letter);
+
+  /* void emitParametric(Vector2i numSubdivs, const std::function<Vtx(Vector2f)> &parametric); */
+
+public:
+  /// \name Fringe (anti-aliasing)
+  /// \{
+
+  struct FringeState {
+    Idx idxA{0};        ///< The fringe index A.
+    Idx idxB{0};        ///< The fringe index B.
+    Vector2f direction; ///< The direction, normalized.
+    struct {
+      Idx idxA{0};
+      Idx idxB{0};
+      Vector2f direction;
+    } first{};
+  };
+
+  /// Emit fringe.
+  ///
+  /// \param[in] ctx        The context.
+  /// \param[in] idxA       The index of vertex A.
+  /// \param[in] idxB       The index of vertex B.
+  /// \param[in] prevState  The previous state, for continuity.
+  /// \param[in] winding    The winding, positive if CCW and negative if CW.
+  ///
+  FringeState emitFringe(const Context &ctx, Idx idxA, Idx idxB, std::optional<FringeState> prevState = {}, float winding = +1);
+
+  /// Finish fringe, close loop.
+  void finishFringeCloseLoop(const Context &ctx, const FringeState &lastState);
+
+  // \}
+
+public:
+  /// \name Stroke
+  /// \{
+
+  struct StrokeState {
+    bool isFirst{true};  ///< Is this the first state emitted?
+    Vector2f direction;  ///< The direction, normalized.
+    Vector2f position;   ///< The position.
+    Vector2f texcoord;   ///< The texture coordinate.
+    Vector4b color;      ///< The color.
+    float width{};       ///< The width.
+    float widthSlope{};  ///< The width slope.
+    Idx idxA{};          ///< The index of vertex A.
+    Idx idxB{};          ///< The index of vertex B.
+    FringeState fringeA; ///< The fringe state for vertex A.
+    FringeState fringeB; ///< The fringe state for vertex B.
+    struct FirstRecord {
+      Vector2f direction;
+      float widthSlope{};
+      Idx idxA{};
+      Idx idxB{};
+      FringeState fringeA;
+      FringeState fringeB;
+    } first{};
+  };
+
+  /// Emit stroke, vertex by vertex.
+  StrokeState emitStroke(const Context &ctx, const Vtx &vtx, float width = 0, const std::optional<StrokeState> &prevState = {});
+
+  void finishStroke(const Context &ctx, const StrokeState &lastState, bool roundCapFirst, bool roundCapLast);
+
+  void finishStroke(const Context &ctx, const StrokeState &lastState, bool roundCaps = false) {
+    finishStroke(ctx, lastState, roundCaps, roundCaps);
+  }
+
+  void finishStrokeCloseLoop(const Context &ctx, const StrokeState &lastState);
+  /// \}
+
+public:
+  void emitCircleWithFringe(const Context &ctx, const Vtx &vtx, float radius, int numSubdivs = 32);
+
+private:
+  /// The command buffer.
+  std::deque<Cmd> mCmdBuffer;
+
+  /// The vertex buffer.
+  std::vector<Vtx> mVtxBuffer;
+
+  /// The index buffer.
+  std::vector<Idx> mIdxBuffer;
+
+  /// The first vertex.
+  uint32_t mFirstVtx = 0;
+
+  /// The first index.
+  uint32_t mFirstIdx = 0;
+
+  /// The iterator to the last committed command.
+  std::deque<Cmd>::iterator mCmdItr{mCmdBuffer.end()};
+};
+
+} // namespace mi::ui

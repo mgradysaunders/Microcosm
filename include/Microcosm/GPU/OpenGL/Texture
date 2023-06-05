@@ -1,0 +1,153 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/gl3w"
+
+namespace mi::gl {
+
+struct Texture final : Handle<Texture, GLenum> {
+public:
+  using Handle<Texture, GLenum>::Handle;
+
+  [[nodiscard]] static GLuint allocate(GLenum target) noexcept {
+    GLuint handle = 0;
+    glCreateTextures(target, 1, &handle);
+    return handle;
+  }
+
+  static void deallocate(GLuint handle) noexcept { glDeleteTextures(1, &handle); }
+
+public:
+  void bind(GLenum target) const noexcept { glBindTexture(target, mHandle); }
+
+  template <typename Value> [[nodiscard]] Value getLevelParameter(GLint level, GLenum name) const noexcept {
+    Value value{};
+    static_assert(std::same_as<Value, GLint> || std::same_as<Value, GLfloat>);
+    if constexpr (std::same_as<Value, GLint>) glGetTextureLevelParameteriv(mHandle, level, name, &value);
+    if constexpr (std::same_as<Value, GLfloat>) glGetTextureLevelParameterfv(mHandle, level, name, &value);
+    return value;
+  }
+
+  template <typename Value> [[nodiscard]] Value getParameter(GLenum name) const noexcept {
+    Value value{};
+    static_assert(std::same_as<Value, GLint> || std::same_as<Value, GLfloat>);
+    if constexpr (std::same_as<Value, GLint>) glGetTextureParameteriv(mHandle, name, &value);
+    if constexpr (std::same_as<Value, GLfloat>) glGetTextureParameterfv(mHandle, name, &value);
+    return value;
+  }
+
+  template <typename Value> void parameter(GLenum name, Value value) noexcept {
+    static_assert(std::same_as<Value, GLint> || std::same_as<Value, GLfloat>);
+    if constexpr (std::same_as<Value, GLint>) glTextureParameteri(mHandle, name, value);
+    if constexpr (std::same_as<Value, GLfloat>) glTextureParameterf(mHandle, name, value);
+  }
+
+  [[nodiscard]] GLint minFilter() const noexcept { return getParameter<GLint>(GL_TEXTURE_MIN_FILTER); }
+
+  [[nodiscard]] GLint magFilter() const noexcept { return getParameter<GLint>(GL_TEXTURE_MAG_FILTER); }
+
+  void minFilter(GLint value) noexcept { parameter(GL_TEXTURE_MIN_FILTER, value); }
+
+  void magFilter(GLint value) noexcept { parameter(GL_TEXTURE_MAG_FILTER, value); }
+
+  void filter(GLint value) noexcept {
+    minFilter(value);
+    magFilter(value);
+  }
+
+  [[nodiscard]] GLint wrapR() const noexcept { return getParameter<GLint>(GL_TEXTURE_WRAP_R); }
+
+  [[nodiscard]] GLint wrapS() const noexcept { return getParameter<GLint>(GL_TEXTURE_WRAP_S); }
+
+  [[nodiscard]] GLint wrapT() const noexcept { return getParameter<GLint>(GL_TEXTURE_WRAP_T); }
+
+  void wrapR(GLint value) noexcept { parameter(GL_TEXTURE_WRAP_R, value); }
+
+  void wrapS(GLint value) noexcept { parameter(GL_TEXTURE_WRAP_S, value); }
+
+  void wrapT(GLint value) noexcept { parameter(GL_TEXTURE_WRAP_T, value); }
+
+  [[nodiscard]] GLint baseLevel() const noexcept { return getParameter<GLint>(GL_TEXTURE_BASE_LEVEL); }
+
+  [[nodiscard]] GLint maxLevel() const noexcept { return getParameter<GLint>(GL_TEXTURE_MAX_LEVEL); }
+
+  [[nodiscard]] GLfloat minLod() const noexcept { return getParameter<GLfloat>(GL_TEXTURE_MIN_LOD); }
+
+  [[nodiscard]] GLfloat maxLod() const noexcept { return getParameter<GLfloat>(GL_TEXTURE_MAX_LOD); }
+
+  void baseLevel(GLint value) noexcept { parameter(GL_TEXTURE_BASE_LEVEL, value); }
+
+  void maxLevel(GLint value) noexcept { parameter(GL_TEXTURE_MAX_LEVEL, value); }
+
+  void minLod(GLfloat value) noexcept { parameter(GL_TEXTURE_MIN_LOD, value); }
+
+  void maxLod(GLfloat value) noexcept { parameter(GL_TEXTURE_MAX_LOD, value); }
+
+  void storage1D(GLsizei levels, GLenum internalFormat, GLsizei extent) noexcept {
+    glTextureStorage1D(mHandle, levels, internalFormat, extent);
+  }
+
+  void storage2D(GLsizei levels, GLenum internalFormat, Vector2i extent) noexcept {
+    glTextureStorage2D(mHandle, levels, internalFormat, extent[0], extent[1]);
+  }
+
+  void storage3D(GLsizei levels, GLenum internalFormat, Vector3i extent) noexcept {
+    glTextureStorage3D(mHandle, levels, internalFormat, extent[0], extent[1], extent[2]);
+  }
+
+  template <typename Value>
+  void subImage1D(GLint level, GLint offset, GLint extent, GLenum format, const Value *pixels) noexcept {
+    glTextureSubImage1D(mHandle, level, offset, extent, format, enumFor<Value>(), pixels);
+  }
+
+  template <typename Value>
+  void subImage2D(GLint level, Vector2i offset, Vector2i extent, GLenum format, const Value *pixels) noexcept {
+    glTextureSubImage2D(mHandle, level, offset[0], offset[1], extent[0], extent[1], format, enumFor<Value>(), pixels);
+  }
+
+  template <typename Value>
+  void subImage3D(GLint level, Vector3i offset, Vector3i extent, GLenum format, const Value *pixels) noexcept {
+    glTextureSubImage3D(
+      mHandle, level, offset[0], offset[1], offset[2], extent[0], extent[1], extent[2], format, enumFor<Value>(), pixels);
+  }
+
+  void image2DMultisample(
+    GLenum target, GLsizei samples, GLenum internalFormat, Vector2i extent, bool fixedLocations = true) noexcept {
+    // There is apparently no named variant for this one, so default to binding and unbinding.
+    GLuint backup = getInteger(target);
+    glBindTexture(target, mHandle);
+    glTexImage2DMultisample(target, samples, internalFormat, extent[0], extent[1], fixedLocations);
+    glBindTexture(target, backup);
+  }
+
+  void getImage(GLint level, GLenum format, GLenum type, GLsizei sizeInBytes, void *pixels) const noexcept {
+    glGetTextureImage(mHandle, level, format, type, sizeInBytes, pixels);
+  }
+
+protected:
+  using Handle<Texture, GLenum>::mHandle;
+};
+
+struct BackupActiveTexture {
+public:
+  BackupActiveTexture() noexcept : mUnit(getInteger(GL_ACTIVE_TEXTURE)) {}
+
+  ~BackupActiveTexture() noexcept { glActiveTexture(mUnit); }
+
+private:
+  GLint mUnit = 0;
+};
+
+struct BackupActiveSampler {
+public:
+  BackupActiveSampler() noexcept : mUnit(getInteger(GL_ACTIVE_TEXTURE)), mSampler(getInteger(GL_SAMPLER_BINDING)) {}
+
+  ~BackupActiveSampler() noexcept { glBindSampler(mUnit, mSampler); }
+
+private:
+  GLint mUnit = 0;
+
+  GLint mSampler = 0;
+};
+
+} // namespace mi::gl

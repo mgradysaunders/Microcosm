@@ -1,0 +1,89 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+template <typename Float, size_t N> struct Ray {
+public:
+  static_assert(N == 2 || N == 3);
+
+  constexpr Ray() noexcept = default;
+
+  constexpr Ray(
+    Vector<Float, N> origin,    //
+    Vector<Float, N> direction, //
+    Float minParam = 0,         //
+    Float maxParam = constants::Inf<Float>) noexcept
+    : origin(origin), direction(direction), minParam(minParam), maxParam(maxParam) {}
+
+  /// Is the given parameter in range?
+  [[nodiscard, strong_inline]] constexpr bool isInRange(Float t) const noexcept { return minParam < t && t < maxParam; }
+
+  /// Compute the point at the minimum parameter.
+  [[nodiscard, strong_inline]] constexpr auto minPoint() const noexcept { return operator()(minParam); }
+
+  /// Compute the point at the maximum parameter.
+  [[nodiscard, strong_inline]] constexpr auto maxPoint() const noexcept { return operator()(maxParam); }
+
+  /// Compute the minimum distance, which may be different than the minimum parameter if the direction is non-normalized.
+  [[nodiscard, strong_inline]] auto minDistance() const noexcept { return fastLength(direction) * minParam; }
+
+  /// Compute the maximum distance, which may be different than the maximum parameter if the direction is non-normalized.
+  [[nodiscard, strong_inline]] auto maxDistance() const noexcept { return fastLength(direction) * maxParam; }
+
+  /// Compute the segment length.
+  [[nodiscard, strong_inline]] auto segmentLength() const noexcept { return fastLength(direction) * (maxParam - minParam); }
+
+  /// Compute the point at an arbitrary parameter.
+  [[nodiscard, strong_inline]] constexpr auto operator()(auto t) const noexcept { return origin + direction * t; }
+
+  template <std::floating_point Other> [[nodiscard, strong_inline]] constexpr operator Ray<Other, N>() const noexcept {
+    return Ray<Other, N>{Vector<Other, N>(origin), Vector<Other, N>(direction), Other(minParam), Other(maxParam)};
+  }
+
+public:
+  Vector<Float, N> origin;
+
+  Vector<Float, N> direction;
+
+  Float minParam{0};
+
+  Float maxParam{constants::Inf<Float>};
+
+  void onSerialize(auto &&serializer) { serializer <=> origin <=> direction <=> minParam <=> maxParam; }
+
+  void onTransform(auto &&transform) noexcept {
+    origin = transform.applyAffine(origin), direction = transform.applyLinear(direction);
+  }
+};
+
+template <typename Float> using Ray2 = Ray<Float, 2>;
+
+template <typename Float> using Ray3 = Ray<Float, 3>;
+
+using Ray2f = Ray2<float>;
+
+using Ray3f = Ray3<float>;
+
+using Ray2d = Ray2<double>;
+
+using Ray3d = Ray3<double>;
+
+/// Normalize a ray into a more canonical form. This normalizes the ray direction, adjusts ray parameters accordingly, then
+/// moves the ray origin to the minimum parameter, sets the minimum parameter to zero and shifts the maximum parameter down
+/// accordingly.
+template <typename Float, size_t N> [[nodiscard]] inline Ray<Float, N> normalize(Ray<Float, N> ray) noexcept {
+  if (auto dirLength = length(ray.direction); dirLength > 0) {
+    ray.direction /= dirLength;
+    ray.minParam /= dirLength;
+    ray.maxParam /= dirLength;
+  }
+  ray.origin += ray.minParam * ray.direction;
+  ray.maxParam -= ray.minParam;
+  ray.minParam = 0;
+  return ray;
+}
+
+} // namespace mi

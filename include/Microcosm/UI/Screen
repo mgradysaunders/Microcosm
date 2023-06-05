@@ -1,0 +1,105 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Transform"
+#include "Microcosm/UI/common"
+
+namespace mi::ui {
+
+struct Screen {
+public:
+  void start() {
+    shown = (shown << 1) | (shown & 1);
+    focused = (focused << 1) | (focused & 1);
+    screenSizeLastFrame = screenSize;
+  }
+
+  void afterInput() {
+    // Not really sure if there is some theoretically ideal value here,
+    // but 2 pixels seems like too much and 1 pixel is definitely not enough.
+    // For now the multiplier is the golden ratio.
+    fringeScale = 1.618033988749895f * pointsPerPixel();
+  }
+
+public:
+  [[nodiscard]] constexpr bool isResizing() const noexcept { return anyTrue(screenSize != screenSizeLastFrame); }
+
+  [[nodiscard]] constexpr bool isShown() const noexcept { return (shown & 1) == 1; }
+
+  [[nodiscard]] constexpr bool isHidden() const noexcept { return (shown & 1) == 0; }
+
+  [[nodiscard]] constexpr bool isJustShown() const noexcept { return (shown & 0b11) == 0b01; }
+
+  [[nodiscard]] constexpr bool isJustHidden() const noexcept { return (shown & 0b11) == 0b10; }
+
+  [[nodiscard]] constexpr bool isFocused() const noexcept { return focused & 1; }
+
+  [[nodiscard]] constexpr bool isJustFocused() const noexcept { return (focused & 0b11) == 0b01; }
+
+  [[nodiscard]] constexpr bool isJustUnfocused() const noexcept { return (focused & 0b11) == 0b10; }
+
+  constexpr void setIsShown(bool flag) noexcept { shown = (shown & 0b1111'1110) | (flag ? 1 : 0); }
+
+  constexpr void setIsFocused(bool flag) noexcept { focused = (focused & 0b1111'1110) | (flag ? 1 : 0); }
+
+public:
+  static constexpr float pointsPerInch = 72;
+
+  [[nodiscard]] constexpr Vector2f pixelsPerPoint() const noexcept { return (globalScale / pointsPerInch) * pixelsPerInch; }
+
+  [[nodiscard]] constexpr Vector2f pointsPerPixel() const noexcept { return (pointsPerInch / globalScale) / pixelsPerInch; }
+
+  [[nodiscard]] constexpr Transform canvasToDevice() const noexcept {
+    return Transform().scale(pixelsPerPoint() * (2.0f / screenSize));
+  }
+
+  [[nodiscard]] constexpr Transform deviceToCanvas() const noexcept {
+    return Transform().scale(pointsPerPixel() * (0.5f * screenSize));
+  }
+
+  [[nodiscard]] constexpr Transform screenToDevice() const noexcept {
+    return Transform().scale(2.0f / screenSize).translate({-1.0f, -1.0f});
+  }
+
+  [[nodiscard]] constexpr Transform deviceToScreen() const noexcept {
+    return Transform().translate({+1.0f, +1.0f}).scale(0.5f * screenSize);
+  }
+
+  [[nodiscard]] Transform screenToCanvas() const noexcept { return deviceToCanvas() * screenToDevice(); }
+
+  [[nodiscard]] Transform canvasToScreen() const noexcept { return deviceToScreen() * canvasToDevice(); }
+
+  [[nodiscard]] constexpr Transform projection() const noexcept { return canvasToDevice(); }
+
+public:
+  /// The global scale.
+  ///
+  /// NOTE: The units in the projected coordinate space are points, i.e.,
+  /// 1/72 inch. This is an intuitive way to think about sizing various
+  /// elements, and is resolution independent since we are take the
+  /// screen PPI into account. This is an additional multiplier for
+  /// global scaling if desired.
+  ///
+  float globalScale{1};
+
+  /// The screen pixels per inch (PPI), sometimes called dots per inch (DPI).
+  Vector2f pixelsPerInch{140, 140};
+
+  /// The screen size in pixels.
+  Vector2i screenSize{1280, 720};
+
+  /// The screen size in pixels last frame.
+  Vector2i screenSizeLastFrame{1280, 720};
+
+  /// Is shown?
+  uint8_t shown = 0;
+
+  /// Is focused?
+  uint8_t focused = 0;
+
+  /// The scale factor for anti-aliasing fringe. This is cached
+  /// and recalculated each frame during `afterInput()`.
+  Vector2f fringeScale{1, 1};
+};
+
+} // namespace mi::ui

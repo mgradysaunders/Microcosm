@@ -1,0 +1,131 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/Device"
+
+namespace mi::vk {
+
+struct BufferCreateInfo {
+  /// The create info.
+  VkBufferCreateInfo info{
+    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+    .pNext = nullptr,
+    .flags = {},
+    .size = 0,
+    .usage = {},
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .queueFamilyIndexCount = 0,
+    .pQueueFamilyIndices = nullptr};
+
+  /// The memory property flags.
+  VkMemoryPropertyFlags propertyFlags{};
+
+  /// The standard create info for a staging source.
+  [[nodiscard]] static BufferCreateInfo stagingSrc(uint32_t size) noexcept {
+    BufferCreateInfo createInfo;
+    createInfo.info.size = size;
+    createInfo.info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    createInfo.propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    return createInfo;
+  }
+
+  /// The standard create info for a staging destination.
+  [[nodiscard]] static BufferCreateInfo stagingDst(uint32_t size) noexcept {
+    BufferCreateInfo createInfo;
+    createInfo.info.size = size;
+    createInfo.info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    createInfo.propertyFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    return createInfo;
+  }
+};
+
+struct MI_VK_API Buffer final : MoveOnly, WithDeviceAndAllocator {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Buffer, create, destroy)
+
+  /// Create the buffer.
+  ///
+  /// \param[in] device      The device structure.
+  /// \param[in] createInfo  The create info structure.
+  /// \param[in] allocator   The allocation callbacks.
+  ///
+  void create(const Device &device, const BufferCreateInfo &createInfo, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the buffer.
+  void destroy();
+
+  /// Implicit usage as `VkBuffer`.
+  [[nodiscard]] operator VkBuffer() const noexcept { return buffer; }
+
+  /// The buffer.
+  NullifyOnMove<VkBuffer> buffer;
+
+  /// The buffer memory.
+  NullifyOnMove<VkDeviceMemory> memory;
+
+  /// The buffer memory size.
+  VkDeviceSize memorySize{0};
+};
+
+struct MI_VK_API Buffers final : MoveOnly, WithDeviceAndAllocator, ArrayLike<Buffers> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Buffers, create, destroy)
+  MI_VK_DEFAULT_ARRAY_LIKE(buffers)
+
+  /// Create the buffers.
+  ///
+  /// \param[in] device       The device structure.
+  /// \param[in] createInfos  The create info structures.
+  /// \param[in] allocator    The allocation callbacks.
+  ///
+  void create(
+    const Device &device, const std::vector<BufferCreateInfo> &createInfos, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the buffers.
+  void destroy();
+
+  /// The buffers.
+  std::vector<VkBuffer> buffers;
+
+  /// The shared memory.
+  SharedDeviceMemory memory;
+};
+
+struct BufferAccess {
+  /// The buffer.
+  VkBuffer buffer{VK_NULL_HANDLE};
+
+  /// The offset in bytes.
+  VkDeviceSize offset{0};
+
+  /// The size in bytes.
+  VkDeviceSize size{0};
+};
+
+/// Get buffer data through a temporary staging buffer.
+///
+/// \param[in] device  The device structure.
+/// \param[in] access  The buffer access structure.
+/// \param[out] mem    The memory.
+///
+MI_VK_API void bufferGetData(const Device &device, const BufferAccess &access, void *mem);
+
+/// Set buffer data through a temporary staging buffer.
+///
+/// \param[in] device  The device structure.
+/// \param[in] access  The buffer access structure.
+/// \param[in] mem     The memory.
+///
+MI_VK_API void bufferSetData(const Device &device, const BufferAccess &access, const void *mem);
+
+/// Copy data from one buffer to another.
+///
+/// \param[in] device     The device structure.
+/// \param[in] srcBuffer  The source buffer.
+/// \param[in] dstBuffer  The destination buffer.
+/// \param[in] regions    The regions of memory to copy.
+///
+MI_VK_API void
+bufferCopy(const Device &device, VkBuffer srcBuffer, VkBuffer dstBuffer, IteratorRange<const VkBufferCopy *> regions);
+
+} // namespace mi::vk

@@ -1,0 +1,110 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./common"
+
+namespace mi::ui {
+
+struct MI_UI_API StrokeArtist final : public Artist {
+public:
+  using Artist::Artist;
+  MI_UI_DECLARE_WITH(withTexcoord, mTexcoord);
+  MI_UI_DECLARE_WITH(withStrokeColor, mColor);
+  MI_UI_DECLARE_WITH(withStrokeWidth, mWidth);
+
+public:
+  StrokeArtist &moveTo(Vector2f position) {
+    mState = mDrawCmds.emitStroke(mCtx, Vtx(position, mTexcoord, mColor), mWidth);
+    return *this;
+  }
+
+  StrokeArtist &lineTo(Vector2f position) {
+    mState = mDrawCmds.emitStroke(mCtx, Vtx(position, mTexcoord, mColor), mWidth, mState);
+    return *this;
+  }
+
+  StrokeArtist &relativeLineTo(Vector2f offset) { return lineTo(mState->position + offset); }
+
+  /// Continue with an arbitrary callback. This is used to implement many of the other
+  /// continuation functions.
+  template <std::invocable<float> Position> //
+  [[strong_inline]] StrokeArtist &functionTo(int numLines, Position &&position) {
+    if (!mState) moveTo(std::invoke(position, 0.0f));
+    for (float t : linspace(numLines, Exclusive(0.0f), 1.0f)) {
+      mState = mDrawCmds.emitStroke(
+        mCtx,
+        Vtx(
+          Vector2f(std::invoke(position, t)),             //
+          Vector2f(lerp(t, mState->texcoord, mTexcoord)), //
+          Vector4b(lerp(t, mState->color, mColor))),
+        lerp(t, mState->width, mWidth), mState);
+    }
+    return *this;
+  }
+
+  /// Continue with a quadratic bezier curve.
+  StrokeArtist &curveTo(Vector2f positionA, Vector2f positionB, int numLines = 12);
+
+  /// Continue with a cubic bezier curve.
+  StrokeArtist &curveTo(Vector2f positionA, Vector2f positionB, Vector2f positionC, int numLines = 12);
+
+  /// Continue with a circular arc.
+  StrokeArtist &arcTo(Vector2f center, float radius, float thetaA, float thetaB, int numLines = 12);
+
+  /// \overload
+  ///
+  /// This overload computes the radius and angular sweep to maintain continuity
+  /// with the slope of the last line segment.
+  ///
+  StrokeArtist &arcTo(Vector2f point, int numLines = 12);
+
+  /// Continue as if by `lineTo()` up to position A, except end with an arc that is appropriate to
+  /// continue to position B.
+  StrokeArtist &roundCornerTo(Vector2f positionA, Vector2f positionB, float radius, int numLines = 12);
+
+  /// Draw a circle.
+  StrokeArtist &circle(Vector2f center, float radius, int numLines = 64);
+
+  /// Draw a rectangle.
+  StrokeArtist &rectangle(Rect rect);
+
+  /// Draw a rectangle with round corners.
+  StrokeArtist &rectangle(Rect rect, float radius, int numLines = 12);
+
+  /// Draw a rectangle with round corners.
+  StrokeArtist &rectangle(Rect rect, float radiusNE, float radiusNW, float radiusSW, float radiusSE, int numLines = 12);
+
+  /// Draw an arrow head.
+  StrokeArtist &arrowHead(Vector2f position, Vector2f direction, float headSize, float headHalfAngle = 45.0_degreesf);
+
+  /// Draw an arrow head, with implicit alignment to the current state.
+  StrokeArtist &arrowHead(float headSize, float headHalfAngle = 45.0_degreesf) {
+    assert(mState);
+    return arrowHead(mState->position, mState->direction, headSize, headHalfAngle);
+  }
+
+  /// Finish the stroke.
+  StrokeArtist &finish(auto... more) {
+    if (mState) mDrawCmds.finishStroke(mCtx, *mState, more...);
+    mState = std::nullopt;
+    return *this;
+  }
+
+  /// Finish the stroke and close the loop back to the beginning.
+  StrokeArtist &finishCloseLoop() {
+    if (mState) mDrawCmds.finishStrokeCloseLoop(mCtx, *mState);
+    mState = std::nullopt;
+    return *this;
+  }
+
+private:
+  Vector2f mTexcoord{};
+
+  Vector4b mColor{0xFF, 0xFF, 0xFF, 0xFF};
+
+  float mWidth{0};
+
+  std::optional<DrawCmds::StrokeState> mState{};
+};
+
+} // namespace mi::ui

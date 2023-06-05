@@ -1,0 +1,414 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <algorithm>
+#include <bit>
+#include <cstddef>
+#include <cstdint>
+#include <map>
+#include <variant>
+#include <vector>
+
+#include "Microcosm/Serializer_Export.h"
+#include "Microcosm/memory"
+#include "Microcosm/miniz"
+
+namespace mi {
+
+class Serializer;
+class Serializable;
+using SerializableNewTable = std::map<StaticString<char, 64>, RefPtr<Serializable> (*)()>;
+
+MI_SERIALIZER_API SerializableNewTable &serializableNew();
+
+/// A serializable object interface.
+///
+/// This class defines an interface to a dynamic object usable with the
+/// serializer class. Notice that serializable objects must be reference
+/// countable, and used with the `RefPtr` reference counter in order to be
+/// serialized.
+///
+/// Most-derived subclasses must be final, must be default constructible,
+/// must place the `MI_DECLARE_DYNAMIC_SERIALIZABLE` macro inside the class body, and
+/// must then implement the `serialize` method either immediately after the macro or
+/// in the source file. For example,
+/// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.cpp}
+/// class Foo final : virtual public mi::Serializable {
+/// public:
+///   MI_DECLARE_DYNAMIC_SERIALIZABLE(Foo) { serializer <=> mBar; }
+/// private:
+///   int mBar = 0;
+/// };
+/// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/// Then, the type `RefPtr<Foo>` is serializable using the spaceship
+/// operator. Note that it is only necessary to implement a serializable
+/// class with this interface if the class type needs to be dynamic. In
+/// the above example, `Foo` could simply implement `serialize()` without
+/// inheriting from `Serializable` or using the `SERIALIZABLE` macro and
+/// `Foo` would still be serializable using the spaceship operator, but
+/// `RefPtr<Foo>` would not be.
+///
+class MI_SERIALIZER_API Serializable {
+public:
+  virtual ~Serializable() = default;
+
+  /// Serial subclass name.
+  ///
+  /// \note
+  /// This is a pointer to a character string literal equal to the
+  /// name of the most derived subclass. Client code should never define
+  /// this function directly, as it is implemented by the `SERIALIZABLE`
+  /// macro.
+  ///
+  [[nodiscard]] virtual const char *serialSubclass() const noexcept = 0;
+
+  /// Serialize.
+  ///
+  /// \note
+  /// This should serialize all relevant members of the
+  /// most derived subclass into the given serializer.
+  virtual void serialize(Serializer &) = 0;
+};
+
+/// A serializable subclass macro to generate boilerplate.
+///
+/// This macro must appear in the class body of most derived `Serializable`
+/// subclasses. The `Subclass` argument must be the name of the most derived
+/// subclass, which must be derived from `Serializable`, must be final, and
+/// must be default constructible. The implementation checks each of these
+/// conditions using static assertions, so client code will not compile
+/// otherwise.
+///
+/// \note
+/// For those curious, this macro simply implements the `serialSubclass`
+/// method, and uses a static inline member variable to automatically add
+/// a callback to the `serializableNew` function table at program
+/// initialization.
+///
+#define MI_DECLARE_DYNAMIC_SERIALIZABLE(Subclass)                                                                \
+  const char *serialSubclass() const noexcept override {                                                         \
+    static_assert(std::is_final_v<Subclass>);                                                                    \
+    static_assert(std::is_default_constructible_v<Subclass>);                                                    \
+    static_assert(std::is_base_of_v<mi::Serializable, Subclass>);                                                \
+    static_assert(std::is_same_v<std::decay_t<decltype(*this)>, Subclass>);                                      \
+    return #Subclass;                                                                                            \
+  }                                                                                                              \
+  static mi::RefPtr<mi::Serializable> serialNew() { return mi::make_ref<Subclass>(); }                           \
+  struct SerialInit {                                                                                            \
+    SerialInit() {                                                                                               \
+      auto result = mi::serializableNew().insert({mi::StaticString<char, 64>(#Subclass), &Subclass::serialNew}); \
+      if (!result.second) throw mi::Error(std::logic_error("Serializable name collision for " #Subclass));       \
+    }                                                                                                            \
+  };                                                                                                             \
+  static inline SerialInit serial_init = {};                                                                     \
+  void serialize(mi::Serializer &serializer) final
+
+/// A serializer interface.
+///
+/// This class defines the interface to a so-called _serializer_,
+/// for binary serialization and de-serialization of C++ objects using
+/// the new spaceship operator. This makes it convenient to implicitly
+/// define binary file-formats via hierarchical/recursive serialization
+/// of component data structures.
+///
+class MI_SERIALIZER_API Serializer {
+public:
+  virtual ~Serializer() = default;
+
+  enum class Mode {
+    Reading, ///< Reading.
+    Writing  ///< Writing.
+  };
+
+  Serializer(Mode mode) noexcept : mode_(mode) {}
+
+  Serializer(const Serializer &) = delete;
+
+public:
+  [[nodiscard]] Mode mode() const noexcept { return mode_; }
+
+  [[nodiscard]] bool reading() const noexcept { return mode_ == Mode::Reading; }
+
+  template <typename Value> [[nodiscard]] Value deserialize() {
+    if (!reading()) throw Error(std::runtime_error("Tried to deserialize while writing!"));
+    Value value;
+    *this <=> value;
+    return value;
+  }
+
+private:
+  const Mode mode_;
+
+  /// Bookkeeping for serializable objects read.
+  std::vector<RefPtr<Serializable>> mObjectsRead;
+
+  /// Bookkeeping for serializable objects written.
+  std::map<RefPtr<Serializable>, uint32_t> mObjectsWritten;
+
+public:
+  /// Read or write primitive elements.
+  ///
+  /// \param[in] ptr  Pointer.
+  /// \param[in] num  Number of elements.
+  /// \param[in] sz   Element size in bytes.
+  ///
+  /// \throw std::invalid_argument
+  /// - If pointer is null and number of elements is non-zero
+  /// - If pointer is non-null and element size is zero
+  /// - If pointer is non-null and element size is greater than 16
+  ///
+  void readOrWrite(void *ptr, size_t num, size_t sz);
+
+  /// Read or write serializable value.
+  ///
+  /// This either reads or writes a dynamically-typed
+  /// serializable object. The implementation uses an unsigned 32-bit
+  /// index to avoid duplicate serializables in the output. If the
+  /// index is the special constant `Next`, the subclass name and
+  /// whatever is performed by the subclass `serialize` method follows.
+  /// The subclass name is used with the `serializableNew` function
+  /// table to dynamically construct and initialize arbitrary
+  /// most-derived serializable types.
+  ///
+  /// If the index is not `Next`, then the index is the only
+  /// thing read or written, and the object is looked-up or stored in
+  /// the bookkeeping members `mObjectsRead` and `mObjectsWritten`.
+  ///
+  void readOrWrite(RefPtr<Serializable> &value);
+
+protected:
+  /// On-read callback.
+  ///
+  /// \param[in] ptr  Pointer.
+  /// \param[in] num  Number of bytes to read.
+  ///
+  virtual void onRead(void *ptr, size_t num) = 0;
+
+  /// On-write callback.
+  ///
+  /// \param[in] ptr  Pointer.
+  /// \param[in] num  Number of bytes to write.
+  ///
+  virtual void onWrite(const void *ptr, size_t num) = 0;
+};
+
+namespace concepts {
+
+template <typename T>
+concept overrides_serialize_method = requires(T &value, Serializer &serializer) {
+  { value.onSerialize(serializer) };
+};
+
+} // namespace concepts
+
+/// Serialize serializable primitive element.
+inline Serializer &operator<=>(Serializer &serializer, concepts::arithmetic_or_enum auto &value) {
+  serializer.readOrWrite(&value, 1, sizeof(value));
+  return serializer;
+}
+
+/// Serialize serializable object.
+inline Serializer &operator<=>(Serializer &serializer, RefPtr<Serializable> &value) {
+  serializer.readOrWrite(value);
+  return serializer;
+}
+
+/// Serialize anything defining a serialize member function.
+template <typename Value> requires concepts::overrides_serialize_method<Value>
+inline Serializer &operator<=>(Serializer &serializer, Value &value) {
+  value.onSerialize(serializer);
+  return serializer;
+}
+
+/// Serialize array.
+template <typename Value, size_t N> inline Serializer &operator<=>(Serializer &serializer, Value (&values)[N]) {
+  if constexpr (concepts::arithmetic_or_enum<Value>) {
+    serializer.readOrWrite(&values[0], N, sizeof(Value));
+  } else {
+    for (auto &value : values) serializer <=> value;
+  }
+  return serializer;
+}
+
+/// Serialize STL array.
+template <typename Value, size_t N> inline Serializer &operator<=>(Serializer &serializer, std::array<Value, N> &values) {
+  if constexpr (N > 0) { // N == 0 is allowed for STL arrays!
+    if constexpr (concepts::arithmetic_or_enum<Value>) {
+      serializer.readOrWrite(&values[0], N, sizeof(Value));
+    } else {
+      for (auto &value : values) serializer <=> value;
+    }
+  }
+  return serializer;
+}
+
+/// Serialize array-like constant-size containers as ordinary arrays by default.
+template <typename Container>
+requires(concepts::array_like_constant_size<Container> && !concepts::overrides_serialize_method<Container>)
+inline Serializer &operator<=>(Serializer &serializer, Container &container) {
+  using Value = std::ranges::range_value_t<Container>;
+  if constexpr (concepts::arithmetic_or_enum<Value>) {
+    serializer.readOrWrite(&container[0], Container::size(), sizeof(Value));
+  } else {
+    for (auto &value : container) serializer <=> value;
+  }
+  return serializer;
+}
+
+/// Serialize STL complex.
+template <std::floating_point Float> inline Serializer &operator<=>(Serializer &serializer, std::complex<Float> &value) {
+  Float valueRe = value.real();
+  Float valueIm = value.imag();
+  serializer <=> valueRe;
+  serializer <=> valueIm;
+  if (serializer.reading()) value = {valueRe, valueIm};
+  return serializer;
+}
+
+/// Serialize unique pointer.
+template <typename Value, typename Deleter>
+inline Serializer &operator<=>(Serializer &serializer, std::unique_ptr<Value, Deleter> &pointer) {
+  bool hasValue = false;
+  if (serializer.reading()) {
+    serializer <=> hasValue;
+    if (hasValue) {
+      pointer.reset(new Value()), serializer <=> *pointer;
+    } else {
+      pointer.reset(); // It's null
+    }
+  } else {
+    hasValue = pointer != nullptr;
+    serializer <=> hasValue;
+    if (hasValue) serializer <=> *pointer;
+  }
+  return serializer;
+}
+
+/// Serialize deep pointer.
+template <typename Value, typename Deleter>
+inline Serializer &operator<=>(Serializer &serializer, DeepPtr<Value, Deleter> &pointer) {
+  serializer <=> static_cast<std::unique_ptr<Value, Deleter> &>(pointer);
+  return serializer;
+}
+
+/// Serialize optional.
+template <typename Value> inline Serializer &operator<=>(Serializer &serializer, std::optional<Value> &pointer) {
+  bool hasValue = false;
+  if (serializer.reading()) {
+    serializer <=> hasValue;
+    if (hasValue) {
+      pointer.emplace(), serializer <=> *pointer;
+    } else {
+      pointer.reset(); // It's null
+    }
+  } else {
+    hasValue = pointer.has_value();
+    serializer <=> hasValue;
+    if (hasValue) serializer <=> *pointer;
+  }
+  return serializer;
+}
+
+/// Serialize standard pair.
+template <typename... Args> inline Serializer &operator<=>(Serializer &serializer, std::pair<Args...> &values) {
+  using Arg1 = std::decay_t<decltype(values.first)>;
+  using Arg2 = std::decay_t<decltype(values.second)>;
+  serializer <=> const_cast<Arg1 &>(values.first);
+  serializer <=> const_cast<Arg2 &>(values.second);
+  return serializer;
+}
+
+/// Serialize standard tuple.
+template <typename... Args> inline Serializer &operator<=>(Serializer &serializer, std::tuple<Args...> &values) {
+  auto dummy1 = [&](auto &arg) {
+    serializer <=> arg;
+    return 0;
+  };
+  auto dummy2 = [&](auto &...args) { std::make_tuple(dummy1(args)...); };
+  std::apply(dummy2, values);
+  return serializer;
+}
+
+/// Serialize standard variant.
+template <typename... Args> inline Serializer &operator<=>(Serializer &serializer, std::variant<Args...> &value) {
+  auto dummy = [&](auto &arg) { serializer <=> arg; };
+  auto index = uint32_t(value.index());
+  serializer <=> index;
+  if (serializer.reading()) {
+    std::variant<Args...> defaultValues[sizeof...(Args)] = {Args{}...};
+    value = defaultValues[index];
+  }
+  std::visit(dummy, value);
+  return serializer;
+}
+
+/// Serialize sequence-constructible container.
+template <typename Container> requires(
+  concepts::basic_container<Container> && concepts::sequence_constructible<Container> &&
+  !concepts::array_like_constant_size<Container> && !concepts::overrides_serialize_method<Container>)
+inline Serializer &operator<=>(Serializer &serializer, Container &container) {
+  uint32_t size = container.size();
+  serializer <=> size;
+  // Writing?
+  if (!serializer.reading()) {
+    // Write each value.
+    for (auto &value : container) serializer <=> value;
+  } else {
+    // Read each value into temporary vector.
+    std::vector<typename Container::value_type> values(size);
+    for (auto &value : values) serializer <=> value;
+    // If container is allocator aware, preserve allocator.
+    if constexpr (concepts::allocator_aware<Container>) {
+      container = Container(Container(values.begin(), values.end()), container.get_allocator());
+    } else {
+      container = Container(values.begin(), values.end());
+    }
+  }
+  return serializer;
+}
+
+/// A standard serializer.
+class MI_SERIALIZER_API StandardSerializer final : public Serializer {
+public:
+  /// Construct from standard input stream.
+  StandardSerializer(std::shared_ptr<std::istream> stream) : Serializer(Mode::Reading), mIStream(std::move(stream)) {}
+
+  /// Construct from standard output stream.
+  StandardSerializer(std::shared_ptr<std::ostream> stream) : Serializer(Mode::Writing), mOStream(std::move(stream)) {}
+
+protected:
+  void onRead(void *ptr, size_t num) override { mIStream->read(static_cast<char *>(ptr), num); }
+
+  void onWrite(const void *ptr, size_t num) override { mOStream->write(static_cast<const char *>(ptr), num); }
+
+private:
+  /// Input stream.
+  std::shared_ptr<std::istream> mIStream{nullptr};
+
+  /// Output stream.
+  std::shared_ptr<std::ostream> mOStream{nullptr};
+};
+
+class MI_SERIALIZER_API MinizSerializer final : public Serializer {
+public:
+  MinizSerializer(std::shared_ptr<std::istream> stream) : Serializer(Mode::Reading), mInflator(std::move(stream)) {}
+
+  MinizSerializer(std::shared_ptr<std::ostream> stream) : Serializer(Mode::Writing), mDeflator(std::move(stream)) {}
+
+public:
+  void onRead(void *ptr, size_t num) override { mInflator->read(ptr, num); }
+
+  void onWrite(const void *ptr, size_t num) override { mDeflator->write(ptr, num); }
+
+private:
+  std::optional<miniz::StreamInflator> mInflator;
+
+  std::optional<miniz::StreamDeflator> mDeflator;
+};
+
+template <typename SerializerType, typename Object, typename... Args> inline void serialize(Object &object, Args &&...args) {
+  SerializerType serializer(std::forward<Args>(args)...);
+  serializer <=> object;
+}
+
+} // namespace mi

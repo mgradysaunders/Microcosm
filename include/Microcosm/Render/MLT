@@ -1,0 +1,62 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Path"
+
+namespace mi::render {
+
+struct MI_RENDER_API MLTRandom final {
+public:
+  using random_tag = std::true_type;
+
+  MLTRandom(Random random) noexcept : mRandom(std::move(random)) {}
+
+  /// The generate function required to bind to the Random interface.
+  void generate(IteratorRange<double *> sampleU) {
+    for (double &each : sampleU) each = nextSample();
+  }
+
+  /// Advance to the next iteration.
+  void nextIteration();
+
+  /// Advance to the next sequence of samples.
+  void nextSequence();
+
+  /// Advance to the next sample.
+  [[nodiscard]] double nextSample();
+
+  /// Finish the iteration and either accept or reject the mutation with the given acceptance probability.
+  void finish(bool accept);
+
+private:
+  struct Sample {
+    struct Record {
+      double value{};
+      size_t iteration{};
+    };
+    Record active;
+    Record backup;
+    void save() noexcept { backup = active; }
+    void load() noexcept { active = backup; }
+  };
+
+  Random mRandom{};
+
+  size_t mIteration{};
+
+  size_t mIterationOfLastLargeStep{};
+
+  double mSmallStepSigma{0.01};
+
+  double mLargeStepProbability{0.3};
+
+  bool mIsLargeStep{true};
+
+  size_t mSampleCount{0};
+
+  size_t mSequenceCount{0};
+
+  std::vector<std::vector<Sample>> mSequences{};
+};
+
+} // namespace mi::render

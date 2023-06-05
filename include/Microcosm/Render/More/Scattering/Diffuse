@@ -1,0 +1,87 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+struct MI_RENDER_API LambertBSDF {
+public:
+  using bsdf_tag = std::true_type;
+
+  LambertBSDF() noexcept = default;
+
+  LambertBSDF(Spectrum valueR, Spectrum valueT) noexcept;
+
+  LambertBSDF(Spectrum valueR, Spectrum valueT, double probR) noexcept : LambertBSDF(std::move(valueR), std::move(valueT)) {
+    mProbR = saturate(probR);
+  }
+
+  BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept;
+
+  BidirPDF scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio) const noexcept;
+
+private:
+  /// The BRDF coefficient.
+  Spectrum mValueR{};
+
+  /// The BTDF coefficient.
+  Spectrum mValueT{};
+
+  /// The probability of sampling the BRDF.
+  double mProbR{1};
+};
+
+/// The well-known Oren-Nayar diffuse BRDF, which is an empirical fit to
+/// the scattering distribution of a Lambertian microsurface parameterized by
+/// the standard deviation of the facets.
+struct MI_RENDER_API OrenNayarBRDF {
+public:
+  using bsdf_tag = std::true_type;
+
+  OrenNayarBRDF() noexcept = default;
+
+  OrenNayarBRDF(Spectrum valueR, Spectrum sigma) noexcept;
+
+  BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept;
+
+  BidirPDF scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio) const noexcept;
+
+private:
+  Spectrum mValueR{};
+
+  Spectrum mCoeffA{};
+
+  Spectrum mCoeffB{};
+};
+
+/// The Disney diffuse BRDF, as described in the 2015 paper _Extending
+/// the Disney BRDF to a BSDF with Integrated Subsurface Scattering_.
+///
+/// So, this is just the refactored diffuse and sheen components of
+/// the full BSDF. Importantly, the lambertian coefficient has been
+/// factored out of the original BRDF model so that it can be zeroed
+/// in favor of subsurface scattering when desired.
+struct MI_RENDER_API DisneyDiffuseBRDF {
+public:
+  using bsdf_tag = std::true_type;
+
+  DisneyDiffuseBRDF() noexcept = default;
+
+  DisneyDiffuseBRDF(Spectrum valueR, Spectrum retro, Spectrum sheen, Spectrum roughness) noexcept;
+
+  BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept;
+
+  BidirPDF scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio) const noexcept;
+
+private:
+  Spectrum mValueR{};
+
+  Spectrum mRetro{};
+
+  Spectrum mSheen{};
+
+  Spectrum mRoughness{};
+};
+
+} // namespace mi::render

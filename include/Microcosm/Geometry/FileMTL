@@ -1,0 +1,83 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <map>
+#include <string>
+#include <string_view>
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/utility"
+
+namespace mi::geometry {
+
+class MI_GEOMETRY_API FileMTL {
+public:
+  FileMTL() = default;
+
+  FileMTL(const std::string &filename) { read(filename); }
+
+  struct Material {
+    /// The ambient color, or `Ka`.
+    std::optional<Vector3f> ambient;
+
+    /// The diffuse color, or `Kd`.
+    std::optional<Vector3f> diffuse;
+
+    /// The specular color, or `Ks`.
+    std::optional<Vector3f> specular;
+
+    /// The emissive color, or `Ke`.
+    std::optional<Vector3f> emissive;
+
+    /// The ambient color map filename, or `map_Ka`.
+    std::optional<std::string> ambientTexture;
+
+    /// The diffuse color map filename, or `map_Kd`.
+    std::optional<std::string> diffuseTexture;
+
+    /// The specular color map filename, or `map_Ks`.
+    std::optional<std::string> specularTexture;
+
+    /// The emissive color map filename, or `map_Ke`.
+    std::optional<std::string> emissiveTexture;
+
+    /// The bump map filename, or `map_bump`.
+    std::optional<std::string> bumpTexture;
+
+    /// The normal map filename, or `map_normal`.
+    std::optional<std::string> normalTexture;
+
+    /// The opacity map filename, or `map_d`.
+    std::optional<std::string> opacityTexture;
+
+    /// The illumination model, or `illum`.
+    std::optional<int> illuminationModel{};
+
+    // The specular highlight factor, or `Ns`.
+    std::optional<float> specularHighlight{};
+
+    // The refractive index, or `Ni`.
+    std::optional<float> refractiveIndex{};
+
+    /// The opacity, or `d`.
+    std::optional<float> opacity{};
+
+    /// Dump to string.
+    [[nodiscard]] operator std::string() const;
+  };
+
+  void read(const std::string &filename);
+
+  void read(std::istream &stream);
+
+  void write(const std::string &filename) const;
+
+  void write(std::ostream &stream) const;
+
+  /// Dump to string.
+  [[nodiscard]] operator std::string() const;
+
+  std::map<std::string, Material> materials;
+};
+
+} // namespace mi::geometry

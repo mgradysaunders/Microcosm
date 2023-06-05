@@ -1,0 +1,82 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./common"
+
+namespace mi::ui {
+
+struct MI_UI_API FillArtist final : public Artist {
+public:
+  using Artist::Artist;
+  MI_UI_DECLARE_WITH(withCornerRadius, mCornerRadius);
+  MI_UI_DECLARE_WITH(withCornerResolution, mCornerResolution);
+  MI_UI_DECLARE_WITH(withStrokeWidth, mStrokeWidth);
+  MI_UI_DECLARE_WITH(withStrokeColor, mStrokeColor);
+  MI_UI_DECLARE_WITH(withFillColor, mFillColor);
+
+public:
+  FillArtist &nextCorner(Vector2f position);
+  FillArtist &rectangle(Rect rect) {
+    nextCorner(rect.northEast());
+    nextCorner(rect.northWest());
+    nextCorner(rect.southWest());
+    nextCorner(rect.southEast());
+    return finish();
+  }
+  FillArtist &circle(Vector2f center, float radius); // TODO
+  FillArtist &finish();
+
+private:
+  /// The corner radius.
+  float mCornerRadius{0};
+
+  /// The corner subdivisions.
+  int mCornerResolution{12};
+
+  /// The stroke width.
+  float mStrokeWidth{0};
+
+  /// The stroke color.
+  Vector4b mStrokeColor{0x00};
+
+  /// The fill color.
+  Vector4b mFillColor{0xFF};
+
+  struct Corner {
+    /// The position.
+    Vector2f position;
+
+    /// \name Round corners
+    ///
+    /// There are three indexes to permit round corners. A round corner, if present, is a triangle
+    /// fan which forms a circular wedge. The inner vertex at `innerIdx` functions as the pivot of
+    /// the triangle fan. The rest of the vertexes fall in a contiguous range between `outerIdxA`
+    /// and `outerIdxB`, both inclusive.
+    ///
+    /// The triangle fan is entirely omitted if the corner radius is zero, in which case
+    /// the corner collapses into an ordinary sharp corner. The `innerIdx`, `outerIdxA`, and
+    /// `outerIdxB` are all equal to each other. No unecessary work is performed.
+    ///
+    /// \{
+    Idx innerIdx{0};       ///< The index of the inner vertex.
+    Idx outerIdxA{0};      ///< The index of the first outer vertex.
+    Idx outerIdxB{0};      ///< The index of the final outer vertex.
+    float cornerRadius{0}; ///< The corner radius.
+    /// \}
+
+    float strokeWidth{0};
+    Vector4b strokeColor{0x00};
+  };
+
+  /// The corners.
+  ///
+  /// \note
+  /// Uses growable stack to avoid heap allocations if less than eight corners (almost always true).
+  ///
+  GrowableStack<Corner, 8> mCorners;
+
+  void finalizeCorner(const Corner &cornerY, const Corner &cornerZ);
+  void finalizeCorner(const Corner &cornerX, const Corner &cornerY, const Corner &cornerZ);
+};
+
+} // namespace mi::ui

@@ -1,0 +1,475 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/Json"
+
+namespace mi::geometry::glTF {
+
+constexpr uint32_t BadIndex = -1;
+
+struct MI_GEOMETRY_API Asset {
+  std::string version = "2.0"; ///< The glTF version "major.minor".
+  std::string copyright;       ///< The copyright information.
+  std::string generator;       ///< The generator.
+  std::string minVersion;      ///< The minimum glTF version "major.minor".
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API WithExtensions {
+  Json extensions;
+  Json extras;
+  void jsonConversion(Json::Conversion &conversion) {
+    conversion.optionalImplicit("extensions", extensions);
+    conversion.optionalImplicit("extras", extras);
+  }
+};
+
+struct MI_GEOMETRY_API WithNameAndExtensions : WithExtensions {
+  std::string name;
+  void jsonConversion(Json::Conversion &conversion) {
+    WithExtensions::jsonConversion(conversion.optionalImplicit("name", name));
+  }
+};
+
+struct MI_GEOMETRY_API Accessor final : WithNameAndExtensions {
+  enum class Component : uint32_t {
+    None = 0,
+    Byte = 5120,          ///< `GL_BYTE`
+    Short = 5122,         ///< `GL_SHORT`
+    Int = 5124,           ///< `GL_INT`
+    UnsignedByte = 5121,  ///< `GL_UNSIGNED_BYTE`
+    UnsignedShort = 5123, ///< `GL_UNSIGNED_SHORT`
+    UnsignedInt = 5125,   ///< `GL_UNSIGNED_INT`
+    Float = 5126          ///< `GL_FLOAT`
+  };
+
+  struct Sparse final : WithExtensions {
+    struct Indices final : WithExtensions {
+      Component component = {};
+      uint32_t bufferView = BadIndex;
+      uint32_t byteOffset = 0;
+
+      void jsonConversion(Json::Conversion &conversion);
+    };
+
+    struct Values final : WithExtensions {
+      uint32_t bufferView = BadIndex;
+      uint32_t byteOffset = 0;
+
+      void jsonConversion(Json::Conversion &conversion);
+    };
+
+    uint32_t count = BadIndex;
+    Indices indices;
+    Values values;
+
+    void jsonConversion(Json::Conversion &conversion);
+    operator bool() const noexcept { return count != BadIndex; }
+  };
+
+  /// The name of the high-level type, which is either "SCALAR" or
+  /// - "VEC2": a 2-dimensional vector.
+  /// - "VEC3": a 3-dimensional vector.
+  /// - "VEC4": a 4-dimensional vector.
+  /// - "MAT2": a 2-by-2 matrix in column-major layout.
+  /// - "MAT3": a 3-by-3 matrix in column-major layout.
+  /// - "MAT4": a 4-by-4 matrix in column-major layout.
+  std::string type = "SCALAR";
+  Component component = {};       ///< The component type.
+  uint32_t count = 0;             ///< The element count.
+  uint32_t bufferView = BadIndex; ///< The buffer view.
+  uint32_t byteOffset = 0;        ///< The offset into the buffer view.
+  std::vector<double> minValues;  ///< The minimum values in the buffer.
+  std::vector<double> maxValues;  ///< The maximum values in the buffer.
+  bool normalized = false;        ///< Normalized values?
+  Sparse sparse;
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Buffer final : WithNameAndExtensions {
+  std::string uri;         ///< The URI.
+  uint32_t byteLength = 0; ///< The length in bytes.
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API BufferView final : WithNameAndExtensions {
+  enum class Target : uint32_t {
+    None = 0,
+    ArrayBuffer = 34962, ///< `GL_ARRAY_BUFFER`
+    IndexBuffer = 34963  ///< `GL_ELEMENT_ARRAY_BUFFER`
+  };
+
+  uint32_t buffer = BadIndex;   ///< The buffer.
+  uint32_t byteLength = 0;      ///< The length in bytes.
+  uint32_t byteOffset = 0;      ///< The offset in bytes.
+  uint32_t byteStride = 0;      ///< The stride, 0 means tightly packed.
+  Target target = Target::None; ///< The target hint.
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API TextureInfo : WithExtensions {
+  uint32_t index = BadIndex; ///< The texture.
+  uint32_t texcoord = 0;     ///< The texture coordinate channel.
+
+  void jsonConversion(Json::Conversion &conversion);
+  operator bool() const noexcept { return index != BadIndex; }
+};
+
+struct MI_GEOMETRY_API Texture final : WithNameAndExtensions {
+  uint32_t imageSource = BadIndex; ///< The image source.
+  uint32_t sampler = BadIndex;     ///< The sampler.
+
+  void jsonConversion(Json::Conversion &conversion);
+  operator bool() const noexcept { return imageSource != BadIndex; }
+};
+
+struct MI_GEOMETRY_API Sampler final : WithNameAndExtensions {
+  enum class Filter : uint32_t {
+    None = 0,
+    Nearest = 9728,              ///< `GL_NEAREST`
+    Linear = 9729,               ///< `GL_LINEAR`
+    NearestMipmapNearest = 9984, ///< `GL_NEAREST_MIPMAP_NEAREST`
+    NearestMipmapLinear = 9986,  ///< `GL_NEAREST_MIPMAP_LINEAR`
+    LinearMipmapNearest = 9985,  ///< `GL_LINEAR_MIPMAP_NEAREST`
+    LinearMipmapLinear = 9987    ///< `GL_LINEAR_MIPMAP_LINEAR`
+  };
+
+  enum class Wrap : uint32_t {
+    None = 0,
+    ClampToEdge = 33071,    ///< `GL_CLAMP_TO_EDGE`
+    MirroredRepeat = 33648, ///< `GL_MIRRORED_REPEAT`
+    Repeat = 10497          ///< `GL_REPEAT`
+  };
+
+  Filter minFilter = Filter::None; ///< The filter mode for minification.
+  Filter magFilter = Filter::None; ///< The filter mode for magnification.
+  Wrap wrap0 = Wrap::None;         ///< The wrap mode on axis 0.
+  Wrap wrap1 = Wrap::None;         ///< The wrap mode on axis 1.
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Image final : WithNameAndExtensions {
+  std::string uriOrMimeType;      ///< The URI or MIME type.
+  uint32_t bufferView = BadIndex; ///< The buffer view, BadIndex means URI.
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Material final : WithNameAndExtensions {
+  /// The metallic and roughness information for use with standard
+  /// Physically-Based Rendering (PBR) practices.
+  struct PbrMetallicRoughness final : WithExtensions {
+    /// The base color in linear RGBA. This should multiply
+    /// the base color texture if it is present, else it just defines
+    /// the color.
+    std::array<float, 4> baseColor = {1, 1, 1, 1};
+
+    /// The base color texture in sRGB or sRGB+A, so that the RGB
+    /// channels are unpremultiplied with sRGB encoding, and the
+    /// A channel is linear if present.
+    TextureInfo baseColorTexture;
+
+    /// The metallic factor between 0 and 1. This should multiply
+    /// the metallic component of the metallic/roughness texture
+    /// if it is present, else this just defines the metallic
+    /// parameter.
+    float metallic = 0.0f;
+
+    /// The roughness factor between 0 and 1. This should multiply
+    /// the roughness component of the metallic/roughness texture
+    /// if it is present, else this just defines the roughness
+    /// parameter.
+    float roughness = 1.0f;
+
+    /// The metallic/roughness texture, with metallic in the B channel
+    /// and roughness in the G channel, both with linear encoding.
+    TextureInfo metallicRoughnessTexture;
+
+    void jsonConversion(Json::Conversion &conversion);
+    operator bool() const noexcept {
+      return baseColor != std::array<float, 4>{1, 1, 1, 1} || baseColorTexture || metallic != 0 || roughness != 1 ||
+             metallicRoughnessTexture;
+    }
+  } pbr;
+
+  /// The tangent-space normal map texture information.
+  struct NormalTextureInfo final : TextureInfo {
+    /// The scale factor to apply to the sampled vectors in
+    /// the tangent-space X and Y directions before normalization.
+    float scale = 1;
+    void jsonConversion(Json::Conversion &conversion);
+  } normalTexture;
+
+  /// The occlusion texture information.
+  struct OcclusionTextureInfo final : TextureInfo {
+    /// The strength parameter, where 0 means no occlusion.
+    float strength = 1;
+    void jsonConversion(Json::Conversion &conversion);
+  } occlusionTexture;
+
+  /// The emissive color texture in sRGB.
+  TextureInfo emissiveTexture;
+
+  /// The emissive color factor as linear RGB. This should multiply
+  /// the emissive color texture if it present, else it just defines
+  /// the emissive color.
+  std::array<float, 3> emissive = {0, 0, 0};
+
+  /// The alpha blending mode.
+  /// - "OPAQUE":
+  ///   The rendered output is fully opaque, such that the
+  ///   renderer may ignore alpha values in all components of this
+  ///   material.
+  /// - "MASK":
+  ///   The rendered output is either fully opaque or transparent,
+  ///   depending on whether the alpha value is above the given
+  ///   alpha cutoff.
+  /// - "BLEND":
+  ///   The rendered output is alpha-blended over the background using
+  ///   the standard Porter-Duff OVER operator.
+  std::string alphaMode = "OPAQUE";
+
+  /// The alpha cutoff, for use if alpha mode is "MASK".
+  float alphaCutoff = 0.5f;
+
+  /// Is two-sided?
+  bool twoSided = false;
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Mesh final : WithNameAndExtensions {
+  struct Primitive final : WithExtensions {
+    enum class Mode : uint32_t { Points = 0, Lines, LineLoop, LineStrip, Triangles, TriangleStrip, TriangleFan };
+    using Attributes = std::map<std::string, uint32_t>;
+
+    Mode mode = Mode::Triangles;  ///< The drawing mode.
+    uint32_t material = BadIndex; ///< The material, if present.
+    uint32_t indices = BadIndex;  ///< The indices accessor, if present.
+
+    /// The attribute accessors, for any of "POSITION", "NORMAL",
+    /// "TANGENT", "TEXCOORD_#", "JOINTS_#", or "WEIGHTS_#".
+    Attributes attributes;
+
+    /// The attribute accessors for morph targets, where each may specify
+    /// any of "POSITION", "NORMAL", or "TANGENT".
+    std::vector<Attributes> targets;
+
+    void jsonConversion(Json::Conversion &conversion);
+  };
+
+  /// The primitives.
+  std::vector<Primitive> primitives;
+
+  /// The weights to apply to morph targets, if present. The size of
+  /// the array must match the size of the targets array for each
+  /// primitive.
+  std::vector<float> weights;
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Skin final : WithNameAndExtensions {
+  /// The inverse bind matrices accessor, if present.
+  uint32_t inverseBindMatrices = BadIndex;
+  /// The skeleton root node, if present.
+  uint32_t skeleton = BadIndex;
+  /// The joint nodes.
+  std::vector<uint32_t> joints;
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Animation final : WithNameAndExtensions {
+  struct Channel final : WithExtensions {
+    /// The associated sampler.
+    uint32_t sampler = BadIndex;
+
+    struct Target : WithExtensions {
+      /// The property to animate, should be any of "translation",
+      /// "rotation", "scale", or "weights".
+      std::string property;
+
+      /// The target node.
+      uint32_t node = BadIndex;
+
+      void jsonConversion(Json::Conversion &conversion) {
+        conversion.required("path", property);
+        conversion.optionalByDefault("node", node, BadIndex);
+        WithExtensions::jsonConversion(conversion);
+      }
+    };
+
+    /// The target.
+    Target target;
+
+    void jsonConversion(Json::Conversion &conversion);
+  };
+
+  struct Sampler final : WithExtensions {
+    /// The input accessor containing keyframe timestamps.
+    uint32_t input = BadIndex;
+
+    /// The output accessor containing keyframe values.
+    uint32_t output = BadIndex;
+
+    /// The interpolation method. If present, should be any of
+    /// "LINEAR", "STEP", or "CUBICSPLINE".
+    std::string interpolation;
+
+    void jsonConversion(Json::Conversion &conversion);
+  };
+
+  std::vector<Channel> channels;
+
+  std::vector<Sampler> samplers;
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Camera final : WithNameAndExtensions {
+  struct Perspective : WithExtensions {
+    float yfov = 90.0_degreesf;         ///< The vertical FOV in radians.
+    float aspect = 0.0f;                ///< The aspect ratio, 0 is unspecified.
+    float znear = 0.1f;                 ///< The near clip distance.
+    float zfar = constants::Inf<float>; ///< The far clip distance.
+
+    void jsonConversion(Json::Conversion &conversion) {
+      conversion //
+        .required("yfov", yfov)
+        .required("znear", znear)
+        .optionalByDefault("zfar", zfar, constants::Inf<float>)
+        .optionalByDefault("aspectRatio", aspect, 0.0f);
+      WithExtensions::jsonConversion(conversion);
+    }
+  };
+
+  struct Orthographic final : WithExtensions {
+    float xscale = 1.0f; ///< The magnification in X.
+    float yscale = 1.0f; ///< The magnification in Y.
+    float znear = 0.1f;  ///< The near clip distance.
+    float zfar = 100.0f; ///< The far clip distance.
+
+    void jsonConversion(Json::Conversion &conversion) {
+      conversion //
+        .required("xmag", xscale)
+        .required("ymag", yscale)
+        .required("znear", znear)
+        .required("zfar", zfar);
+      WithExtensions::jsonConversion(conversion);
+    }
+  };
+
+  /// The camera parameters.
+  std::variant<Perspective, Orthographic> camera = Perspective();
+
+  void jsonConversion(Json::Conversion &conversion) {
+    conversion.required({"perspective", "orthographic"}, static_cast<std::variant<Perspective, Orthographic> &>(camera));
+    WithNameAndExtensions::jsonConversion(conversion);
+  }
+};
+
+struct MI_GEOMETRY_API Node final : WithNameAndExtensions {
+  using Affine = std::array<float, 16>;
+  struct TrsTransform {
+    /// The translation.
+    std::array<float, 3> translation = {0, 0, 0};
+
+    /// The rotation as an XYZW quaterion (note the difference in order
+    /// versus the Precept WXYZ quaternion).
+    std::array<float, 4> rotation = {0, 0, 0, 1};
+
+    /// The potentially non-uniform scaling.
+    std::array<float, 3> scale = {1, 1, 1};
+  };
+
+  std::vector<uint32_t> children; ///< The child nodes.
+  uint32_t camera = BadIndex;     ///< The associated camera, if any.
+  uint32_t mesh = BadIndex;       ///< The associated mesh, if any.
+  uint32_t skin = BadIndex;       ///< The associated skin, if any.
+
+  /// The weights of the instantiated morph target. If present, the size of
+  /// the array must match the number or morph targets in the associated
+  /// mesh.
+  std::vector<float> weights;
+
+  /// The transform either as a column-major 4x4 affine matrix or as a
+  /// structure containing translation, rotation, and scale.
+  std::variant<Affine, TrsTransform> transform = Affine{1, 0, 0, 0, //
+                                                        0, 1, 0, 0, //
+                                                        0, 0, 1, 0, //
+                                                        0, 0, 0, 1};
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+struct MI_GEOMETRY_API Scene final : WithNameAndExtensions {
+  std::vector<uint32_t> nodes; ///< The nodes.
+  void jsonConversion(Json::Conversion &conversion) {
+    conversion.optionalImplicit("nodes", nodes);
+    WithNameAndExtensions::jsonConversion(conversion);
+  }
+};
+
+struct MI_GEOMETRY_API File final : WithExtensions {
+  /// The asset info.
+  Asset asset;
+
+  /// The accessors, if any.
+  std::vector<Accessor> accessors;
+
+  /// The animations, if any.
+  std::vector<Animation> animations;
+
+  /// The buffers, if any.
+  std::vector<Buffer> buffers;
+
+  /// The buffer views, if any.
+  std::vector<BufferView> bufferViews;
+
+  /// The cameras, if any.
+  std::vector<Camera> cameras;
+
+  /// The images, if any.
+  std::vector<Image> images;
+
+  /// The materials, if any.
+  std::vector<Material> materials;
+
+  /// The meshes, if any.
+  std::vector<Mesh> meshes;
+
+  /// The nodes, if any.
+  std::vector<Node> nodes;
+
+  /// The samplers, if any.
+  std::vector<Sampler> samplers;
+
+  /// The default scene, if any.
+  uint32_t scene = BadIndex;
+
+  /// The scenes, if any.
+  std::vector<Scene> scenes;
+
+  /// The skins, if any.
+  std::vector<Skin> skins;
+
+  /// The textures, if any.
+  std::vector<Texture> textures;
+
+  /// The extensions used by this file, if any.
+  std::vector<std::string> extensionsUsed;
+
+  /// The extensions required to properly use this file, if any.
+  std::vector<std::string> extensionsRequired;
+
+  void jsonConversion(Json::Conversion &conversion);
+};
+
+} // namespace mi::geometry::glTF

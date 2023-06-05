@@ -1,0 +1,55 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Bezier"
+#include "Microcosm/BoundBox"
+#include "Microcosm/Line"
+#include "Microcosm/Tensor"
+#include "Microcosm/utility"
+
+#include "Microcosm/UI/Export.h"
+
+#define MI_UI_DECLARE_WITH(methodName, memberName)            \
+  [[strong_inline]] auto &methodName(auto... args) noexcept { \
+    memberName = decltype(memberName)(args...);               \
+    return *this;                                             \
+  }
+
+#define MI_UI_DECLARE_WITH_COMPONENTS_2(methodName, memberName, name0, name1) \
+  MI_UI_DECLARE_WITH(methodName, memberName);                                 \
+  MI_UI_DECLARE_WITH(methodName##name0, memberName[0]);                       \
+  MI_UI_DECLARE_WITH(methodName##name1, memberName[1]);
+
+#define MI_UI_DECLARE_WITH_COMPONENTS_4(methodName, memberName, name0, name1, name2, name3) \
+  MI_UI_DECLARE_WITH(methodName, memberName);                                               \
+  MI_UI_DECLARE_WITH(methodName##name0, memberName[0]);                                     \
+  MI_UI_DECLARE_WITH(methodName##name1, memberName[1]);                                     \
+  MI_UI_DECLARE_WITH(methodName##name2, memberName[2]);                                     \
+  MI_UI_DECLARE_WITH(methodName##name3, memberName[3]);
+
+namespace mi::ui {
+
+[[nodiscard]] inline float signedAngleBetween(Vector2f omegaA, Vector2f omegaB) noexcept {
+  return sign(cross(omegaA, omegaB)) * angleBetween(omegaA, omegaB);
+}
+
+[[nodiscard]] inline Vector2f miter(Vector2f pointA, Vector2f omegaA, Vector2f pointB, Vector2f omegaB) noexcept {
+  if (!(dot(omegaA, omegaB) < 0.8f))
+    return 0.5f * (pointA + pointB);
+  else {
+    float numer = cross(omegaB, pointB - pointA);
+    float denom = cross(omegaB, omegaA);
+    if (!(abs(denom) > 1e-4f)) return 0.5f * (pointA + pointB);
+    return pointA + numer / denom * omegaA;
+  }
+}
+
+[[nodiscard]] constexpr Matrix2x3f affineDot(const Matrix2x3f &matrixA, const Matrix2x3f &matrixB) noexcept {
+  Matrix2x3f matrixC;
+  matrixC.col(0).assign(dot(matrixA.linear(), matrixB.col(0)));
+  matrixC.col(1).assign(dot(matrixA.linear(), matrixB.col(1)));
+  matrixC.col(2).assign(dot(matrixA.linear(), matrixB.col(2)) + matrixA.col(2));
+  return matrixC;
+}
+
+} // namespace mi::ui

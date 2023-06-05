@@ -1,0 +1,248 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Ray"
+#include "Microcosm/Tensor"
+
+namespace mi {
+
+/// An axis-aligned bounding box.
+template <concepts::arithmetic Value, size_t N> struct BoundBox final : ArrayLike<BoundBox<Value, N>> {
+public:
+  using Float = to_float_t<Value>;
+
+  constexpr BoundBox() noexcept = default;
+
+  constexpr BoundBox(const Vector<Value, N> &coord) noexcept : mPoints{coord, coord} {}
+
+  constexpr BoundBox(const Vector<Value, N> &coord0, const Vector<Value, N> &coord1) noexcept : mPoints{coord0, coord1} {}
+
+  template <std::ranges::range Range> requires(!concepts::tensor<Range> && !std::same_as<std::decay_t<Range>, BoundBox>)
+  [[strong_inline]] explicit constexpr BoundBox(Range &&range) {
+    for (auto &&value : std::forward<Range>(range)) *this |= value;
+  }
+
+  template <std::ranges::range Range, typename Cast> requires(
+    !concepts::tensor<Range> && //
+    !std::same_as<std::decay_t<Range>, BoundBox> && std::invocable<Cast, std::ranges::range_value_t<Range>>)
+  [[strong_inline]] explicit constexpr BoundBox(Range &&range, Cast &&cast) {
+    for (auto &&value : std::forward<Range>(range)) *this |= std::invoke(std::forward<Cast>(cast), value);
+  }
+
+public:
+  MI_ARRAY_LIKE_CONSTEXPR_DATA(&mPoints[0])
+
+  MI_ARRAY_LIKE_STATIC_CONSTEXPR_SIZE(2)
+
+public:
+  /// The lower bound.
+  [[nodiscard]] constexpr Vector<Value, N> lower() const noexcept { return mPoints[0]; }
+
+  /// The upper bound.
+  [[nodiscard]] constexpr Vector<Value, N> upper() const noexcept { return mPoints[1]; }
+
+  /// The extent.
+  [[nodiscard]] constexpr Vector<Value, N> extent() const noexcept { return upper() - lower(); }
+
+  /// The center.
+  [[nodiscard]] constexpr Vector<Value, N> center() const noexcept { return (lower() + upper()) / Value(2); }
+
+  /// Overlaps the given bound?
+  [[nodiscard]] constexpr bool overlaps(const BoundBox &other) const noexcept {
+    return allTrue(lower() <= other.upper() && upper() >= other.lower());
+  }
+
+  /// Contains the given bound?
+  [[nodiscard]] constexpr bool contains(const BoundBox &other) const noexcept {
+    return allTrue(lower() <= other.lower() && upper() >= other.upper());
+  }
+
+  /// Hyper area.
+  ///
+  /// \note
+  /// - In 2 dimensions, this measures signed perimeter.
+  /// - In 3 dimensions, this measures signed surface area.
+  /// - ...
+  ///
+  [[nodiscard]] constexpr Value hyperArea() const noexcept {
+    if constexpr (N == 1)
+      return 1;
+    else {
+      Vector<Value, N> area;
+      Vector<Value, N> shape = extent();
+      area = Value(1);
+      for (size_t i = 0; i < N; i++)
+        for (size_t j = 0; j < N; j++)
+          if (i != j) area[i] *= area[j];
+      return 2 * area.sum();
+    }
+  }
+
+  /// Hyper volume.
+  ///
+  /// \note
+  /// - In 2 dimensions, this measures signed area.
+  /// - In 3 dimensions, this measures signed volume.
+  /// - ...
+  ///
+  [[nodiscard]] constexpr Value hyperVolume() const noexcept { return extent().product(); }
+
+  /// In 2 dimensions, shortcut for `hyperVolume()`.
+  [[nodiscard]] constexpr Value area() const noexcept requires(N == 2) { return hyperVolume(); }
+
+  /// In 3 dimensions, shortcut for `hyperArea()`.
+  [[nodiscard]] constexpr Value area() const noexcept requires(N == 3) { return hyperArea(); }
+
+  /// Aspect ratio, as width over height.
+  [[nodiscard]] constexpr Float aspectRatio() const noexcept requires(N == 2) {
+    return Float(extent()[0]) / Float(extent()[1]);
+  }
+
+  /// Clamp point to interior.
+  [[nodiscard]] constexpr Vector<Value, N> clamp(Vector<Value, N> point) const noexcept {
+    point = max(point, lower());
+    point = min(point, upper());
+    return point;
+  }
+
+  /// Pad by the given absolute delta.
+  ///
+  /// \note
+  /// In each axis,
+  /// - If the delta is positive, add to the upper bound.
+  /// - If the delta is negative, add to the lower bound.
+  ///
+  [[nodiscard]] constexpr BoundBox padAbsoluteDelta(Vector<Value, N> delta) const noexcept {
+    BoundBox boundBox{*this};
+    for (size_t i = 0; i < N; i++) boundBox[delta[i] < 0 ? 0 : 1] += delta[i];
+    return boundBox;
+  }
+
+  /// Pad by the given absolute amount.
+  [[nodiscard]] constexpr BoundBox padAbsolute(Value amount) const noexcept {
+    return BoundBox(lower() - amount, upper() + amount);
+  }
+
+  /// Pad by the given relative amount.
+  [[nodiscard]] constexpr BoundBox padRelative(Value amount) const noexcept requires std::floating_point<Value> {
+    return scale(1 + amount);
+  }
+
+  /// Scale about the center by the given amount.
+  [[nodiscard]] constexpr BoundBox scale(auto amount) const noexcept { return scaleAboutPoint(center(), amount); }
+
+  /// Scale about the given point by the given amount.
+  [[nodiscard]] constexpr BoundBox scaleAboutPoint(Vector<Value, N> point, auto amount) const noexcept
+    requires std::floating_point<Value> {
+    return BoundBox(
+      amount * (mPoints[0] - point) + point, //
+      amount * (mPoints[1] - point) + point);
+  }
+
+  /// Build an array of all possible corner points.
+  [[nodiscard]] constexpr auto allCorners() const noexcept {
+    std::array<Vector<Value, N>, (2 << N)> combinations{};
+    for (size_t i = 0; i < (2 << N); i++) {
+      for (size_t j = 0; j < N; j++) {
+        combinations[i][j] = mPoints[(i >> j) & 1][j];
+      }
+    }
+    return combinations;
+  }
+
+public:
+  /// \name Set operators
+  /// \{
+  [[nodiscard]] constexpr BoundBox operator|(const BoundBox &other) const noexcept {
+    return {min(lower(), other.lower()), max(upper(), other.upper())};
+  }
+
+  [[nodiscard]] constexpr BoundBox operator&(const BoundBox &other) const noexcept {
+    return {max(lower(), other.lower()), min(upper(), other.upper())};
+  }
+
+  [[nodiscard]] constexpr BoundBox operator|(const Vector<Value, N> &point) const noexcept {
+    return {min(lower(), point), max(upper(), point)};
+  }
+
+  [[nodiscard]] constexpr BoundBox operator&(const Vector<Value, N> &point) const noexcept {
+    return {max(lower(), point), min(upper(), point)};
+  }
+
+  [[nodiscard]] friend constexpr BoundBox operator|(const Vector<Value, N> &point, const BoundBox &bound) noexcept {
+    return bound | point;
+  }
+
+  [[nodiscard]] friend constexpr BoundBox operator&(const Vector<Value, N> &point, const BoundBox &bound) noexcept {
+    return bound & point;
+  }
+
+  [[strong_inline]] constexpr BoundBox &operator|=(const auto &other) noexcept { return *this = *this | other; }
+
+  [[strong_inline]] constexpr BoundBox &operator&=(const auto &other) noexcept { return *this = *this & other; }
+  /// \}
+
+public:
+  /// Implicit cast as bool. (Is hyper volume non-negative?)
+  [[nodiscard]] constexpr operator bool() const noexcept { return allTrue(lower() <= upper()); }
+
+  template <typename Other> [[nodiscard]] constexpr operator BoundBox<Other, N>() const noexcept {
+    return BoundBox<Other, N>(
+      Vector<Other, N>(mPoints[0]), //
+      Vector<Other, N>(mPoints[1]));
+  }
+
+public:
+  [[nodiscard]] constexpr std::optional<std::pair<Float, Float>> rayCast(const Ray<Float, N> &ray) const noexcept {
+    auto params = rayCast(ray.origin, ray.direction);
+    if (!params || !(std::get<0>(*params) < ray.maxParam && std::get<1>(*params) >= ray.minParam)) return std::nullopt;
+    return params;
+  }
+
+  [[nodiscard]] constexpr std::optional<std::pair<Float, Float>> rayCast( //
+    const Vector<Float, N> &origin, const Vector<Float, N> &direction) const noexcept {
+    Float denom{1 / direction[0]};
+    Float minParam{(mPoints[0][0] - origin[0]) * denom};
+    Float maxParam{(mPoints[1][0] - origin[0]) * denom};
+    if (direction[0] < 0) std::swap(minParam, maxParam);
+    maxParam *= 1 + 2 * constants::MachineEch<Float, 3>;
+    for (size_t k = 1; k < N; k++) {
+      Float denomK{1 / direction[k]};
+      Float minParamK{(mPoints[0][k] - origin[k]) * denomK};
+      Float maxParamK{(mPoints[1][k] - origin[k]) * denomK};
+      if (direction[k] < 0) std::swap(minParamK, maxParamK);
+      maxParamK *= 1 + 2 * constants::MachineEch<Float, 3>;
+      if (minParam > maxParamK || maxParam < minParamK) return std::nullopt;
+      minParam = max(minParam, minParamK);
+      maxParam = min(maxParam, maxParamK);
+    }
+    return std::pair<Float, Float>{minParam, maxParam};
+  }
+
+  void onTransform(auto &&transform) {
+    BoundBox bound{};
+    for (auto point : allCorners()) bound |= transform.applyAffine(point);
+    operator=(bound);
+  }
+
+private:
+  Vector<Value, N> mPoints[2] = {Vector<Value, N>(+constants::Max<Value>), Vector<Value, N>(-constants::Max<Value>)};
+};
+
+template <typename Value> using BoundBox2 = BoundBox<Value, 2>;
+
+template <typename Value> using BoundBox3 = BoundBox<Value, 3>;
+
+using BoundBox2i = BoundBox2<int>;
+
+using BoundBox3i = BoundBox3<int>;
+
+using BoundBox2f = BoundBox2<float>;
+
+using BoundBox3f = BoundBox3<float>;
+
+using BoundBox2d = BoundBox2<double>;
+
+using BoundBox3d = BoundBox3<double>;
+
+} // namespace mi

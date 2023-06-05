@@ -1,0 +1,35 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/OpenGL/gl3w"
+
+namespace mi::gl {
+
+struct Buffer final : Handle<Buffer> {
+public:
+  using Handle<Buffer>::Handle;
+
+  [[nodiscard]] static GLuint allocate() noexcept {
+    GLuint handle = 0;
+    glCreateBuffers(1, &handle);
+    return handle;
+  }
+
+  static void deallocate(GLuint handle) noexcept { glDeleteBuffers(1, &handle); }
+
+public:
+  void bind(GLenum target) const noexcept { glBindBuffer(target, mHandle); }
+
+  void data(GLsizei count, const auto *values, GLenum mode) noexcept {
+    glNamedBufferData(mHandle, count * sizeof(values[0]), values, mode);
+  }
+
+  void data(std::ranges::random_access_range auto const &values, GLenum mode) noexcept {
+    data(std::ranges::size(values), std::ranges::data(values), mode);
+  }
+
+protected:
+  using Handle<Buffer>::mHandle;
+};
+
+} // namespace mi::gl

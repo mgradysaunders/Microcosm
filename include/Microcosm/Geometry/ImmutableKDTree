@@ -1,0 +1,104 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/memory"
+
+namespace mi::geometry {
+
+template <size_t N> class MI_GEOMETRY_API ImmutableKDTree {
+  static_assert(N == 2 || N == 3);
+
+public:
+  using Box = BoundBox<float, N>;
+  using Point = Vector<float, N>;
+
+  struct Node {
+    Point point;
+    uint32_t index = 0;
+    uint32_t right = 0;
+    uint8_t left = 0;
+    uint8_t axis = 0;
+
+    void onSerialize(auto &serializer) { serializer <=> point <=> index <=> right <=> left <=> axis; }
+  };
+
+  struct Item {
+    uint32_t index;
+    Point point;
+  };
+
+  using Nodes = std::vector<Node>;
+  using Items = std::vector<Item>;
+
+public:
+  void build(Items &items);
+
+  template <std::ranges::range Range, std::invocable<std::ranges::range_value_t<Range>> Cast>
+  void build(Range &&range, Cast &&cast) {
+    Items items;
+    items.reserve(128);
+    for (auto &&value : std::forward<Range>(range)) {
+      Item &item = items.emplace_back();
+      item.index = items.size() - 1;
+      item.point = std::invoke(std::forward<Cast>(cast), value);
+    }
+    build(items);
+  }
+
+  template <std::ranges::range Range> void build(Range &&range) {
+    build(std::forward<Range>(range), [](auto value) { return value; });
+  }
+
+  void clear() noexcept { nodes.clear(); }
+
+public:
+  /// Visit all nodes in box.
+  template <std::invocable<const Node &> Visitor> [[strong_inline]] void visit(const Box &box, Visitor &&visitor) {
+    GrowableStack<const Node *> todo;
+    if (!nodes.empty()) todo.push(&nodes[0]);
+    while (!todo.empty()) {
+      const Node *node = todo.pop();
+      if (!std::invoke(std::forward<Visitor>(visitor), *node)) return;
+      int axis = node->axis;
+      const Node *child0 = node + node->left;
+      const Node *child1 = node + node->right;
+      if (child0 != node && node->point[axis] > box.lower(axis)) todo.push(child0);
+      if (child1 != node && node->point[axis] < box.upper(axis)) todo.push(child1);
+    }
+  }
+
+  /// Visit all nodes in sphere.
+  template <std::invocable<const Node &> Visitor>
+  [[strong_inline]] void visit(const Point &center, float radius, Visitor &&visitor) {
+    float radSqr = radius * radius;
+    Point minPoint = center - Point(std::abs(radius));
+    Point maxPoint = center + Point(std::abs(radius));
+    visit(Box(minPoint, maxPoint), [&](const Node &node) {
+      return !(distanceSquare(node.point, center) < radSqr) || std::invoke(std::forward<Visitor>(visitor), node);
+    });
+  }
+
+  struct Nearest {
+    /// Node.
+    const Node *node = nullptr;
+    /// Distance.
+    float dist = constants::Inf<float>;
+    /// Comparison operator.
+    constexpr auto operator<=>(const Nearest &other) const noexcept { return dist <=> other.dist; }
+  };
+
+  [[nodiscard]] Nearest nearestTo(Point point) const;
+
+  void nearestTo(Point point, IteratorRange<Nearest *> near) const;
+
+public:
+  Nodes nodes;
+
+  void onSerialize(auto &serializer) { serializer <=> nodes; }
+};
+
+using ImmutableKDTree2 = ImmutableKDTree<2>;
+using ImmutableKDTree3 = ImmutableKDTree<3>;
+
+} // namespace mi::geometry

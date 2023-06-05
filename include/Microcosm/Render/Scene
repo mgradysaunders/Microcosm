@@ -1,0 +1,49 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Path"
+
+namespace mi::render {
+
+/// This is the scene representation. It is responsible for constructing paths with random walks and for
+/// determining visibility and transmission.
+struct MI_RENDER_API Scene final {
+public:
+  /// The surface intersection routine. The implementation must find the closest intersection with a surface in
+  /// the scene which is within the given ray parameter range. If no intersection is detected, the implementation
+  /// may simply return nullopt. If an intersection is detected, the associated ray parameter should be returned,
+  /// and the vertex reference should be initialized as a surface vertex.
+  using Intersect = std::function<std::optional<double>(Ray3d ray, Path::Vertex &vertex)>;
+
+  Scene() noexcept = default;
+
+  Scene(Intersect intersect) noexcept : mIntersect(std::move(intersect)) {}
+
+  void setMinRatio(double value) noexcept { mMinRatio = value; }
+
+  void setShadowEpsilon(double value) noexcept { mShadowEpsilon = value; }
+
+public:
+  /// Randomly walk through the scene to construct a path. This accepts the first vertex and initial direction
+  /// as parameters. Therefore, the returned path is guaranteed to have at least this vertex.
+  [[nodiscard]] Path walk(const Spectrum &waveLens, Random &random, Path::Vertex initialVertex, int maxDepth = -1) const;
+
+  /// Determine boolean visibility, keeping track of path transmission along the way. Note: The transmission is not
+  /// overwritten, but instead modified in-place. This is consistent with how DirectLighting expects visibility
+  /// checks to work.
+  [[nodiscard]] bool visibility(
+    const Spectrum &waveLens, Random &random, const Path::Vertex &initialVertex, Vector3d omegaI, double maxDistance,
+    Spectrum &tau) const;
+
+private:
+  /// The surface intersection routine.
+  Intersect mIntersect{};
+
+  /// The minimum ratio, below which the random walk routine terminates the path.
+  double mMinRatio{1e-6};
+
+  /// The shadow epsilon.
+  double mShadowEpsilon{1e-6};
+};
+
+} // namespace mi::render

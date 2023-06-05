@@ -1,0 +1,81 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+
+namespace mi::geometry {
+
+/// An animation curve.
+///
+/// \note
+/// This is based off of animation curves appearing in applications
+/// like Blender and Unity. Weighted evaluation allows for more control,
+/// but is more computationally expensive.
+///
+class MI_GEOMETRY_API FCurve {
+public:
+  enum class Weight : int {
+    None = 0, ///< Unweighted.
+    In = 1,   ///< Weighted only in.
+    Out = 2,  ///< Weighted only out.
+    Both = 3  ///< Weighted both in and out.
+  };
+
+  /// A keyframe.
+  struct Keyframe {
+    Weight weightMode = Weight::None;
+    float time = 0;
+    float value = 0;
+    float slopeIn = 0;
+    float slopeOut = 0;
+    float weightIn = 0.333f;
+    float weightOut = 0.333f;
+
+    void onSerialize(auto &serializer) {
+      serializer <=> weightMode;
+      serializer <=> time;
+      serializer <=> value;
+      serializer <=> slopeIn;
+      serializer <=> slopeOut;
+      serializer <=> weightIn;
+      serializer <=> weightOut;
+    }
+  };
+
+  void sortKeyframes() {
+    std::sort(keyframes.begin(), keyframes.end(), [](const Keyframe &keyframe0, const Keyframe &keyframe1) {
+      return keyframe0.time < keyframe1.time;
+    });
+  }
+
+  struct Result {
+    float value = 0;
+    float valueDeriv = 0;
+  };
+
+  [[nodiscard]] Result operator()(float time, int &index) const;
+
+  [[nodiscard]] Result operator()(float time) const {
+    int index = -1;
+    return operator()(time, index);
+  }
+
+public:
+  /// The wrap mode before the first keyframe.
+  Wrap wrapBefore = Wrap::Clamp;
+
+  /// The wrap mode after the last keyframe.
+  Wrap wrapAfter = Wrap::Clamp;
+
+  /// The keyframe array, must be sorted!
+  std::vector<Keyframe> keyframes;
+
+  /// Serialize.
+  void onSerialize(auto &serializer) {
+    serializer <=> wrapBefore;
+    serializer <=> wrapAfter;
+    serializer <=> keyframes;
+  }
+};
+
+} // namespace mi::geometry

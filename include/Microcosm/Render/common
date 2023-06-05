@@ -1,0 +1,443 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <any>
+#include <atomic>
+#include <map>
+
+#include "Microcosm/BoundBox"
+#include "Microcosm/Pcg"
+#include "Microcosm/Quaternion"
+#include "Microcosm/Tensor"
+#include "Microcosm/Timer"
+#include "Microcosm/utility"
+
+#include "Microcosm/Render/Export.h"
+
+namespace mi::render {
+
+struct MI_RENDER_API Any {
+public:
+  Any() noexcept = default;
+
+  Any(std::any any) noexcept : mAny(std::move(any)) {}
+
+  template <typename Value> [[nodiscard, strong_inline]] bool is() const { return mAny.type() == typeid(std::decay_t<Value>); }
+
+  template <typename Value> [[nodiscard, strong_inline]] auto as() -> std::decay_t<Value> & {
+    auto ptr = std::any_cast<std::decay_t<Value>>(&mAny);
+    if (!ptr) [[unlikely]]
+      throwLogicErrorBadCast(typeid(std::decay_t<Value>), mAny.type());
+    return *ptr;
+  }
+
+  template <typename Value> [[nodiscard, strong_inline]] auto as() const -> const std::decay_t<Value> & {
+    auto ptr = std::any_cast<std::decay_t<Value>>(&mAny);
+    if (!ptr) [[unlikely]]
+      throwLogicErrorBadCast(typeid(std::decay_t<Value>), mAny.type());
+    return *ptr;
+  }
+
+protected:
+  std::any mAny{};
+
+private:
+  static void throwLogicErrorBadCast(const std::type_info &type, const std::type_info &internType);
+};
+
+struct MI_RENDER_API AnyLookup final {
+public:
+  AnyLookup() = default;
+
+  void clear() noexcept;
+
+  [[nodiscard]] bool has(std::string_view name) const;
+
+  [[nodiscard]] bool has(std::string_view name, const std::type_info &type) const;
+
+  template <typename Value> void set(std::string name, Value &&value) {
+    mLookup.insert_or_assign(std::move(name), std::any(std::forward<Value>(value)));
+  }
+
+  template <typename Value> [[nodiscard]] auto &get(std::string_view name) const {
+    auto itr = mLookup.find(name);
+    if (itr == mLookup.end()) [[unlikely]]
+      throwLogicErrorNotFound(name, typeid(std::decay_t<Value>));
+    auto ptr = std::any_cast<std::decay_t<Value>>(&itr->second);
+    if (!ptr) [[unlikely]]
+      throwLogicErrorBadCast(name, typeid(std::decay_t<Value>), itr->second.type());
+    return *ptr;
+  }
+
+private:
+  std::map<std::string, std::any, std::less<>> mLookup;
+
+  static void throwLogicErrorNotFound(std::string_view name, const std::type_info &type);
+
+  static void throwLogicErrorBadCast(std::string_view name, const std::type_info &type, const std::type_info &internType);
+};
+
+struct MI_RENDER_API Progress final {
+public:
+  Progress(std::string heading, uint64_t total) noexcept : mHeading(std::move(heading)), mTotal(total) {
+    if (mTotal <= 1000)
+      mPrintFrequency = 1;
+    else
+      mPrintFrequency = uint64_t(mTotal * 0.001);
+  }
+
+  void increment();
+
+private:
+  Timer<std::chrono::steady_clock> mTimer;
+
+  std::string mHeading;
+
+  std::atomic<uint64_t> mCount{};
+
+  uint64_t mTotal{};
+
+  uint64_t mPrintFrequency{};
+};
+
+struct MI_RENDER_API BidirPDF final {
+  double forward{0};
+
+  double reverse{0};
+};
+
+constexpr double Pi = constants::Pi<double>;
+
+constexpr double OneOverPi = constants::OneOverPi<double>;
+
+constexpr double OneOverFourPi = constants::OneOverFourPi<double>;
+
+constexpr double OneOverSqrtPi = constants::OneOverSqrtPi<double>;
+
+constexpr double TwoPi = constants::TwoPi<double>;
+
+constexpr double Inf = constants::Inf<double>;
+
+template <std::floating_point Float>
+[[nodiscard]] inline bool isNegativeAndFinite(Float value, std::type_identity_t<Float> epsilon = 0) noexcept {
+  return value < -epsilon && isfinite(value);
+}
+
+template <std::floating_point Float>
+[[nodiscard]] inline bool isPositiveAndFinite(Float value, std::type_identity_t<Float> epsilon = 0) noexcept {
+  return value > +epsilon && isfinite(value);
+}
+
+template <typename Values> requires(concepts::tensor_vector<Values>)
+[[nodiscard]] inline bool isNegativeAndFinite(Values &&values, to_float_t<Values> epsilon = 0) noexcept {
+  bool someNegative = false;
+  for (auto &&value : auto_forward(values)) {
+    if (value > 0 || !isfinite(value)) return false;
+    if (value < -epsilon) someNegative = true;
+  }
+  return someNegative;
+}
+
+template <typename Values> requires(concepts::tensor_vector<Values>)
+[[nodiscard]] inline bool isPositiveAndFinite(Values &&values, to_float_t<Values> epsilon = 0) noexcept {
+  bool somePositive = false;
+  for (auto &&value : auto_forward(values)) {
+    if (value < 0 || !isfinite(value)) return false;
+    if (value > +epsilon) somePositive = true;
+  }
+  return somePositive;
+}
+
+[[nodiscard]] inline double saturateSigned(double cosTheta) noexcept { return clamp(cosTheta, -1, +1); }
+
+[[nodiscard]] inline double nonnegativeAtan2(double sinPhi, double cosPhi) noexcept {
+  double phi = atan2(sinPhi, cosPhi);
+  return phi < 0 ? phi + TwoPi : phi;
+}
+
+[[nodiscard]] inline Vector2d zenithOf(Vector3d omega) noexcept {
+  double cosTheta{1};
+  double sinTheta{0};
+  if (double denom = fastLength(omega); denom > 0) [[likely]] {
+    cosTheta = clamp(omega[2] / denom, -1, 1);
+    sinTheta = sqrt(max(1 - sqr(cosTheta), 0));
+  }
+  return {cosTheta, sinTheta};
+}
+
+[[nodiscard]] inline Vector2d azimuthOf(Vector3d omega) noexcept {
+  double cosPhi{1};
+  double sinPhi{0};
+  if (double denom = hypot(omega[0], omega[1]); denom > 0) [[likely]] {
+    cosPhi = omega[0] / denom;
+    sinPhi = omega[1] / denom;
+  }
+  return {cosPhi, sinPhi};
+}
+
+/// Is in the same Z hemisphere?
+[[nodiscard]] inline bool isSameHemisphere(Vector3d omegaO, Vector3d omegaI) noexcept {
+  return signbit(omegaO[2]) == signbit(omegaI[2]);
+}
+
+/// Is in the upper Z hemisphere?
+[[nodiscard]] constexpr bool isUpperHemisphere(Vector3d omega) noexcept { return omega[2] >= 0; }
+
+/// Is in the lower Z hemisphere?
+[[nodiscard]] constexpr bool isLowerHemisphere(Vector3d omega) noexcept { return !isUpperHemisphere(omega); }
+
+/// If not in the upper Z hemisphere, take the negative so it is in the lower Z hemisphere.
+[[nodiscard]] constexpr Vector3d upperHemisphere(Vector3d omega) noexcept { return omega[2] < 0 ? -omega : omega; }
+
+/// If not in the lower Z hemisphere, take the negative so it is in the lower Z hemisphere.
+[[nodiscard]] constexpr Vector3d lowerHemisphere(Vector3d omega) noexcept { return omega[2] > 0 ? -omega : omega; }
+
+/// Reflect omegaI through omegaN.
+[[nodiscard]] constexpr Vector3d reflect(Vector3d omegaI, Vector3d omegaN) noexcept {
+  return 2 * dot(omegaI, omegaN) * omegaN - omegaI;
+}
+
+/// Refract omegaI through omegaN, with cosThetaT already computed.
+[[nodiscard]] constexpr Vector3d refract(Vector3d omegaI, Vector3d omegaN, double eta, double cosThetaT) noexcept {
+  return -eta * omegaI + (eta * dot(omegaI, omegaN) + cosThetaT) * omegaN;
+}
+
+/// Refract omegaI through omegaN.
+[[nodiscard]] inline Vector3d refract(Vector3d omegaI, Vector3d omegaN, double eta) noexcept {
+  double cosThetaI{dot(omegaI, omegaN)};
+  double cosThetaT{sqrt(1 - sqr(eta) * (1 - sqr(cosThetaI)))};
+  return refract(omegaI, omegaN, eta, -copysign(cosThetaT, cosThetaI));
+}
+
+[[nodiscard]] constexpr Vector3d reflectionHalfVector(Vector3d omegaI, Vector3d omegaR) noexcept { return omegaI + omegaR; }
+
+[[nodiscard]] constexpr Vector3d refractionHalfVector(Vector3d omegaI, Vector3d omegaT, double eta) noexcept {
+  return -(eta * omegaI + omegaT);
+}
+
+/// Same as reflectionHalfVector(), but normalizes to return a proper direction.
+[[nodiscard]] inline Vector3d reflectionHalfDirection(Vector3d omegaI, Vector3d omegaR) noexcept {
+  return fastNormalize(reflectionHalfVector(omegaI, omegaR));
+}
+
+/// Same as refractionHalfVector(), but normalizes to return a proper direction.
+[[nodiscard]] inline Vector3d refractionHalfDirection(Vector3d omegaI, Vector3d omegaT, double eta) noexcept {
+  return fastNormalize(refractionHalfVector(omegaI, omegaT, eta));
+}
+
+/// The solid-angle Jacobian of the reflection half vector from omegaI to omegaR.
+[[nodiscard]] inline double reflectionHalfVectorJacobian(Vector3d omegaI, Vector3d omegaR) noexcept {
+  return 0.25 / dot(omegaR, reflectionHalfDirection(omegaI, omegaR));
+}
+
+/// The solid-angle Jacobian of the refraction half vector from omegaI to omegaT.
+[[nodiscard]] inline double refractionHalfVectorJacobian(Vector3d omegaI, Vector3d omegaT, double eta) noexcept {
+  return absDot(omegaT, refractionHalfDirection(omegaI, omegaT, eta)) / lengthSquare(refractionHalfVector(omegaI, omegaT, eta));
+}
+
+[[nodiscard]] inline double correctRefractiveIndex(double eta, bool isOutside) noexcept { return isOutside ? eta : 1 / eta; }
+
+[[nodiscard]] inline double correctRefractiveIndex(double eta, Vector3d omega) noexcept {
+  return correctRefractiveIndex(eta, isUpperHemisphere(omega));
+}
+
+/// Convert XY slope to normal direction.
+[[nodiscard]] inline Vector3d convertSlopeToNormal(Vector2d slope) noexcept {
+  return fastNormalize(Vector3d(-slope[0], -slope[1], 1));
+}
+
+/// Convert normal direction to XY slope.
+[[nodiscard]] inline Vector2d convertNormalToSlope(Vector3d omega) noexcept {
+  return Vector2d{-omega[0], -omega[1]} / clamp(omega[2], -1, +1);
+}
+
+/// Convert area measurement to solid angle measurement.
+[[nodiscard]] inline double convertAreaToSolidAngle(Vector3d pointA, Vector3d pointB, Vector3d normalAtB) noexcept {
+  return finiteOrZero(lengthSquare(pointB - pointA) / absDot(normalize(normalAtB), normalize(pointB - pointA)));
+}
+
+/// Convert solid angle measurement to area measurement.
+[[nodiscard]] inline double convertSolidAngleToArea(Vector3d pointA, Vector3d pointB, Vector3d normalAtB) noexcept {
+  return finiteOrZero(absDot(normalize(normalAtB), normalize(pointB - pointA)) / lengthSquare(pointB - pointA));
+}
+
+/// The probability density for the uniform Z-cone with the given coordinate limits.
+[[nodiscard]] constexpr double uniformConePDF(double minZ, double maxZ = 1.0) noexcept { return (1 / TwoPi) / (maxZ - minZ); }
+
+/// The probability density for the uniform sphere.
+[[nodiscard]] constexpr double uniformSpherePDF() noexcept { return uniformConePDF(-1.0, +1.0); }
+
+/// The probability density for the uniform hemisphere.
+[[nodiscard]] constexpr double uniformHemispherePDF() noexcept { return uniformConePDF(+0.0, +1.0); }
+
+/// Sample a uniformly distributed direction from the unit Z-cone with the given coordinate limits.
+[[nodiscard]] inline Vector3d uniformConeSample(Vector2d sampleU, double minZ, double maxZ = +1.0) noexcept {
+  double cosTheta{lerp(saturate(sampleU[0]), minZ, maxZ)};
+  double sinTheta{sqrt(1 - sqr(cosTheta))};
+  return {
+    sinTheta * cos(TwoPi * sampleU[1]), //
+    sinTheta * sin(TwoPi * sampleU[1]), cosTheta};
+}
+
+/// Sample a uniformly distributed direction from the unit sphere.
+[[nodiscard]] inline Vector3d uniformSphereSample(Vector2d sampleU) noexcept { return uniformConeSample(sampleU, -1.0, +1.0); }
+
+/// Sample a uniformly distributed direction from the unit hemisphere.
+[[nodiscard]] inline Vector3d uniformHemisphereSample(Vector2d sampleU) noexcept {
+  return uniformConeSample(sampleU, +0.0, +1.0);
+}
+
+/// Sample a uniformly distributed position from the unit disk. (Note: This uses the standard partitioning
+/// scheme to better preserve stratified samples. This is essentially a piecewise continuous mapping from the unit
+/// square. Technically all that is necessary to be mathematically correct is to use a polar mapping with the radius
+/// as the sqrt(U0) and the angle as TwoPi*U1.)
+[[nodiscard]] inline Vector2d uniformDiskSample(Vector2d sampleU) noexcept {
+  sampleU[0] = 2 * saturate(sampleU[0]) - 1;
+  sampleU[1] = 2 * saturate(sampleU[1]) - 1;
+  if (sampleU[0] == 0 && sampleU[1] == 0) [[unlikely]]
+    return {};
+  double rad{};
+  double phi{};
+  if (abs(sampleU[0]) > abs(sampleU[1]))
+    rad = sampleU[0], phi = (Pi / 4) * sampleU[1] / sampleU[0];
+  else
+    rad = sampleU[1], phi = (Pi / 2) * (1 - sampleU[0] / (2 * sampleU[1]));
+  return {rad * cos(phi), rad * sin(phi)};
+}
+
+/// Sample a cosine distributed direction from the unit hemisphere. This is the quintessential distribution for
+/// constant or "Lambertian" diffuse BRDFs. (Note: This is equivalent sampling a uniformly distributed position
+/// from the unit disk, then projecting it up onto the unit hemisphere.)
+[[nodiscard]] inline Vector3d cosineHemisphereSample(Vector2d sampleU) noexcept {
+  Vector2d disk{uniformDiskSample(sampleU)};
+  Vector3d hemi{disk[0], disk[1], safeSqrt(1 - lengthSquare(disk))};
+  return hemi;
+}
+
+/// \overload
+[[nodiscard]] inline Vector3d cosineHemisphereSample(Vector2d sampleU, Vector3d omegaM) noexcept {
+  return normalize(dot(Matrix3d::orthonormalBasis(omegaM), cosineHemisphereSample(sampleU)));
+}
+
+/// Sample a uniformly distributed parameter for any uniform triangle.
+[[nodiscard]] inline Vector2d uniformTriangleSample(Vector2d sampleU) noexcept {
+  return sqrt(sampleU[0]) * Vector2d(sampleU[1], 1 - sampleU[1]);
+}
+
+template <typename Value>
+concept is_random = std::same_as<typename std::decay_t<Value>::random_tag, std::true_type>;
+
+struct MI_RENDER_API Random final : Any {
+public:
+  using Generate = std::function<void(Random &self, IteratorRange<double *> sampleU)>;
+
+  Random(std::in_place_t, std::any any, Generate generate) noexcept //
+    : Any(std::move(any)), mGenerate(std::move(generate)) {}
+
+  template <std::uniform_random_bit_generator Generator>
+  Random(Generator generator)
+    : Random(std::in_place, std::any(std::move(generator)), [](auto &self, IteratorRange<double *> sampleU) {
+        auto &generator = self.template as<Generator>();
+        for (auto &each : sampleU) each = randomize<double>(generator);
+      }) {}
+
+  Random() : Random(Pcg32()) {}
+
+  template <typename Value> requires is_random<Value> Random(Value &&value)
+    : Random(std::in_place, std::any(std::forward<Value>(value)), [](auto &self, IteratorRange<double *> sampleU) {
+        return self.template as<Value>().generate(sampleU);
+      }) {}
+
+public:
+  [[nodiscard, strong_inline]] int generateIndex(int count) { return clamp(int(generate1() * count), 0, count - 1); }
+
+  [[nodiscard, strong_inline]] double generate1() { return generateN<1>()[0]; }
+
+  [[nodiscard, strong_inline]] Vector2d generate2() { return generateN<2>(); }
+
+  [[nodiscard, strong_inline]] Vector3d generate3() { return generateN<3>(); }
+
+  [[nodiscard, strong_inline]] Vector4d generate4() { return generateN<4>(); }
+
+  [[nodiscard, strong_inline]] operator double() { return generate1(); }
+
+  [[nodiscard, strong_inline]] operator Vector2d() { return generate2(); }
+
+  [[nodiscard, strong_inline]] operator Vector3d() { return generate3(); }
+
+  [[nodiscard, strong_inline]] operator Vector4d() { return generate4(); }
+
+  template <size_t N> [[nodiscard, strong_inline]] Vector<double, N> generateN() {
+    Vector<double, N> sampleU{};
+    mGenerate(*this, IteratorRange(&sampleU[0], N));
+    return sampleU;
+  }
+
+private:
+  Generate mGenerate{};
+};
+
+/// A low-discrepancy point sequence based on the generalized golden ratio.
+///
+/// \see
+/// http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+template <std::floating_point Float, size_t N> struct LowDiscrepancySequence final {
+public:
+  LowDiscrepancySequence(Float seed = 0.5) noexcept {
+    Float phi = 2;
+    if constexpr (N == 1) phi = 1.6180339887498948482;
+    if constexpr (N == 2) phi = 1.32471795724474602596;
+    if constexpr (N == 3) phi = 1.22074408460575947536;
+    if constexpr (N >= 4)
+      for (size_t itr = 0; itr < 32; itr++) phi = pow(1 + phi, 1 / Float(1 + N));
+
+    mDelta[0] = fastFract(1 / phi);
+    mPoint[0] = fastFract(mDelta[0] + seed);
+    for (size_t dim = 1; dim < N; dim++) {
+      mDelta[dim] = fastFract(mDelta[dim - 1] * mDelta[0]);
+      mPoint[dim] = fastFract(mDelta[dim] + seed);
+    }
+  }
+
+  /// Compute the next mPoint in the sequence.
+  [[nodiscard]] Vector<Float, N> operator()() noexcept { return (mPoint = fastFract(mPoint + mDelta)); }
+
+private:
+  Vector<Float, N> mDelta{};
+  Vector<Float, N> mPoint{};
+};
+
+using LowDiscrepancySequence2f = LowDiscrepancySequence<float, 2>;
+using LowDiscrepancySequence3f = LowDiscrepancySequence<float, 3>;
+using LowDiscrepancySequence4f = LowDiscrepancySequence<float, 4>;
+using LowDiscrepancySequence2d = LowDiscrepancySequence<double, 2>;
+using LowDiscrepancySequence3d = LowDiscrepancySequence<double, 3>;
+using LowDiscrepancySequence4d = LowDiscrepancySequence<double, 4>;
+
+template <std::floating_point Float> struct CubicInterpolator {
+public:
+  constexpr CubicInterpolator() noexcept = default;
+  constexpr CubicInterpolator(const Float *coordsPtr, size_t coordsCount) noexcept : coords(coordsPtr, coordsCount) {}
+  template <typename Value> [[nodiscard]] constexpr Value operator()(Float coord, const Value *values) {
+    if (sequentialLowerBoundIndex(indexB, coords, coord, std::less<>())) {
+      indexA = max(indexB - 1, 0);
+      indexPrev = max(indexB - 2, 0);
+      indexNext = min(indexB + 1, int(coords.size()) - 1);
+    }
+    return catmullRom(
+      unlerp(coord, coords[indexA], coords[indexB]), values[indexPrev], values[indexA], values[indexB], values[indexNext]);
+  }
+
+public:
+  IteratorRange<const Float *> coords;
+  int indexPrev{0};
+  int indexA{0};
+  int indexB{0};
+  int indexNext{0};
+};
+
+[[nodiscard]] constexpr Ray3d shadowRayBetween(Vector3d pointA, Vector3d pointB, double eps = 1e-5) {
+  return Ray3d(pointA, pointB - pointA, eps, 1 - eps);
+}
+
+} // namespace mi::render

@@ -1,0 +1,44 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/common"
+#include <span>
+
+namespace mi::vk {
+
+struct ShaderCreateInfo {
+  /// The shader stage.
+  VkShaderStageFlagBits stage = {};
+
+  /// The shader code.
+  std::span<const uint32_t> code;
+
+  /// The shader code filename, if `code` is empty.
+  std::string_view codeFilename;
+};
+
+struct MI_VK_API Shaders final : MoveOnly, WithDeviceAndAllocator, ArrayLike<Shaders> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Shaders, create, destroy)
+  MI_VK_DEFAULT_ARRAY_LIKE(shaders)
+
+  /// Create the shaders.
+  ///
+  /// \param[in] device       The Vulkan device.
+  /// \param[in] createInfos  The shader create info structures.
+  /// \param[in] allocator    The allocation callbacks.
+  ///
+  void
+  create(VkDevice device, const std::vector<ShaderCreateInfo> &createInfos, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Destroy the shaders.
+  void destroy();
+
+  /// The shader modules.
+  std::vector<VkShaderModule> shaders;
+
+  /// The associated stage create infos, for convenience.
+  std::vector<VkPipelineShaderStageCreateInfo> stageCreateInfos;
+};
+
+} // namespace mi::vk

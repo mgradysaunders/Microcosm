@@ -1,0 +1,83 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/common"
+
+namespace mi::render {
+
+template <typename Value> using SpectrumOf = Vector<Value, Dynamic>;
+
+using Spectrum = SpectrumOf<double>;
+
+using ComplexSpectrum = SpectrumOf<std::complex<double>>;
+
+template <typename Other> [[nodiscard, strong_inline]] inline auto spectrumZerosLike(Other &&other) noexcept {
+  return SpectrumOf<value_type_t<Other>>{with_shape, other.size()};
+}
+
+template <typename Other> [[nodiscard, strong_inline]] inline auto spectrumLike(Other &&other, const auto &value) noexcept {
+  SpectrumOf<value_type_t<Other>> spectrum{with_shape, other.size()};
+  spectrum = value;
+  return spectrum;
+}
+
+/// Linearly space values, typically wavelengths. Note: The value at each index is centered.
+MI_RENDER_API [[nodiscard]] Spectrum spectrumLinspace(size_t count, double minValue, double maxValue) noexcept;
+
+/// Linearly space values, typically wavelengths. Note: The value at each index is randomly jittered.
+MI_RENDER_API [[nodiscard]] Spectrum spectrumLinspace(size_t count, double minValue, double maxValue, Random &random) noexcept;
+
+/// Convert spectrum to XYZ.
+MI_RENDER_API [[nodiscard]] Vector3d convertSpectrumToXYZ(const Spectrum &waveLens, const Spectrum &values) noexcept;
+
+/// Convert spectrum to RGB.
+MI_RENDER_API [[nodiscard]] Vector3d convertSpectrumToRGB(const Spectrum &waveLens, const Spectrum &values) noexcept;
+
+/// Convert RGB to spectrum, for albedo. This follows the implementation in PBRT-v3.
+MI_RENDER_API [[nodiscard]] Spectrum convertRGBToSpectrumAlbedo(const Spectrum &waveLens, const Vector3d &color) noexcept;
+
+/// Convert RGB to spectrum, for illumination. This follows the implementation in PBRT-v3.
+MI_RENDER_API [[nodiscard]] Spectrum convertRGBToSpectrumIllumination(const Spectrum &waveLens, const Vector3d &color) noexcept;
+
+/// CIE Illuminant D (daylight) spectrum. Non-zero for wavelengths between 0.30-0.83μm.
+MI_RENDER_API [[nodiscard]] Spectrum spectrumIlluminantD(const Spectrum &waveLens, const Vector2d &chromaticity) noexcept;
+
+/// CIE Illuminant D50 (daylight) spectrum, with color temperature of 5003K. Non-zero for wavelengths between 0.30-0.83μm.
+[[nodiscard]] inline Spectrum spectrumIlluminantD50(const Spectrum &waveLens) noexcept {
+  return spectrumIlluminantD(waveLens, convertCCTToXY(5003.0));
+}
+
+/// CIE Illuminant D55 (daylight) spectrum, with color temperature of 5503K. Non-zero for wavelengths between 0.30-0.83μm.
+[[nodiscard]] inline Spectrum spectrumIlluminantD55(const Spectrum &waveLens) noexcept {
+  return spectrumIlluminantD(waveLens, convertCCTToXY(5503.0));
+}
+
+/// CIE Illuminant D65 (daylight) spectrum, with color temperature of 6504K. Non-zero for wavelengths between 0.30-0.83μm.
+[[nodiscard]] inline Spectrum spectrumIlluminantD65(const Spectrum &waveLens) noexcept {
+  return spectrumIlluminantD(waveLens, convertCCTToXY(6504.0));
+}
+
+/// CIE Illuminant D75 (daylight) spectrum, with color temperature of 7504K. Non-zero for wavelengths between 0.30-0.83μm.
+[[nodiscard]] inline Spectrum spectrumIlluminantD75(const Spectrum &waveLens) noexcept {
+  return spectrumIlluminantD(waveLens, convertCCTToXY(7504.0));
+}
+
+/// CIE Illuminant D93 (daylight) spectrum, with color temperature of 9305K. Non-zero for wavelengths between 0.30-0.83μm.
+[[nodiscard]] inline Spectrum spectrumIlluminantD93(const Spectrum &waveLens) noexcept {
+  return spectrumIlluminantD(waveLens, convertCCTToXY(9305.0));
+}
+
+/// CIE Illuminant F (fluorescent) spectrum, given the number between 1 and 12 inclusive.
+MI_RENDER_API [[nodiscard]] Spectrum spectrumIlluminantF(const Spectrum &waveLens, int number = 1) noexcept;
+
+/// Normalized blackbody.
+MI_RENDER_API [[nodiscard]] Spectrum spectrumBlackbody(const Spectrum &waveLens, double kelvin) noexcept;
+
+[[nodiscard]] inline int spectrumIndexSample(int count, double &sample) noexcept {
+  int index{0};
+  sample *= count;
+  sample = fastFract(sample, &index);
+  return min(index, count - 1);
+}
+
+} // namespace mi::render

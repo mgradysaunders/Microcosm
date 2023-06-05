@@ -1,0 +1,55 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./Click"
+
+namespace mi::ui {
+
+/// The fundamental behavior to click and hold something in order to move it around.
+struct ClickToMoveBehavior : ClickBehavior {
+protected:
+  using ClickBehavior::think;
+
+public:
+  /// Update.
+  ///
+  /// \param[in] clock
+  /// The clock, which may be implicitly converted from the context.
+  ///
+  /// \param[in] isInputTriggered
+  /// Is the input needed to trigger the pressed state down this frame and not last frame?
+  ///
+  /// \param[in] isInputSustained
+  /// Is the input needed to sustain the pressed state down this frame?
+  ///
+  /// \param[in] isHovered
+  /// Is the relevant region hovered by the mouse this frame?
+  ///
+  /// \param[in] mousePosition
+  /// The mouse position.
+  ///
+  /// \param[in,out] grabPosition
+  /// The grab position (or control or handle or whatever) that the mouse grabs
+  /// and moves when the click behavior is pressed. Client code must keep track of this,
+  /// and may additionally apply constraints afterward to keep it in some legitimate
+  /// range.
+  ///
+  /// \returns
+  /// Whether the click behavior is pressed, and thus whether the mouse is actually
+  /// updating the grab position.
+  ///
+  [[strong_inline]] bool think(
+    const Clock &clock, //
+    bool isInputTriggered, bool isInputSustained, bool isHovered, Vector2d mousePosition, Vector2d &grabPosition) noexcept {
+    ClickBehavior::think(clock, isInputTriggered, isInputSustained, isHovered);
+    if (pressed.justTrue()) grabOffset = grabPosition - mousePosition;
+    if (pressed) grabPosition = mousePosition + grabOffset;
+    return pressed;
+  }
+
+  /// The separation from the mouse position to the grab position, necessary to maintain
+  /// the original offset while the mouse moves around.
+  Vector2d grabOffset;
+};
+
+} // namespace mi::ui

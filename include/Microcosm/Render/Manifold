@@ -1,0 +1,93 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/common"
+
+namespace mi::render {
+
+struct MI_RENDER_API Manifold final {
+public:
+  uint32_t primitiveIndex{};
+
+  /// The position.
+  Vector3d point;
+
+  struct MI_RENDER_API TangentSpace final {
+  public:
+    /// Calculate unit-length normal from the tangents.
+    void calculateNormalFromTangents() noexcept;
+
+    /// Calculate unit-length tangents (arbitrarily) from the normal.
+    void calculateTangentsFromNormal() noexcept;
+
+    /// Flatten the tangents into the plane perpendicular to the normal.
+    void flattenTangentsToNormal() noexcept;
+
+    /// The Jacobian matrix.
+    [[nodiscard]] Matrix3x2d jacobian() const noexcept { return Matrix3x2d(from_cols, tangents[0], tangents[1]); }
+
+    /// The orthonormal local-to-world transform.
+    [[nodiscard]] Quaterniond orthonormalLocalToWorld() const noexcept;
+
+    /// The orthonormal world-to-local transform.
+    [[nodiscard]] Quaterniond orthonormalWorldToLocal() const noexcept { return conj(orthonormalLocalToWorld()); }
+
+    /// Perturb with local bump map evaluation. This expects the slope or gradient of the bump map at the
+    /// intersection point (the standard calculation is to difference adjacent pixels and scale the result by
+    /// some user-controlled intensity).
+    void perturbWithLocalBump(Vector2d localSlope) noexcept { perturbWithLocalNormal(convertSlopeToNormal(localSlope)); }
+
+    /// Perturb with local normal map evaluation.
+    void perturbWithLocalNormal(Vector3d localNormal) noexcept;
+
+    /// Perturb with local azimuth rotation around the normal. This is useful for changing the
+    /// alignment of anisotropic scattering functions.
+    void perturbWithLocalAzimuthRotation(double localRotation) noexcept;
+
+  public:
+    /// The surface parameters.
+    Vector2d parameters{};
+
+    /// The surface tangent vectors, which represent the partial derivatives of the intersection point with respect to
+    /// the surface parameters.
+    Vector3d tangents[2]{};
+
+    /// The surface normal vector, which is perpendicular to the surface (and thus both of the tangent vectors) at
+    /// the intersection point.
+    Vector3d normal;
+
+    void onTransform(auto &&transform) {
+      AsLinear(tangents[0]) >>= transform;
+      AsLinear(tangents[1]) >>= transform;
+      AsNormal(normal) >>= transform;
+    }
+  };
+
+  /// The correct tangent space, which is accurate to the underlying geometric representation.
+  TangentSpace correct;
+
+  /// The shading tangent space, which is often perturbed by interpolating shading normals and
+  /// tangents, and/or applying normal maps to artificially increase the apparent geometric
+  /// details.
+  TangentSpace shading;
+
+  /// The nearest distance found so far, if applicable. Meant to be used and updated by
+  /// the nearestTo() implementations.
+  double nearestDistance{Inf};
+
+  void onTransform(auto &&transform) {
+    AsAffine(point) >>= transform;
+    correct.onTransform(transform);
+    shading.onTransform(transform);
+  }
+};
+
+[[nodiscard]] inline double convertSolidAngleToArea(const Vector3d &pointA, const Manifold &pointB) noexcept {
+  return convertSolidAngleToArea(pointA, pointB.point, pointB.correct.normal);
+}
+
+[[nodiscard]] inline double convertAreaToSolidAngle(const Vector3d &pointA, const Manifold &pointB) noexcept {
+  return convertAreaToSolidAngle(pointA, pointB.point, pointB.correct.normal);
+}
+
+} // namespace mi::render

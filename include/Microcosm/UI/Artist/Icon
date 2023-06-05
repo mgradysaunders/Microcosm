@@ -1,0 +1,195 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./Stroke"
+
+namespace mi::ui {
+
+struct MI_UI_API IconArtist final : public Artist {
+public:
+  using Artist::Artist;
+  MI_UI_DECLARE_WITH(withStrokeColor, mStrokeColor);
+  MI_UI_DECLARE_WITH(withStrokeWidth, mStrokeWidth);
+
+public:
+#if 0
+  /// Draw three dots.
+  IconArtist &threeDots(float theta = 0);
+
+  /// Draw three dots, horizontal.
+  IconArtist &threeDotsH() { return threeDots(); }
+
+  /// Draw three dots, vertical.
+  IconArtist &threeDotsV() { return threeDots(90.0_degreesf); }
+
+  /// Draw three-by-three grid of dots.
+  IconArtist &threeByThreeDots();
+#endif
+
+  /// Draw a minus.
+  IconArtist &minus(float theta = 0);
+
+  /// Dra a plus.
+  IconArtist &plus(float theta = 0);
+
+  /// Draw a letter X.
+  IconArtist &ex() { return plus(45.0_degreesf); }
+
+  /// Draw a check mark.
+  IconArtist &check();
+
+  /// Draw a chevron.
+  IconArtist &chevron(float theta = 0);
+
+  /// Draw an arrow.
+  IconArtist &arrow(float theta);
+
+  /// Draw an arrow pointing east.
+  IconArtist &arrowEast() { return arrow(0); }
+
+  /// Draw an arrow pointing west.
+  IconArtist &arrowWest() { return arrow(180.0_degreesf); }
+
+  /// Draw an arrow pointing north.
+  IconArtist &arrowNorth() { return arrow(+90.0_degreesf); }
+
+  /// Draw an arrow pointing south.
+  IconArtist &arrowSouth() { return arrow(-90.0_degreesf); }
+
+  /// Draw a two-way arrow.
+  IconArtist &twoWayArrow(float theta = 0);
+
+  /// Draw a four-way arrow.
+  IconArtist &fourWayArrow(float theta = 0);
+
+  /// Draw an arrow pointing into (or out of) an open box. Points east by default.
+  IconArtist &arrowIntoBox(float theta = 0, bool outOfBox = false);
+
+  /// Draw a clockwise circular refresh arrow.
+  IconArtist &refresh();
+
+  IconArtist &undo();
+
+  IconArtist &redo();
+
+  /// Draw a magnifying glass with a plus inside the lens.
+  IconArtist &zoomIn();
+
+  /// Draw a magnifying glass with a minus inside the lens.
+  IconArtist &zoomOut();
+
+  /// Draw a search magnifying glass.
+  IconArtist &search();
+
+  /// Draw a trash bin.
+  IconArtist &trash();
+
+  /// Draw a letter (as in mail).
+  IconArtist &letter();
+
+  /// Draw a folder.
+  IconArtist &folder();
+
+  /// Draw a document.
+  IconArtist &document();
+
+  /// Draw an eye.
+  IconArtist &eye();
+
+  // TODO hammer()
+
+  // TODO wrench()
+
+  /// Draw a padlock.
+  IconArtist &padlock(float lockFraction = 1.0f);
+
+  /// Draw a key.
+  IconArtist &key();
+
+  /// Draw a sun.
+  IconArtist &sun();
+
+  /// Draw a snowflake.
+  IconArtist &snowflake();
+
+  /// Draw a hash (also known as pound).
+  IconArtist &hash();
+
+  /// Draw a musical sharp symbol (similar to a skewed hash).
+  IconArtist &musicSharp();
+
+  /// Draw a musical flat symbol.
+  IconArtist &musicFlat();
+
+  /// Draw a gene or chromosome symbol.
+  IconArtist &gene();
+
+  /// Draw a bug.
+  IconArtist &bug();
+
+  /// Draw a leaf.
+  IconArtist &leaf();
+
+  /// Draw a tree.
+  IconArtist &tree();
+
+  /// Draw a gear.
+  IconArtist &gear();
+
+  /// Draw a die.
+  IconArtist &dice();
+
+  /// Draw the male gender symbol.
+  IconArtist &male();
+
+  /// Draw the female gender symbol.
+  IconArtist &female();
+
+  /// Draw the nonbinary gender symbol.
+  ///
+  /// \note
+  /// There are many proposed symbols for nonbinary/genderqueer folks out there. At least for the time being, the
+  /// implementation here models this one: https://en.wiktionary.org/wiki/non-binary.
+  IconArtist &nonbinary();
+
+  IconArtist &infinity();
+
+  IconArtist &forAll();
+
+  IconArtist &partial();
+
+#if 0
+    IconArtist &nabla();
+
+    IconArtist &nablaSquared();
+#endif
+
+public:
+  IconArtist &strikeThrough() {
+    stroke().moveTo({-1, +1}).lineTo({+1, -1}).finish(/*roundCaps=*/true);
+    return *this;
+  }
+
+  /// Surround the icon with a circle.
+  IconArtist &surroundWithCircle() {
+    stroke().circle({0, 0}, constants::SqrtTwo<float>);
+    return *this;
+  }
+
+  /// Surround the icon with a rectangle.
+  IconArtist &surroundWithRectangle() {
+    stroke().rectangle(Rect({-1, -1}, {+1, +1}), 0.05f);
+    return *this;
+  }
+
+private:
+  Vector4b mStrokeColor{Vector4b{0xFF}};
+
+  float mStrokeWidth{1.0f / 24.0f};
+
+  [[nodiscard]] StrokeArtist stroke() noexcept {
+    return std::move(StrokeArtist(mCtx, mDrawCmds).withStrokeWidth(mStrokeWidth).withStrokeColor(mStrokeColor));
+  }
+};
+
+} // namespace mi::ui

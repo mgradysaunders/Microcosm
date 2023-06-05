@@ -1,0 +1,101 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Geometry/common"
+#include <map>
+
+namespace mi {
+
+struct MI_GEOMETRY_API SparseMatrix {
+public:
+  SparseMatrix() = default;
+
+  SparseMatrix(size_t numRows, size_t numCols) : mShape(numRows, numCols) {}
+
+  [[nodiscard]] auto numNonZero() const noexcept { return mValues.size(); }
+
+  [[nodiscard]] auto rows() const noexcept { return mShape.rows(); }
+
+  [[nodiscard]] auto cols() const noexcept { return mShape.cols(); }
+
+  [[nodiscard]] auto begin() noexcept { return mValues.begin(); }
+
+  [[nodiscard]] auto begin() const noexcept { return mValues.begin(); }
+
+  [[nodiscard]] auto end() noexcept { return mValues.end(); }
+
+  [[nodiscard]] auto end() const noexcept { return mValues.end(); }
+
+  void resize(size_t numRows, size_t numCols);
+
+  void clear() noexcept {
+    mShape = {};
+    mValues.clear();
+  }
+
+  void setZero();
+
+  void setRowToZero(size_t i);
+
+  void setColToZero(size_t j);
+
+  void setIdentity();
+
+  void addIdentity(double factor = 1);
+
+  double setValue(IndexVector<2> ij, double value);
+
+  [[nodiscard]] double getValue(IndexVector<2> ij) const;
+
+  [[nodiscard]] double &operator()(size_t i, size_t j) { return mValues[IndexVector(i, j)]; }
+
+  SparseMatrix &operator+=(const SparseMatrix &other);
+
+  SparseMatrix &operator-=(const SparseMatrix &other);
+
+  SparseMatrix &operator*=(double factor);
+
+  SparseMatrix &operator/=(double factor);
+
+  [[nodiscard]] SparseMatrix transpose() const;
+
+  [[nodiscard]] SparseMatrix dot(const SparseMatrix &other) const;
+
+  template <typename Expr> requires(concepts::tensor_with_rank<Expr, 1>) [[nodiscard]] auto dot(Expr &&vectorX) const {
+    auto shapeX{vectorX.shape};
+    auto shapeY{mShape.template take<0>()};
+    equalShapes(mShape.template take<1>(), shapeX);
+    Vectord vectorY{shapeY};
+    for (auto &[ij, value] : mValues) vectorY[ij[0]] += value * vectorX[ij[1]];
+    return vectorY;
+  }
+
+  template <typename Expr> requires(concepts::tensor_with_rank<Expr, 2>) [[nodiscard]] auto dot(Expr &&matrixX) const {
+    auto shapeX{matrixX.shape};
+    auto shapeY{mShape.template take<0>().append(shapeX.template take<1>())};
+    equalShapes(mShape.template take<1>(), shapeX.template take<0>());
+    Tensor<double, std::decay_t<decltype(shapeY)>> matrixY{shapeY};
+    for (auto &[ik, value] : mValues)
+      for (size_t j = 0; j < matrixX.cols(); j++) matrixY(ik[0], j) += value * matrixX(ik[1], j);
+    return matrixY;
+  }
+
+  [[nodiscard]] Matrixd solveQR(const Matrixd &matrixB) const;
+
+  [[nodiscard]] Matrixd solveLU(const Matrixd &matrixB) const;
+
+  [[nodiscard]] Matrixd solveCholesky(const Matrixd &matrixB) const;
+
+  enum class Order { Largest, Smallest };
+
+  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(Order order, size_t count) const;
+
+  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(Order order, size_t count, const SparseMatrix &matrixI) const;
+
+private:
+  TensorShape<Dynamic, Dynamic> mShape;
+
+  std::map<IndexVector<2>, double> mValues;
+};
+
+} // namespace mi

@@ -1,0 +1,87 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Spectrum"
+#include <atomic>
+
+namespace mi::render {
+
+struct MI_RENDER_API SpectrumImage final {
+public:
+  using AtomicUInt64 = std::atomic<uint64_t>;
+
+  using AtomicDouble = std::atomic<double>;
+
+  static_assert(
+    sizeof(AtomicUInt64) == 8 && AtomicUInt64::is_always_lock_free && //
+    sizeof(AtomicDouble) == 8 && AtomicDouble::is_always_lock_free);
+
+  SpectrumImage() noexcept = default;
+
+  SpectrumImage(const SpectrumImage &) = delete;
+
+  SpectrumImage(SpectrumImage &&other) noexcept
+    : mNumBands(steal(other.mNumBands)), mSizeX(steal(other.mSizeX)), mSizeY(steal(other.mSizeY)), mData(steal(other.mData)) {}
+
+  ~SpectrumImage() { clear(); }
+
+  SpectrumImage &operator=(const SpectrumImage &) = delete;
+
+  SpectrumImage &operator=(SpectrumImage &&other) {
+    clear();
+    mNumBands = steal(other.mNumBands);
+    mSizeX = steal(other.mSizeX);
+    mSizeY = steal(other.mSizeY);
+    mData = steal(other.mData);
+    return *this;
+  }
+
+  void resize(int newNumBands, Vector2i newSize) noexcept;
+
+  void clear() noexcept;
+
+  [[nodiscard]] int numBands() const noexcept { return mNumBands; }
+
+  [[nodiscard]] int sizeX() const noexcept { return mSizeX; }
+
+  [[nodiscard]] int sizeY() const noexcept { return mSizeY; }
+
+  [[nodiscard]] int imageSizeInBytes() const noexcept { return mSizeX * mSizeY * pixelSizeInBytes(); }
+
+  [[nodiscard]] int pixelSizeInBytes() const noexcept {
+    return sizeof(AtomicUInt64) + sizeof(AtomicDouble) + sizeof(AtomicDouble) * mNumBands;
+  }
+
+  struct PixelReference {
+    AtomicUInt64 &num;
+    AtomicDouble &weight;
+    AtomicDouble *values;
+  };
+
+  [[nodiscard]] PixelReference pixelReference(Vector2i index) noexcept {
+    auto *ptr = mData + pixelSizeInBytes() * (mSizeX * index[1] + index[0]);
+    return {
+      *reinterpret_cast<AtomicUInt64 *>(ptr),                        //
+      *reinterpret_cast<AtomicDouble *>(ptr + sizeof(AtomicUInt64)), //
+      reinterpret_cast<AtomicDouble *>(ptr + sizeof(AtomicUInt64) + sizeof(AtomicDouble))};
+  }
+
+  [[nodiscard]] bool isIndexValid(Vector2i index) const noexcept {
+    return 0 <= index[0] && index[0] < mSizeX && 0 <= index[1] && index[1] < mSizeY;
+  }
+
+  void add(Vector2i index, const Spectrum &values, double weight = 1);
+
+  [[nodiscard]] Spectrum extract(Vector2i index, bool divideOutNum = false, bool divideOutWeight = false);
+
+private:
+  int mNumBands{};
+
+  int mSizeX{};
+
+  int mSizeY{};
+
+  std::byte *mData{};
+};
+
+} // namespace mi::render

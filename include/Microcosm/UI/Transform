@@ -1,0 +1,133 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/Rect"
+#include "Microcosm/UI/common"
+
+namespace mi::ui {
+
+struct MI_UI_API Transform {
+public:
+  constexpr Transform() noexcept = default;
+
+  Transform(const Matrix2f &matrix) noexcept;
+
+  Transform(const Matrix2f &matrix, const Vector2f &affine) noexcept;
+
+  Transform(const Matrix2x3f &matrix) noexcept : Transform(matrix.linear(), matrix.col(2)) {}
+
+  explicit constexpr Transform(std::in_place_t, const Matrix2x3f &forward, const Matrix2x3f &inverse) noexcept
+    : mForward(forward), mInverse(inverse) {}
+
+  [[nodiscard]] constexpr Transform operator*(const Transform &other) const noexcept {
+    return Transform(std::in_place, affineDot(mForward, other.mForward), affineDot(other.mInverse, mInverse));
+  }
+
+  /// Apply the transform to a linear vector.
+  [[nodiscard]] constexpr Vector2f applyLinear(Vector2f vectorV) const noexcept { return dot(mForward.linear(), vectorV); }
+
+  /// Apply the transform to a normal vector.
+  [[nodiscard]] constexpr Vector2f applyNormal(Vector2f vectorN) const noexcept { return dot(vectorN, mInverse.linear()); }
+
+  /// Apply the transform to an affine vector (also known as a point).
+  [[nodiscard]] constexpr Vector2f applyAffine(Vector2f vectorP) const noexcept { return applyLinear(vectorP) + translation(); }
+
+  /// Translate.
+  constexpr Transform &translate(Vector2f offset) noexcept {
+    mForward.col(2) += offset, mInverse.col(2) -= dot(mInverse.linear(), offset);
+    return *this;
+  }
+
+  /// Rotate.
+  Transform &rotate(float theta) noexcept {
+    Matrix2f rotation = Matrix2f::rotate(theta);
+    mForward = dot(rotation, mForward), mInverse.linear().assign(dot(mInverse.linear(), transpose(rotation)));
+    return *this;
+  }
+
+  /// Uniformly scale.
+  constexpr Transform &scale(float amount) noexcept {
+    mForward *= amount, mInverse.linear() *= 1.0f / amount;
+    return *this;
+  }
+
+  /// Non-uniformly scale.
+  constexpr Transform &scale(Vector2f amount) noexcept {
+    mForward.row(0) *= amount[0], mInverse.col(0) *= 1.0f / amount[0];
+    mForward.row(1) *= amount[1], mInverse.col(1) *= 1.0f / amount[1];
+    return *this;
+  }
+
+  /// Map the [0,1) square onto the given rectangle.
+  constexpr Transform &rectilinearForward(Rect rect) noexcept { return scale(rect[1] - rect[0]).translate(rect[0]); }
+
+  /// Map the given rectangle onto the [0,1) square.
+  constexpr Transform &rectilinearInverse(Rect rect) noexcept { return translate(-rect[0]).scale(1 / (rect[1] - rect[0])); }
+
+  /// Map the first rectangle onto the second rectangle.
+  constexpr Transform &rectilinear(Rect rectA, Rect rectB) noexcept {
+    return rectilinearInverse(rectA).rectilinearForward(rectB);
+  }
+
+  /// Has rotation? This is an exact check without any epsilon.
+  [[nodiscard]] constexpr bool hasRotation() const noexcept { return mForward(0, 1) != 0 || mForward(1, 0) != 0; }
+
+  /// Has translation? This is an exact check without any epsilon.
+  [[nodiscard]] constexpr bool hasTranslation() const noexcept { return mForward(0, 2) != 0 || mForward(1, 2) != 0; }
+
+  /// The local X-axis.
+  [[nodiscard]] constexpr Vector2f axisX() const noexcept { return mForward.col(0); }
+
+  /// The local Y-axis.
+  [[nodiscard]] constexpr Vector2f axisY() const noexcept { return mForward.col(1); }
+
+  /// The translation.
+  [[nodiscard]] constexpr Vector2f translation() const noexcept { return mForward.col(2); }
+
+  /// The angle of rotation.
+  ///
+  /// This is computed as the canonical angle of the local X-axis. So, this is only well-defined
+  /// if the transform has no skewing, though it may have non-uniform scale.
+  ///
+  [[nodiscard]] float angle() const noexcept { return atan2(mForward(1, 0), mForward(0, 0)); }
+
+  /// The scale factor.
+  ///
+  /// This is computed as the square root of the absolute value of the determinant. So,
+  /// this is only well-defined if the transform has no skewing and no non-uniform scale.
+  ///
+  [[nodiscard]] float scale() const noexcept { return sqrt(abs(determinant(mForward))); }
+
+  /// The inverse transform.
+  ///
+  /// The implementation tracks the forward and inverse transforms simultaneously, and so this function only
+  /// exchanges the forward and inverse representations without needing to do any expensive inverse
+  /// calculations.
+  ///
+  [[nodiscard]] constexpr Transform inverse() const noexcept { return Transform(std::in_place, mInverse, mForward); }
+
+  /// Extract the underlying 2x3 forward transform matrix.
+  [[nodiscard]] explicit constexpr operator Matrix2x3f() const noexcept { return mForward; }
+
+  /// Extract the linear part of the 2x3 forward transform matrix.
+  [[nodiscard]] explicit constexpr operator Matrix2f() const noexcept { return mForward.linear(); }
+
+  /// Extract the affine part of the 2x3 forward transform matrix (same as `translation()`).
+  [[nodiscard]] explicit constexpr operator Vector2f() const noexcept { return mForward.col(2); }
+
+  /// Pad the 2x3 forward transform matrix as 4x4.
+  [[nodiscard]] explicit constexpr operator Matrix4f() const noexcept {
+    return {
+      {mForward[0][0], mForward[0][1], 0, mForward[0][2]},
+      {mForward[1][0], mForward[1][1], 0, mForward[1][2]},
+      {0, 0, 1, 0},
+      {0, 0, 0, 1}};
+  }
+
+private:
+  Matrix2x3f mForward = {{1, 0}, {0, 1}, {0, 0}};
+
+  Matrix2x3f mInverse = {{1, 0}, {0, 1}, {0, 0}};
+};
+
+} // namespace mi::ui

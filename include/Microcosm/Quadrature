@@ -1,0 +1,136 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Quadrature_Export.h"
+#include "Microcosm/math"
+#include "Microcosm/memory"
+
+namespace mi {
+
+/// A Gauss-Legendre quadrature angle/weight pair.
+///
+/// \param[in] n  The number of nodes.
+/// \param[in] k  The node index in `[1,n]`.
+///
+/// \note
+/// This is an adaptation of Ignace Bogaert's implementation of
+/// his _FastGL_ algorithm, described in "Iteration-Free Computation
+/// of Gauss-Legendre Quadrature Nodes and Weights" published in
+/// the SIAM Journal of Scientific Computing.
+///
+MI_QUADRATURE_API std::pair<double, double> gaussLegendre(int n, int k) noexcept;
+
+/// A quadrature rule with N points.
+template <size_t N> struct Quadrature {
+public:
+  Quadrature() noexcept {
+    for (int k = 0; k < int(N / 2 + (N & 1)); k++) {
+      auto [theta, omega] = gaussLegendre(N, k + 1);
+      x[k] = std::cos(theta);
+      w[k] = omega;
+    }
+  }
+
+  /// Integrate function from -1 to +1.
+  template <std::invocable<double> Func> double operator()(Func &&func) const {
+    double f = 0;
+    for (int k = 0; k < int(N / 2); k++) {
+      double f0 = std::invoke(std::forward<Func>(func), +x[k]);
+      double f1 = std::invoke(std::forward<Func>(func), -x[k]);
+      f += w[k] * (f0 + f1);
+    }
+    if constexpr (N & 1) f += w[N / 2] * std::invoke(std::forward<Func>(func), x[N / 2]);
+    return f;
+  }
+
+  /// Integrate function over given range.
+  ///
+  /// \note
+  /// Limits need not be in order. That is, integrating over [b, a] is
+  /// simply the integral over [a, b] with the sign flipped. Furthermore,
+  /// one or both may be infinity, in which case convenient identities are
+  /// used to map the integral onto -1 to +1.
+  ///
+  template <std::invocable<double> Func> double operator()(double a, double b, Func &&func) const {
+    if (a == b) return 0;
+    double f = 0;
+    double s = a < b ? +1 : -1;
+    if (s == -1) std::swap(a, b);
+    if (
+      std::isfinite(a) and //
+      std::isfinite(b)) {
+      f = operator()([=](double x) { return std::invoke(func, lerp(std::fma(x, 0.5, 0.5), a, b)); });
+      f *= (b - a) / 2;
+    } else if (std::isinf(a) and std::isinf(b)) {
+      f = operator()([=](double x) {
+        double u = 1 - x * x;
+        double v = 1 + x * x;
+        return v / (u * u) * std::invoke(func, x / u);
+      });
+    } else if (std::isinf(b)) {
+      a -= 1;
+      f = operator()([=](double x) {
+        double u = 2 / (1 + x);
+        return 0.5 * u * u * std::invoke(func, a + u);
+      });
+    } else {
+      b += 1;
+      f = operator()([=](double x) {
+        double u = 2 / (1 + x);
+        return 0.5 * u * u * std::invoke(func, b - u);
+      });
+    }
+    return s * f;
+  }
+
+  /// The abscissas.
+  double x[N / 2 + (N & 1)] = {};
+
+  /// The weights.
+  double w[N / 2 + (N & 1)] = {};
+};
+
+struct AdaptiveSimpsonQuadrature {
+  /// Integrate function over the given range.
+  template <std::invocable<double> Func> double operator()(double a, double b, Func &&func) const {
+    if (a == b) return 0;
+    struct Params {
+      double e = 0;
+      double p = 0, q = 0;
+      double fp = 0, fq = 0, fm = 0;
+      double g = 0;
+    };
+    double terms = 0;
+    double fa = std::invoke(func, a);
+    double fb = std::invoke(func, b);
+    double fm = std::invoke(func, (a + b) / 2);
+    GrowableStack<Params, 16> todo;
+    todo.push({err, a, b, fa, fb, fm, (b - a) / 12 * (fa + fb + 4 * fm)});
+    while (not todo.empty()) {
+      auto [e, p, q, fp, fq, fm, g] = todo.pop();
+      double m = (p + q) / 2;
+      double f0 = std::invoke(func, (p + m) / 2);
+      double f1 = std::invoke(func, (m + q) / 2);
+      double g0 = (q - p) / 12 * (fp + fm + 4 * f0);
+      double g1 = (q - p) / 12 * (fm + fq + 4 * f1);
+      if (double delta = g0 + g1 - g; todo.size() >= min_depth and (abs(delta) < 15 * e or todo.size() >= max_depth))
+        terms += g0 + g1 + delta / 15;
+      else {
+        todo.push({e / 2, p, m, fp, fm, f0, g0});
+        todo.push({e / 2, m, q, fm, fq, f1, g1});
+      }
+    }
+    return terms;
+  }
+
+  /// The error tolerance.
+  double err = 1e-6;
+
+  /// The minimum recursion depth.
+  size_t min_depth = 0;
+
+  /// The maximum recursion depth.
+  size_t max_depth = 8;
+};
+
+} // namespace mi

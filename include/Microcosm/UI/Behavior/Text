@@ -1,0 +1,80 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "./common"
+
+namespace mi::ui {
+
+struct Text;
+
+struct MI_UI_API TextBehavior {
+public:
+  void setEditable(bool flag) noexcept { mEditable = flag; }
+
+  [[nodiscard]] bool editable() const noexcept { return mEditable; }
+
+  [[nodiscard]] size_t cursorA() const noexcept { return mCursorA; }
+
+  [[nodiscard]] size_t cursorB() const noexcept { return mCursorB; }
+
+  [[nodiscard]] bool hasSelection() const noexcept { return mCursorA != mCursorB; }
+
+  [[nodiscard]] std::string selection() const;
+
+  void selectWord();
+
+  void selectLine();
+
+  void deselect() { mCursorA = mCursorB; }
+
+  void eraseSelection();
+
+  void insert(char32_t codepoint);
+
+  void insert(const std::string &text);
+
+  void pressLeft(bool selecting);
+
+  void pressRight(bool selecting);
+
+  void pressUp(bool selecting, const Text &text);
+
+  void pressDown(bool selecting, const Text &text);
+
+  void pressHome(bool selecting);
+
+  void pressEnd(bool selecting);
+
+  void pressBackspace();
+
+  void pressDelete();
+
+  void pressCtrlX(Context &ctx) { ctx.setClipboardText(selection()), eraseSelection(); }
+
+  void pressCtrlC(Context &ctx) { ctx.setClipboardText(selection()); }
+
+  void pressCtrlV(Context &ctx) { insert(ctx.getClipboardText()); }
+
+  void think(Context &ctx, Text &text, bool ignoreMouse = false, bool ignoreKeyboard = false);
+
+  void convertBackToString(std::string &result) const;
+
+  [[nodiscard]] std::string convertBackToString() const {
+    std::string result;
+    convertBackToString(result);
+    return result;
+  }
+
+private:
+  std::vector<char32_t> mBuffer;
+
+  size_t mCursorA{0};
+
+  size_t mCursorB{0};
+
+  bool mEditable{true};
+
+  bool mMouseActive{false};
+};
+
+} // namespace mi::ui

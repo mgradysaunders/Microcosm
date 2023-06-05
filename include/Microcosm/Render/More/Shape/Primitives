@@ -1,0 +1,220 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Manifold"
+
+namespace mi::render {
+
+/// This defines an interface to primitive shapes, which readily support everything we might
+/// want to do when rendering. That is: calculating bounding boxes, testing for ray intersections,
+/// finding nearest points, and sampling random points with respect to surface area as well as
+/// solid angle.
+///
+/// The motivation for using an ordinary virtual interface here instead of reverse polymorphism is that
+/// the scope here is limited (we demand that every implementation support everything), and it is more convenient
+/// and performant to have defaulted virtual functions specifically concering solid angle sampling and density
+/// evaluation, which can easily lean on the guaranteed-to-be-present area sampling and intersection routines
+/// to prevent self-shadowing. Also note: all of the implementations operate in a rather restricted local space. 
+/// If you need to do instance-like transforms, it is understood that this can be accomplished by binding the 
+/// primitive to the relevant reverse polymorphic interfaces and then applying the transform there.
+struct MI_RENDER_API Primitive {
+public:
+  virtual ~Primitive() = default;
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] virtual BoundBox3d box() const noexcept = 0;
+
+  [[nodiscard]] virtual std::optional<double> intersect(Ray3d ray) const noexcept {
+    Manifold manifold;
+    return intersect(ray, manifold);
+  }
+
+  [[nodiscard]] virtual std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept = 0;
+
+  [[nodiscard]] virtual std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept = 0;
+
+  [[nodiscard]] virtual double area() const noexcept = 0;
+
+  [[nodiscard]] virtual double areaPDF(Manifold) const noexcept { return 1 / area(); }
+
+  [[nodiscard]] virtual double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept = 0;
+
+  [[nodiscard]] virtual double solidAnglePDF(Vector3d referencePoint, Manifold manifold) const noexcept {
+    return convertAreaToSolidAngle(referencePoint, manifold) * areaPDF(manifold);
+  }
+
+  [[nodiscard]] virtual double solidAngleSample(Vector2d sampleU, Vector3d referencePoint, Manifold &manifold) const noexcept {
+    double density{areaSample(sampleU, manifold)};
+    if (density *= convertAreaToSolidAngle(referencePoint, manifold);
+        density > 0 && !intersect(shadowRayBetween(referencePoint, manifold.point))) {
+      return density;
+    } else {
+      return 0;
+    }
+  }
+
+  [[nodiscard]] virtual Manifold parameterization(Vector2d parameters) const noexcept = 0;
+  /// \}
+};
+
+/// A planar disk.
+struct MI_RENDER_API Disk final : public Primitive {
+public:
+  using shape_tag = std::true_type;
+
+  constexpr Disk(double radius = 1, double offset = 0) noexcept : mRadius(radius), mOffset(offset) {}
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override { return Pi * sqr(mRadius); }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = manifoldOf(Vector2d(mRadius * uniformDiskSample(sampleU)).append(mOffset));
+    return 1 / area();
+  }
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override {
+    return manifoldOf(
+      {mRadius * parameters[0] * cos(TwoPi * parameters[1]), //
+       mRadius * parameters[0] * sin(TwoPi * parameters[1]), //
+       mOffset});
+  }
+  /// \}
+
+private:
+  double mRadius{1}; ///< The radius.
+  double mOffset{0}; ///< The offset in Z.
+
+  [[nodiscard]] Manifold manifoldOf(Vector3d point) const noexcept;
+};
+
+/// A sphere.
+struct MI_RENDER_API Sphere final : public Primitive {
+public:
+  using shape_tag = std::true_type;
+
+  constexpr Sphere(double radius = 1) noexcept : mRadius(radius) {}
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override { return 4 * Pi * sqr(mRadius); }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = manifoldOf(mRadius * uniformSphereSample(sampleU));
+    return 1 / area();
+  }
+
+  [[nodiscard]] double solidAnglePDF(Vector3d referencePoint, Manifold manifold) const noexcept override;
+
+  [[nodiscard]] double solidAngleSample(Vector2d sampleU, Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override {
+    return manifoldOf(
+      {mRadius * sin(Pi * parameters[0]) * cos(TwoPi * parameters[1]), //
+       mRadius * sin(Pi * parameters[0]) * sin(TwoPi * parameters[1]), //
+       mRadius * cos(Pi * parameters[0])});
+  }
+  /// \}
+
+private:
+  double mRadius{1};
+
+  [[nodiscard]] Manifold manifoldOf(Vector3d point) const noexcept;
+};
+
+/// A cylinder.
+struct MI_RENDER_API Cylinder final : public Primitive {
+public:
+  using shape_tag = std::true_type;
+
+  Cylinder(double radius = 1, double heightA = -1, double heightB = +1) noexcept
+    : mRadius(radius), mHeightA(heightA), mHeightB(heightB) {}
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override { return 2 * Pi * mRadius * abs(mHeightB - mHeightA); }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = parameterization(sampleU);
+    return 1 / area();
+  }
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override {
+    return manifoldOf(
+      {mRadius * cos(TwoPi * parameters[1]), //
+       mRadius * sin(TwoPi * parameters[1]), //
+       lerp(parameters[0], mHeightA, mHeightB)});
+  }
+  /// \}
+
+private:
+  double mRadius{1};
+  double mHeightA{-1};
+  double mHeightB{+1};
+
+  [[nodiscard]] Manifold manifoldOf(Vector3d point) const noexcept;
+};
+
+// TODO Cone
+
+struct MI_RENDER_API Triangle final : public Primitive, public ArrayLike<Triangle> {
+public:
+  using shape_tag = std::true_type;
+
+  static constexpr double Eps = 1e-7;
+
+  constexpr Triangle() noexcept = default;
+
+  constexpr Triangle(const Vector3d &pointA, const Vector3d &pointB, const Vector3d &pointC) noexcept
+    : mPoints{pointA, pointB, pointC} {}
+
+public:
+  MI_ARRAY_LIKE_CONSTEXPR_DATA(&mPoints[0])
+
+  MI_ARRAY_LIKE_STATIC_CONSTEXPR_SIZE(3)
+
+public:
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override {
+    return fastLength(cross(mPoints[1] - mPoints[0], mPoints[2] - mPoints[0])) / 2;
+  }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = parameterization(uniformTriangleSample(sampleU));
+    return 1 / area();
+  }
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override;
+  /// \}
+
+private:
+  Vector3d mPoints[3]{};
+};
+
+} // namespace mi::render

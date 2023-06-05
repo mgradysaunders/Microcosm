@@ -1,0 +1,181 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/GPU/Vulkan/Instance"
+
+namespace mi::vk {
+
+struct DeviceCreateInfo {
+  /// The associated surface.
+  VkSurfaceKHR surface{};
+
+  /// The requested device name, if desired.
+  std::string_view requestedDeviceName{};
+};
+
+struct MI_VK_API Device final : MoveOnly {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(Device, create, destroy)
+
+  void create(const Instance &instance, const DeviceCreateInfo &createInfo, const VkAllocationCallbacks *allocator = nullptr);
+
+  void destroy();
+
+  /// Implicit usage as `VkDevice`.
+  [[nodiscard]] operator VkDevice() const noexcept { return device; }
+
+  /// Implicit usage as `VkPhysicalDevice`.
+  [[nodiscard]] operator VkPhysicalDevice() const noexcept { return physicalDevice; }
+
+  /// Implicit usage as `bool`.
+  [[nodiscard]] operator bool() const noexcept { return device; }
+
+  /// \name Formats and memory types
+  /// \{
+
+  /// Find supported format, or return `VK_FORMAT_UNDEFINED`.
+  ///
+  /// \param[in] tiling
+  /// The required format tiling, either `VK_IMAGE_TILING_OPTIMAL` or
+  /// `VK_IMAGE_TILING_LINEAR`.
+  ///
+  /// \param[in] features
+  /// The required format features.
+  ///
+  /// \param[in] candidates
+  /// The candidate formats to consider.
+  ///
+  [[nodiscard]] VkFormat supportedFormat(
+    VkImageTiling tiling, VkFormatFeatureFlags features, std::initializer_list<VkFormat> candidates) const noexcept;
+
+  /// Find supported depth format.
+  [[nodiscard]] VkFormat supportedDepthFormat() const noexcept;
+
+  /// Find supported depth-stencil format.
+  [[nodiscard]] VkFormat supportedDepthStencilFormat() const noexcept;
+
+  /// Find suitable memory type index.
+  [[nodiscard]] uint32_t findMemoryTypeIndex(VkMemoryPropertyFlags flags, uint32_t typeBits) const;
+
+  /// Get surface capabilities.
+  [[nodiscard]] VkSurfaceCapabilitiesKHR getSurfaceCapabilities(VkSurfaceKHR surface) const {
+    VkSurfaceCapabilitiesKHR capabilities = {};
+    error_check(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &capabilities));
+    return capabilities;
+  }
+
+  /// \}
+
+  template <typename Value> struct QueueFamilySpecific {
+    Value graphics{}; ///< For graphics operations.
+    Value transfer{}; ///< For transfer operations.
+    Value compute{};  ///< For compute operations.
+  };
+
+  /// The device.
+  NullifyOnMove<VkDevice> device;
+
+  /// The physical device.
+  NullifyOnMove<VkPhysicalDevice> physicalDevice;
+
+  /// The physical device properties.
+  VkPhysicalDeviceProperties properties{};
+
+  /// The physical device features.
+  VkPhysicalDeviceFeatures features{};
+
+  /// The physical device memory properties.
+  VkPhysicalDeviceMemoryProperties memoryProperties;
+
+  /// The physical device queue family properties.
+  std::vector<VkQueueFamilyProperties> queueFamilyProperties;
+
+  /// The queue family indexes.
+  QueueFamilySpecific<uint32_t> queueFamilyIndexes;
+
+  /// The default queues.
+  QueueFamilySpecific<NullifyOnMove<VkQueue>> defaultQueues;
+
+  /// The default command pools.
+  QueueFamilySpecific<NullifyOnMove<VkCommandPool>> defaultCommandPools;
+
+  /// The default sampler.
+  NullifyOnMove<VkSampler> defaultSampler;
+
+  /// The allocation callbacks.
+  const VkAllocationCallbacks *allocator{nullptr};
+};
+
+inline VkFormat Device::supportedDepthFormat() const noexcept {
+  return supportedFormat(
+    VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    {VK_FORMAT_D16_UNORM, VK_FORMAT_D16_UNORM_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_X8_D24_UNORM_PACK32,
+     VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT});
+}
+
+inline VkFormat Device::supportedDepthStencilFormat() const noexcept {
+  return supportedFormat(
+    VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    {VK_FORMAT_D16_UNORM_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT_S8_UINT});
+}
+
+/// A device memory view.
+///
+/// This structure represents a view of a region of `VkDeviceMemory`. This
+/// structure thus contains a memory handle, the offset of the memory region
+/// in bytes, and the size of the memory region in bytes.
+///
+struct DeviceMemoryView {
+  /// The memory.
+  VkDeviceMemory memory{};
+
+  /// The region offset.
+  VkDeviceSize offset{0};
+
+  /// The region size.
+  VkDeviceSize size{0};
+};
+
+/// A device memory request.
+struct DeviceMemoryRequest {
+  /// The requested memory requirements.
+  VkMemoryRequirements requirements{};
+
+  /// The requested memory property flags.
+  VkMemoryPropertyFlags flags{};
+};
+
+/// Shared device memory.
+///
+/// This structure represents a collection of `VkDeviceMemory`
+/// allocations shared by a set of Vulkan objects. That is, this
+/// structure contains an array of unique `VkDeviceMemory` allocations
+/// (which it manages), and an array of `DeviceMemoryView`s of its
+/// unique allocations (which it also manages) to be bound to Vulkan
+/// objects.
+///
+struct MI_VK_API SharedDeviceMemory final : MoveOnly, WithDeviceAndAllocator, ArrayLike<SharedDeviceMemory> {
+public:
+  MI_VK_DEFAULT_MOVE_ONLY(SharedDeviceMemory, allocate, deallocate)
+  MI_VK_DEFAULT_ARRAY_LIKE(memoryViews)
+
+  /// Allocate the shared memory.
+  ///
+  /// \param[in] device     The device structure.
+  /// \param[in] requests   The memory request structures.
+  /// \param[in] allocator  The allocation callbacks.
+  ///
+  void allocate(
+    const Device &device, const std::vector<DeviceMemoryRequest> &requests, const VkAllocationCallbacks *allocator = nullptr);
+
+  /// Deallocate the shared memory.
+  void deallocate();
+
+  /// The memories.
+  std::vector<VkDeviceMemory> memories;
+
+  /// The memory views, 1 for each requested allocation.
+  std::vector<DeviceMemoryView> memoryViews;
+};
+
+} // namespace mi::vk

@@ -1,0 +1,443 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/UI/common"
+
+namespace mi::ui {
+
+/// An anchor enumeration, with naming conventions inspired by compass directions.
+///
+/// An anchor may identify a point, vector, or direction depending on the context. We refer
+/// to them by compass directions to indicate that there is always an absolute quality to how they fit
+/// in with the overall conventions of this library, i.e., North is up and positive, South is down and
+/// negative, East is right and positive, West is left and negative.
+///
+/// In the Rect implementation further below, the usage of an Anchor enum is almost always understood
+/// to identify a specific location on the perimeter, where the cardinal directions identify mid-points
+/// and the combinations of the cardinal directions identify corners.
+///
+/// ~~~~~~~~~~~~~~~~~~~~~
+///   NW ---- N ---- NE
+///    |             |
+///    |             |
+///    W    Center   E
+///    |             |
+///    |             |
+///   SW ---- S ---- SE
+/// ~~~~~~~~~~~~~~~~~~~~~
+///
+/// For example, the array `operator[]` is overloaded on rectangles such that `rect[Anchor::N]` returns
+/// the point halfway between the two top corners of the rectangle, regardless of the implicit ordering of
+/// the two axis-aligned corner points.
+///
+enum class Anchor : uint8_t {
+  Center = 0,     ///< Center (or none/zero)
+  N = 0b0001,     ///< North
+  S = 0b0010,     ///< South
+  E = 0b0100,     ///< East
+  W = 0b1000,     ///< West
+  NE = N | E,     ///< North-east
+  NW = N | W,     ///< North-west
+  SE = S | E,     ///< South-east
+  SW = S | W,     ///< South-west
+  MaskNS = N | S, ///< Mask North/South
+  MaskEW = E | W, ///< Mask East/West
+};
+
+[[nodiscard]] constexpr Anchor operator|(Anchor anchorA, Anchor anchorB) noexcept {
+  return Anchor(uint8_t(anchorA) | uint8_t(anchorB));
+}
+
+[[nodiscard]] constexpr Anchor operator&(Anchor anchorA, Anchor anchorB) noexcept {
+  return Anchor(uint8_t(anchorA) & uint8_t(anchorB));
+}
+
+constexpr Anchor &operator|=(Anchor &anchorA, Anchor anchorB) noexcept { return anchorA = anchorA | anchorB; }
+
+constexpr Anchor &operator&=(Anchor &anchorA, Anchor anchorB) noexcept { return anchorA = anchorA & anchorB; }
+
+/// Conjugate an anchor to its logical opposite (swap North with South and East with West).
+[[nodiscard]] constexpr Anchor operator~(Anchor anchor) noexcept {
+  Anchor opposite = Anchor::Center;
+  switch (anchor & Anchor::MaskNS) {
+  case Anchor::N: opposite |= Anchor::S; break;
+  case Anchor::S: opposite |= Anchor::N; break;
+  default: break;
+  }
+  switch (anchor & Anchor::MaskEW) {
+  case Anchor::E: opposite |= Anchor::W; break;
+  case Anchor::W: opposite |= Anchor::E; break;
+  default: break;
+  }
+  return opposite;
+}
+
+/// Construct a vector with North/South and East/West mapping to +-1 in Y and X respectively.
+[[nodiscard]] constexpr Vector2f anchorToVector(Anchor anchor) noexcept {
+  switch (anchor) {
+  case Anchor::N: return {0, +1};
+  case Anchor::S: return {0, -1};
+  case Anchor::E: return {+1, 0};
+  case Anchor::W: return {-1, 0};
+  case Anchor::NE: return {+1, +1};
+  case Anchor::NW: return {-1, +1};
+  case Anchor::SW: return {-1, -1};
+  case Anchor::SE: return {+1, -1};
+  default: break;
+  }
+}
+
+/// Construct a vector with North/South and East/West mapping to +-1 in Y and X respectively, normalizing the result.
+[[nodiscard]] constexpr Vector2f anchorToDirection(Anchor anchor) noexcept {
+  switch (anchor) {
+  case Anchor::N: return {0, +1};
+  case Anchor::S: return {0, -1};
+  case Anchor::E: return {+1, 0};
+  case Anchor::W: return {-1, 0};
+  case Anchor::NE: return {+constants::OneOverSqrtTwo<float>, +constants::OneOverSqrtTwo<float>};
+  case Anchor::NW: return {-constants::OneOverSqrtTwo<float>, +constants::OneOverSqrtTwo<float>};
+  case Anchor::SW: return {-constants::OneOverSqrtTwo<float>, -constants::OneOverSqrtTwo<float>};
+  case Anchor::SE: return {+constants::OneOverSqrtTwo<float>, -constants::OneOverSqrtTwo<float>};
+  default: break;
+  }
+  return {};
+}
+
+/// The primary representation for axis-aligned rectangles.
+struct MI_UI_API Rect : ArrayLike<Rect> {
+public:
+  using Super = ArrayLike<Rect>;
+
+  constexpr Rect() noexcept = default;
+
+  constexpr Rect(Vector2f point) noexcept : mPoints{point, point} {}
+
+  constexpr Rect(Vector2f point0, Vector2f point1) noexcept : mPoints{point0, point1} {}
+
+  /// Construct rectangle from an anchor point and an extent.
+  ///
+  /// \param[in] anchor  The anchor.
+  /// \param[in] point   The anchor position.
+  /// \param[in] extent  The extent of the rectangle.
+  ///
+  constexpr Rect(Anchor anchor, Vector2f point, Vector2f extent) noexcept {
+    auto &point0 = mPoints[0];
+    auto &point1 = mPoints[1];
+    point0 = point - 0.5f * extent;
+    point1 = point + 0.5f * extent;
+    switch (anchor & Anchor::MaskNS) {
+    default: break;
+    case Anchor::N: point0[1] = point[1] - extent[1], point1[1] = point[1]; break;
+    case Anchor::S: point0[1] = point[1], point1[1] = point[1] + extent[1]; break;
+    }
+    switch (anchor & Anchor::MaskEW) {
+    default: break;
+    case Anchor::E: point0[0] = point[0] - extent[0], point1[0] = point[0]; break;
+    case Anchor::W: point0[0] = point[0], point1[0] = point[0] + extent[0]; break;
+    }
+  }
+
+  /// Construct rectangle from bounding box.
+  constexpr Rect(const BoundBox2f &bound) noexcept : mPoints{bound[0], bound[1]} {}
+
+  /// Construct rectangle from negative infinity to positive infinity.
+  [[nodiscard]] static constexpr Rect Inf() noexcept { return {Vector2f(-constants::Inff), Vector2f(+constants::Inff)}; }
+
+public:
+  // clang-format off
+  MI_ARRAY_LIKE_CONSTEXPR_DATA(&mPoints[0])
+
+  MI_ARRAY_LIKE_STATIC_CONSTEXPR_SIZE(2)
+  // clang-format on
+
+public:
+  /// \name Observers
+  /// \{
+  [[nodiscard, strong_inline]] constexpr Vector2f lower() const noexcept { return min(mPoints[0], mPoints[1]); }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f upper() const noexcept { return max(mPoints[0], mPoints[1]); }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f extent() const noexcept { return abs(mPoints[1] - mPoints[0]); }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f center() const noexcept { return 0.5f * (mPoints[0] + mPoints[1]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &lowerX() noexcept { return minReference(mPoints[0][0], mPoints[1][0]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &lowerY() noexcept { return minReference(mPoints[0][1], mPoints[1][1]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &upperX() noexcept { return maxReference(mPoints[0][0], mPoints[1][0]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &upperY() noexcept { return maxReference(mPoints[0][1], mPoints[1][1]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &lowerX() const noexcept { return minReference(mPoints[0][0], mPoints[1][0]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &lowerY() const noexcept { return minReference(mPoints[0][1], mPoints[1][1]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &upperX() const noexcept { return maxReference(mPoints[0][0], mPoints[1][0]); }
+
+  [[nodiscard, strong_inline]] constexpr auto &upperY() const noexcept { return maxReference(mPoints[0][1], mPoints[1][1]); }
+
+  [[nodiscard, strong_inline]] constexpr float extentX() const noexcept { return std::abs(mPoints[1][0] - mPoints[0][0]); }
+
+  [[nodiscard, strong_inline]] constexpr float extentY() const noexcept { return std::abs(mPoints[1][1] - mPoints[0][1]); }
+
+  [[nodiscard, strong_inline]] constexpr float centerX() const noexcept { return 0.5f * (mPoints[0][0] + mPoints[1][0]); }
+
+  [[nodiscard, strong_inline]] constexpr float centerY() const noexcept { return 0.5f * (mPoints[0][1] + mPoints[1][1]); }
+
+  [[nodiscard, strong_inline]] constexpr float perimeter() const noexcept { return 2.0f * (extentX() + extentY()); }
+
+  [[nodiscard, strong_inline]] constexpr float area() const noexcept { return extentX() * extentY(); }
+
+  [[nodiscard, strong_inline]] constexpr float minExtent() const noexcept { return min(extentX(), extentY()); }
+
+  [[nodiscard, strong_inline]] constexpr float maxExtent() const noexcept { return max(extentX(), extentY()); }
+
+  [[nodiscard, strong_inline]] constexpr float left() const noexcept { return lowerX(); }
+
+  [[nodiscard, strong_inline]] constexpr float right() const noexcept { return upperX(); }
+
+  [[nodiscard, strong_inline]] constexpr float bottom() const noexcept { return lowerY(); }
+
+  [[nodiscard, strong_inline]] constexpr float top() const noexcept { return upperY(); }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f north() const noexcept { return {centerX(), upperY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f south() const noexcept { return {centerX(), lowerY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f east() const noexcept { return {upperX(), centerY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f west() const noexcept { return {lowerX(), centerY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f northEast() const noexcept { return {upperX(), upperY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f northWest() const noexcept { return {lowerX(), upperY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f southEast() const noexcept { return {upperX(), lowerY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f southWest() const noexcept { return {lowerX(), lowerY()}; }
+
+  [[nodiscard, strong_inline]] constexpr Line2f northEdge() const noexcept { return {northWest(), northEast()}; }
+
+  [[nodiscard, strong_inline]] constexpr Line2f southEdge() const noexcept { return {southWest(), southEast()}; }
+
+  [[nodiscard, strong_inline]] constexpr Line2f eastEdge() const noexcept { return {southEast(), northEast()}; }
+
+  [[nodiscard, strong_inline]] constexpr Line2f westEdge() const noexcept { return {southWest(), northWest()}; }
+
+  [[nodiscard]] constexpr Rect flipX() const noexcept { return {operator()(1, 0), operator()(0, 1)}; }
+
+  [[nodiscard]] constexpr Rect flipY() const noexcept { return {operator()(0, 1), operator()(1, 0)}; }
+
+  [[nodiscard]] constexpr Rect rectify() const noexcept { return {southWest(), northEast()}; }
+
+  using Super::operator[];
+
+  [[nodiscard, strong_inline]] constexpr Vector2f operator[](Anchor anchor) const noexcept {
+    switch (anchor) {
+    case Anchor::Center: return center();
+    case Anchor::N: return north();
+    case Anchor::S: return south();
+    case Anchor::E: return east();
+    case Anchor::W: return west();
+    case Anchor::NE: return northEast();
+    case Anchor::NW: return northWest();
+    case Anchor::SE: return southEast();
+    case Anchor::SW: return southWest();
+    default: break;
+    }
+    return {}; // Error?
+  }
+
+  [[nodiscard, strong_inline]] constexpr Vector2f operator()(float fractionX, float fractionY) const noexcept {
+    return {
+      lerp(fractionX, mPoints[0][0], mPoints[1][0]), //
+      lerp(fractionY, mPoints[0][1], mPoints[1][1])};
+  }
+
+  [[nodiscard, strong_inline]] constexpr operator BoundBox2f() const noexcept {
+    BoundBox2f boundBox;
+    boundBox |= mPoints[0];
+    boundBox |= mPoints[1];
+    return boundBox;
+  }
+  /// \}
+
+public:
+  /// Contains the given point?
+  [[nodiscard]] constexpr bool contains(Vector2f point) const noexcept { return BoundBox2f(*this).contains(point); }
+
+  /// Contains the given rect?
+  [[nodiscard]] constexpr bool contains(const Rect &other) const noexcept {
+    return BoundBox2f(*this).contains(BoundBox2f(other));
+  }
+
+  /// Overlaps the given rect?
+  [[nodiscard]] constexpr bool overlaps(const Rect &other) const noexcept {
+    return BoundBox2f(*this).overlaps(BoundBox2f(other));
+  }
+
+  /// Add symmetric margin in X.
+  ///
+  /// - If amount is positive, the rectangle grows.
+  /// - If amount is negative, the rectangle shrinks.
+  /// - If amount is so negative that the winding of the rectangle would flip, instead collapse the rectangle
+  ///   to its center in X, such that it has zero extent in X.
+  ///
+  [[nodiscard]] constexpr Rect marginX(float amount) const noexcept {
+    Rect rect = *this;
+    float &lowX = rect.lowerX();
+    float &uppX = rect.upperX();
+    float cenX = (lowX + uppX) / 2;
+    lowX = min(lowX - amount, cenX);
+    uppX = max(uppX + amount, cenX);
+    return rect;
+  }
+
+  /// Add symmetric margin in Y.
+  ///
+  /// - If amount is positive, the rectangle grows.
+  /// - If amount is negative, the rectangle shrinks.
+  /// - If amount is so negative that the winding of the rectangle would flip, instead collapse the rectangle
+  ///   to its center in Y, such that it has zero extent in Y.
+  ///
+  [[nodiscard]] constexpr Rect marginY(float amount) const noexcept {
+    Rect rect = *this;
+    float &lowY = rect.lowerY();
+    float &uppY = rect.upperY();
+    float cenY = (lowY + uppY) / 2;
+    lowY = min(lowY - amount, cenY);
+    uppY = max(uppY + amount, cenY);
+    return rect;
+  }
+
+  /// Add symmetric margin in both X and Y.
+  [[nodiscard]] constexpr Rect margin(float amount) const noexcept { return marginX(amount).marginY(amount); }
+
+  /// Add margin in anchor direction.
+  ///
+  /// - If `Anchor::MaskEW`, same as `marginX()`.
+  /// - If `Anchor::MaskNS`, same as `marginY()`.
+  /// - If amount is positive, the rectangle grows.
+  /// - If amount is negative, the rectangle shrinks.
+  /// - As per the other margin functions, if the winding of the rectangle would flip, it is clamped
+  ///   to have zero extent instead. If adding asymmetrically to edge or corner (N, S, E, W, NE, NW, SW, SE), then
+  ///   instead of clamping symmetrically to the center, clamp to the opposite edge or corner.
+  ///
+  [[nodiscard]] constexpr Rect margin(Anchor anchor, float amount) const noexcept {
+    Rect rect = *this;
+    float &lowX = rect.lowerX(), &uppX = rect.upperX();
+    float &lowY = rect.lowerY(), &uppY = rect.upperY();
+    switch (anchor & Anchor::MaskNS) {
+    default: break;
+    case Anchor::N: uppY = max(uppY + amount, lowY); break;
+    case Anchor::S: lowY = min(lowY - amount, uppY); break;
+    case Anchor::MaskNS: {
+      float cenY = (lowY + uppY) / 2;
+      lowY = min(lowY - amount, cenY);
+      uppY = max(uppY + amount, cenY);
+      break;
+    }
+    }
+    switch (anchor & Anchor::MaskEW) {
+    default: break;
+    case Anchor::E: uppX = max(uppX + amount, lowX); break;
+    case Anchor::W: lowX = min(lowX - amount, uppX); break;
+    case Anchor::MaskEW: {
+      float cenX = (lowX + uppX) / 2;
+      lowX = min(lowX - amount, cenX);
+      uppX = max(uppX + amount, cenX);
+      break;
+    }
+    }
+    return rect;
+  }
+
+  [[nodiscard]] constexpr Rect subsetX(float fractionA, float fractionB) const noexcept {
+    return subset({fractionA, 0.0f}, {fractionB, 1.0f});
+  }
+
+  [[nodiscard]] constexpr Rect subsetY(float fractionA, float fractionB) const noexcept {
+    return subset({0.0f, fractionA}, {1.0f, fractionB});
+  }
+
+  [[nodiscard]] constexpr Rect subset(Vector2f fractionA, Vector2f fractionB) const noexcept {
+    return {lerp(fractionA, mPoints[0], mPoints[1]), lerp(fractionB, mPoints[0], mPoints[1])};
+  }
+
+  /// Align the relevant anchor in X to the target location, leaving all Y coordinates unchanged.
+  [[nodiscard]] constexpr Rect alignX(Anchor anchor, float target) const noexcept {
+    float offset = target - operator[](anchor)[0];
+    Vector2f newPointA = mPoints[0] + Vector2f(offset, 0);
+    Vector2f newPointB = mPoints[1] + Vector2f(offset, 0);
+    return {newPointA, newPointB};
+  }
+
+  /// Align the relevant anchor in Y to the target location, leaving all X coordinates unchanged.
+  [[nodiscard]] constexpr Rect alignY(Anchor anchor, float target) const noexcept {
+    float offset = target - operator[](anchor)[1];
+    Vector2f newPointA = mPoints[0] + Vector2f(0, offset);
+    Vector2f newPointB = mPoints[1] + Vector2f(0, offset);
+    return {newPointA, newPointB};
+  }
+
+  [[nodiscard]] std::optional<Anchor> clickHitTest(float radius, Vector2f cursor, Vector2f &hitPoint) const noexcept;
+
+private:
+  Vector2f mPoints[2] = {};
+};
+
+[[nodiscard]] constexpr Rect operator+(Rect rect, Vector2f offset) noexcept { return {rect[0] + offset, rect[1] + offset}; }
+
+[[nodiscard]] constexpr Rect operator-(Rect rect, Vector2f offset) noexcept { return {rect[0] - offset, rect[1] - offset}; }
+
+[[nodiscard]] constexpr Rect operator*(Rect rect, Vector2f amount) noexcept { return {rect[0] * amount, rect[1] * amount}; }
+
+[[nodiscard]] constexpr Rect operator/(Rect rect, Vector2f amount) noexcept { return {rect[0] / amount, rect[1] / amount}; }
+
+[[nodiscard]] constexpr Rect operator*(Rect rect, float amount) noexcept { return {rect[0] * amount, rect[1] * amount}; }
+
+[[nodiscard]] constexpr Rect operator/(Rect rect, float amount) noexcept { return {rect[0] / amount, rect[1] / amount}; }
+
+[[nodiscard]] constexpr Rect operator+(Vector2f offset, Rect rect) noexcept { return {offset + rect[0], offset + rect[1]}; }
+
+[[nodiscard]] constexpr Rect operator-(Vector2f offset, Rect rect) noexcept { return {offset - rect[0], offset - rect[1]}; }
+
+[[nodiscard]] constexpr Rect operator*(Vector2f amount, Rect rect) noexcept { return {amount * rect[0], amount * rect[1]}; }
+
+[[nodiscard]] constexpr Rect operator*(float amount, Rect rect) noexcept { return {amount * rect[0], amount * rect[1]}; }
+
+constexpr Rect &operator+=(Rect &rect, Vector2f offset) noexcept { return rect = rect + offset; }
+
+constexpr Rect &operator-=(Rect &rect, Vector2f offset) noexcept { return rect = rect - offset; }
+
+constexpr Rect &operator*=(Rect &rect, float amount) noexcept { return rect = rect * amount; }
+
+constexpr Rect &operator/=(Rect &rect, float amount) noexcept { return rect = rect / amount; }
+
+constexpr Rect &operator*=(Rect &rect, Vector2f amount) noexcept { return rect = rect * amount; }
+
+constexpr Rect &operator/=(Rect &rect, Vector2f amount) noexcept { return rect = rect / amount; }
+
+#if 0
+inline void Rect::dragAnchor(Anchor anchor, Vector2f cursor, Vector2f minExtent, Vector2f maxExtent) noexcept {
+  if (anchor == Anchor::Center) { // Move
+    cursor -= center();
+    mPoints[0] += cursor;
+    mPoints[1] += cursor;
+  } else { // Resize
+    switch (anchor & Anchor::MaskNS) {
+    case Anchor::N: upperY() = clamp(cursor[1], lowerY() + minExtent[1], lowerY() + maxExtent[1]); break;
+    case Anchor::S: lowerY() = clamp(cursor[1], upperY() - maxExtent[1], upperY() - minExtent[1]); break;
+    default: break;
+    }
+    switch (anchor & Anchor::MaskEW) {
+    case Anchor::E: upperX() = clamp(cursor[0], lowerX() + minExtent[0], lowerX() + maxExtent[0]); break;
+    case Anchor::W: lowerX() = clamp(cursor[0], upperX() - maxExtent[0], upperX() - minExtent[0]); break;
+    default: break;
+    }
+  }
+}
+#endif
+
+} // namespace mi::ui

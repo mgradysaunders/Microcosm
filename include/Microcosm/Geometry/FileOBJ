@@ -1,0 +1,82 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include <map>
+#include <string>
+#include <string_view>
+
+#include "Microcosm/Geometry/common"
+#include "Microcosm/utility"
+
+namespace mi::geometry {
+
+class MI_GEOMETRY_API FileOBJ {
+public:
+  static constexpr uint32_t None = uint32_t(-1);
+
+  struct Face {
+    uint32_t first{0}; ///< The first vertex index.
+    uint32_t count{0}; ///< The vertex count.
+
+    struct Metadata {
+      int16_t material{-1};    ///< _Optional!_ The material. If non-negative, an index into `materialNames`.
+      int16_t object{-1};      ///< _Optional!_ The object. If non-negative, an index into `objectNames`.
+      int16_t group{-1};       ///< _Optional!_ The group. If non-negative, an index into `groupNames`.
+      int16_t smoothGroup{-1}; ///< _Optional!_ The smooth group.
+    } metadata{};
+  };
+
+  template <typename Value, auto Name> struct Buffer {
+  public:
+    void clear() noexcept { v.clear(), f.clear(); }
+
+    [[nodiscard]] operator bool() const noexcept { return !f.empty(); }
+
+    [[nodiscard]] operator std::string() const {
+      std::string buffer;
+      buffer.reserve(1024);
+      for (const auto &value : v) buffer += "{} {:7f}\n"_format(Name.c_str(), join(value, " "));
+      return buffer;
+    }
+
+  public:
+    std::vector<Value> v;
+    std::vector<uint32_t> f;
+  };
+
+public:
+  FileOBJ() = default;
+
+  explicit FileOBJ(const std::string &filename) { read(filename); }
+
+  void read(const std::string &filename);
+
+  void read(std::istream &stream);
+
+  void write(const std::string &filename) const;
+
+  void write(std::ostream &stream) const;
+
+  void clear() noexcept { *this = FileOBJ(); }
+
+#if 0
+  void triangulate();
+
+  void normalizeNormals();
+#endif
+
+public:
+  std::vector<Face> faces;                   ///< The faces.
+  Buffer<Vector3f, "v"_constant> positions;  ///< The vertex positions.
+  Buffer<Vector2f, "vt"_constant> texcoords; ///< _Optional!_ The vertex texture coordinates.
+  Buffer<Vector3f, "vn"_constant> normals;   ///< _Optional!_ The vertex normals.
+
+  struct Metadata {
+    std::vector<std::string> materialFiles; ///< _Optional!_ The material library filenames (.mtl).
+    std::vector<std::string> materialNames; ///< _Optional!_ The material names.
+    std::vector<std::string> objectNames;   ///< _Optional!_ The object names.
+    std::vector<std::string> groupNames;    ///< _Optional!_ The group names.
+  } metadata{};
+};
+
+} // namespace mi::geometry

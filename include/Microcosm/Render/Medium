@@ -1,0 +1,97 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Scattering"
+#include "Microcosm/Render/Spectrum"
+
+namespace mi::render {
+
+template <typename Value>
+concept is_medium = std::same_as<typename std::decay_t<Value>::medium_tag, std::true_type>;
+
+struct MI_RENDER_API Medium final : Any {
+public:
+  /// The transmission function. The transmission along the given ray should be applied to
+  /// the given spectrum multiplicatively (do not simply overwrite it!).
+  using Transmission = std::function<void(const Medium &self, Random &random, Ray3d ray, Spectrum &tr)>;
+
+  /// The transmission importance sampling routine. This should attempt to sample a scattering distance along the given
+  /// ray, restricted to its valid parameter range. If this fails, either because there is no participating medium along
+  /// the ray or because the sampled scattering distance is outside the parameter range, then the implementation should
+  /// update the ratio accordingly (still accounting for transmission and the probability of the event generated)
+  /// and return nullopt to reject the scattering sample.
+  ///
+  /// Note: The ratio should be applied to the given spectrum multiplicatively (do not simply overwrite it!).
+  ///
+  using TransmissionSample =
+    std::function<std::optional<VolumeScattering>(const Medium &self, Random &random, Ray3d ray, Spectrum &ratio)>;
+
+  Medium() noexcept = default;
+
+  explicit Medium(std::in_place_t, std::any any, Transmission transmission, TransmissionSample transmissionSample) noexcept
+    : Any(std::move(any)),                    //
+      mTransmission(std::move(transmission)), //
+      mTransmissionSample(std::move(transmissionSample)) {}
+
+  template <typename Value> requires(is_medium<Value>) Medium(Value &&value) noexcept
+    : Medium(
+        std::in_place, std::any(std::forward<Value>(value)),
+        [](auto &self, Random &random, Ray3d ray, Spectrum &tr) { self.template as<Value>().transmission(random, ray, tr); },
+        [](auto &self, Random &random, Ray3d ray, Spectrum &ratio) -> std::optional<VolumeScattering> {
+          return self.template as<Value>().transmissionSample(random, ray, ratio);
+        }) {}
+
+public:
+  void transmission(Random &random, Ray3d ray, Spectrum &tr) const {
+    if (mTransmission) mTransmission(*this, random, ray, tr);
+  }
+
+  [[nodiscard]] std::optional<VolumeScattering> transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const {
+    return mTransmissionSample ? mTransmissionSample(*this, random, ray, ratio) : std::optional<VolumeScattering>();
+  }
+
+private:
+  Transmission mTransmission{};
+
+  TransmissionSample mTransmissionSample{};
+};
+
+/// This structure gives access to media during path tracing. It represents either:
+/// 1. A medium at a volumetric or "suspended" vertex, or
+/// 2. A medium transition at a surface vertex, where there may be two different media on either side. Note
+///    that the language here assumes that the normal points into the hemisphere above or outside the surface, such
+///    that the negative normal direction points into the hemisphere below or inside the surface.
+struct MI_RENDER_API MediumAccessor final {
+public:
+  MediumAccessor() noexcept = default;
+
+  /// Construct as medium.
+  MediumAccessor(Medium medium) noexcept : mMediumAbove(std::move(medium)) {}
+
+  /// Construct as medium transition.
+  MediumAccessor(Vector3d normal, Medium mediumAbove, Medium mediumBelow) noexcept
+    : mNormal(normal),                      //
+      mMediumAbove(std::move(mediumAbove)), //
+      mMediumBelow(std::move(mediumBelow)) {}
+
+public:
+  /// Is on surface? If so, this is an interface or transition between media. Otherwise, it is an individual medium.
+  [[nodiscard]] bool isOnSurface() const noexcept { return mNormal.has_value(); }
+
+  /// Select medium for the given direction.
+  [[nodiscard]] const Medium &operator()(Vector3d omega) const noexcept {
+    return (!isOnSurface() || dot(omega, *mNormal) >= 0) ? mMediumAbove : mMediumBelow;
+  }
+
+private:
+  /// If applicable, the surface normal.
+  std::optional<Vector3d> mNormal{};
+
+  /// If on a surface, the medium above the surface. Else, the individual medium.
+  Medium mMediumAbove{};
+
+  /// If on a surface, the medium below the surface. Else, unused.
+  Medium mMediumBelow{};
+};
+
+} // namespace mi::render

@@ -1,0 +1,133 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/miniz_Export.h"
+#include "Microcosm/utility"
+#include <ios>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace mi::miniz {
+
+using Bytes = std::vector<std::byte>;
+
+[[nodiscard]] MI_MINIZ_API Bytes deflate(const void *buffer, size_t size, int level = 6);
+
+[[nodiscard]] MI_MINIZ_API Bytes inflate(const void *buffer, size_t size);
+
+[[nodiscard]] inline Bytes deflate(const Bytes &bytes, int level = 6) { return deflate(bytes.data(), bytes.size(), level); }
+
+[[nodiscard]] inline Bytes inflate(const Bytes &bytes) { return inflate(bytes.data(), bytes.size()); }
+
+class MI_MINIZ_API StreamDeflator {
+public:
+  StreamDeflator() = default;
+
+  StreamDeflator(const StreamDeflator &) = delete;
+
+  StreamDeflator(const std::shared_ptr<std::ostream> &stream, int level = 6) { open(stream, level); }
+
+  ~StreamDeflator() { close(); }
+
+  [[nodiscard]] bool isOpen() const noexcept { return ostream != nullptr; }
+
+  void open(const std::shared_ptr<std::ostream> &stream, int level = 6);
+
+  void write(const void *ptr, size_t num);
+
+  void write(const Bytes &bytes) { write(bytes.data(), bytes.size()); }
+
+  void close();
+
+private:
+  void *deflator = nullptr;
+
+  std::shared_ptr<std::ostream> ostream = nullptr;
+};
+
+class MI_MINIZ_API StreamInflator {
+public:
+  StreamInflator() = default;
+
+  StreamInflator(const StreamInflator &) = delete;
+
+  StreamInflator(const std::shared_ptr<std::istream> &stream) { open(stream); }
+
+  ~StreamInflator() { close(); }
+
+  [[nodiscard]] bool isOpen() const noexcept { return istream != nullptr; }
+
+  void open(const std::shared_ptr<std::istream> &stream);
+
+  void read(void *ptr, size_t num);
+
+  void close();
+
+private:
+  void *inflator = nullptr;
+
+  std::shared_ptr<std::istream> istream = nullptr;
+
+  std::byte buffer[1024] = {};
+};
+
+class MI_MINIZ_API ArchiveReader {
+public:
+  ArchiveReader();
+
+  ArchiveReader(const ArchiveReader &) = delete;
+
+  ArchiveReader(ArchiveReader &&other) noexcept : zip(steal(other.zip)), state(steal(other.state)) {}
+
+  ~ArchiveReader();
+
+  ArchiveReader &operator=(const ArchiveReader &) = delete;
+
+  ArchiveReader &operator=(ArchiveReader &&other) noexcept {
+    zip = steal(other.zip);
+    state = steal(other.state);
+    return *this;
+  }
+
+  void open(const std::shared_ptr<std::istream> &stream);
+
+  void open(const std::string &filename);
+
+  void close();
+
+  [[nodiscard]] bool isOpen() const noexcept;
+
+  [[nodiscard]] size_t archiveSize() const noexcept;
+
+  [[nodiscard]] size_t numFiles() const noexcept;
+
+  [[nodiscard]] bool isDirectory(size_t fileIndex) const noexcept;
+
+  [[nodiscard]] bool isFileEncrypted(size_t fileIndex) const noexcept;
+
+  [[nodiscard]] bool isFileSupported(size_t fileIndex) const noexcept;
+
+  [[nodiscard]] std::string getFilename(size_t fileIndex) const;
+
+  [[nodiscard]] std::optional<size_t> locate(const char *filename, bool ignoreCase = false, bool ignorePath = false) const;
+
+  [[nodiscard]] Bytes extract(size_t fileIndex, bool decompress = true) const;
+
+  void extractTo(size_t fileIndex, bool decompress, std::ostream &stream) const;
+
+  void extractTo(size_t fileIndex, bool decompress, const std::string &filename) const;
+
+private:
+  mutable void *zip = nullptr;
+
+  struct State {
+    std::shared_ptr<std::istream> stream = {};
+    std::streamsize offset = 0;
+  } state;
+};
+
+// TODO ArchiveWriter
+
+} // namespace mi::miniz

@@ -1,0 +1,21 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "../Context"
+#include "../DrawCmds"
+
+namespace mi::ui {
+
+struct MI_UI_API Artist {
+public:
+  [[strong_inline]] Artist(Context &ctx, DrawCmds &drawCmds) noexcept : mCtx(ctx), mDrawCmds(drawCmds) {}
+
+  void commit() { mDrawCmds.commit(mCtx); }
+
+protected:
+  Context &mCtx;
+
+  DrawCmds &mDrawCmds;
+};
+
+} // namespace mi::ui

@@ -1,0 +1,270 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/math"
+#include <cstring>
+#include <random>
+
+namespace mi {
+
+/// A PCG XSH-RR engine.
+///
+/// A permuted congruential generator with XOR-shift plus random-rotate output transform. The
+/// implementation here is adapted as a special case of the [implementation by Melissa O'Neill][1]
+/// affiliated with the [PCG project][2].
+///
+/// [1]: https://github.com/imneme/pcg-cpp
+/// [2]: https://pcg-random.org
+///
+template <std::unsigned_integral Result, std::unsigned_integral State, State Multiplier, State DefaultIncrement> class Pcg {
+public:
+  // Sanity check.
+  static_assert(sizeof(Result) <= sizeof(State) && (Multiplier & 3) == 1 && (DefaultIncrement & 1) == 1);
+
+  using state_type = State;
+
+  using result_type = Result;
+
+  [[nodiscard]] static constexpr Result min() noexcept { return 0; }
+
+  [[nodiscard]] static constexpr Result max() noexcept { return std::numeric_limits<Result>::max(); }
+
+public:
+  [[strong_inline]] constexpr Pcg() noexcept { state = state * Multiplier + increment; }
+
+  [[strong_inline]] constexpr Pcg(State seed) noexcept : state(seed) {
+    state = state + increment;
+    state = state * Multiplier + increment;
+  }
+
+  [[strong_inline]] constexpr Pcg(State seed, State seq) noexcept : state(seed) {
+    stream(seq);
+    state = state + increment;
+    state = state * Multiplier + increment;
+  }
+
+  [[strong_inline]] constexpr Pcg(std::pair<uint64_t, uint64_t> seedSeq) noexcept : Pcg(seedSeq.first, seedSeq.second) {}
+
+  [[strong_inline]] constexpr Pcg(std::in_place_t, State state, State increment) noexcept
+    : state(state), increment(increment) {}
+
+public:
+  [[nodiscard, strong_inline]] constexpr State stream() const noexcept { return increment >> 1; }
+
+  [[strong_inline]] constexpr State stream(State newStream) noexcept {
+    State res = stream();
+    increment = (newStream << 1) | 1;
+    return res;
+  }
+
+  [[strong_inline]] constexpr Pcg &discard(State count) noexcept { return *this = *this + count; }
+
+  [[nodiscard, strong_inline]] constexpr Pcg operator+(State count) const noexcept {
+    return {std::in_place, Lcg::seek(state, Multiplier, increment, count), increment};
+  }
+
+  [[nodiscard, strong_inline]] constexpr State operator-(const Pcg &other) const noexcept {
+    return Lcg::distance(other.state, Multiplier, other.increment, state);
+  }
+
+  [[nodiscard, strong_inline]] constexpr bool operator==(const Pcg &other) const noexcept {
+    return state == other.state && increment == other.increment;
+  }
+
+  [[nodiscard, strong_inline]] constexpr bool operator!=(const Pcg &other) const noexcept {
+    return state != other.state || increment != other.increment;
+  }
+
+  /// Generate result.
+  [[nodiscard, strong_inline]] constexpr Result operator()() noexcept {
+    State prevState = state;
+    state = state * Multiplier + increment;
+    return output(prevState);
+  }
+
+  /// Generate result in range \f$ [0, b) \f$.
+  [[nodiscard, strong_inline]] constexpr Result operator()(Result b) noexcept {
+    if (b <= 1) return 0;
+    Result rmin = (-b) % b;
+    while (true)
+      if (Result r = operator()(); r >= rmin) return r % b;
+  }
+
+public:
+  State state = 0;
+
+  State increment = DefaultIncrement;
+
+  /// Output function.
+  [[nodiscard, strong_inline]] static constexpr Result output(State state) noexcept {
+    constexpr size_t resultBits = sizeof(Result) * 8;
+    constexpr size_t stateBits = sizeof(State) * 8;
+    constexpr size_t spareBits = stateBits - resultBits;
+    constexpr size_t targetOpBits = std::countr_zero(resultBits);
+    constexpr size_t opBits = spareBits < targetOpBits ? spareBits : targetOpBits;
+    constexpr size_t amplifier = targetOpBits - opBits;
+    constexpr size_t mask = (1 << opBits) - 1;
+    constexpr size_t topSpare = opBits;
+    constexpr size_t bottomSpare = spareBits - topSpare;
+    constexpr size_t shift = (resultBits + topSpare) >> 1;
+    size_t pivot = 0;
+    if constexpr (opBits > 0) {
+      pivot = state;
+      pivot = mask & (pivot >> (stateBits - opBits));
+      pivot = mask & (pivot << amplifier);
+    }
+    return std::rotr(Result((xorshr(state, shift)) >> bottomSpare), pivot);
+  }
+
+  struct Lcg {
+    /// Linear congruential generator seek.
+    ///
+    /// \note
+    /// If the generator has full period (coeffA is a multiple of four plus one and
+    /// coeffB is odd), then seeking by negative numbers works as expected.
+    ///
+    [[nodiscard]] static constexpr State seek(State state, State coeffA, State coeffB, State count) noexcept {
+      // Fast power by squaring.
+      State accumA = 1;
+      State accumB = 0;
+      while (count > 0) {
+        if (count & 1) {
+          accumA = accumA * coeffA;
+          accumB = accumB * coeffA + coeffB;
+        }
+        coeffB *= coeffA + 1;
+        coeffA *= coeffA;
+        count >>= 1;
+      }
+      return state * accumA + accumB;
+    }
+
+    /// Linear congruential generator distance.
+    [[nodiscard]] static constexpr State distance(State state, State coeffA, State coeffB, State targetState) noexcept {
+      State bit = 1;
+      State count = 0;
+      while (state != targetState) {
+        if ((state & bit) != (targetState & bit)) {
+          state = state * coeffA + coeffB;
+          count = count | bit;
+        }
+        bit <<= 1;
+        coeffB *= coeffA + 1;
+        coeffA *= coeffA;
+      }
+      return count;
+    }
+  };
+};
+
+using Pcg8 = Pcg<uint8_t, uint16_t, 12829U, 47989U>;
+using Pcg16 = Pcg<uint16_t, uint32_t, 747796405UL, 2891336453UL>;
+using Pcg32 = Pcg<uint32_t, uint64_t, 6364136223846793005ULL, 1442695040888963407ULL>;
+using Pcg64 = Pcg<uint64_t, uint64_t, 6364136223846793005ULL, 1442695040888963407ULL>;
+
+/// The k-dimensionally equidistributed (KDD) extended generator based on PCG32.
+///
+/// As alluded to above, the overall PCG methodology is broader than the implementation here. The
+/// [canonical PCG implementation][1] by O'Neill has general mechanisms to build up extended generators
+/// that that operate by the same principles but have a much longer period. This is a stripped down
+/// port of the (perhaps most "standard" in some sense) k-dimensionally equidistributed generator
+/// built around PCG32 XSHRR with an RXSMXS table updater.
+///
+/// Note that k-dimensional equidistribution means the generator can legitimately produce all canonical
+/// k-dimensional random vectors. The dimension is analogous to the table size, so the default value of
+/// 1024 is functionally massive. This is still computationally feasible, as it only adds 4KB of state
+/// (1024 times size of 32-bit int) that only ever needs to be updated once every 65535 calls on average.
+/// The table is randomly accessed once every call however, which may disrupt cache performance. This is
+/// the cost of doing business and is not typically catastrophic, but it is something to be aware of.
+///
+/// [1]: https://github.com/imneme/pcg-cpp
+///
+template <size_t TableSize = 1024> struct ExtendedPcg32 {
+public:
+  static_assert((TableSize & (TableSize - 1)) == 0, "Table size must be power of two!");
+
+  using result_type = uint32_t;
+
+  [[nodiscard]] static constexpr uint32_t min() noexcept { return 0; }
+
+  [[nodiscard]] static constexpr uint32_t max() noexcept { return std::numeric_limits<uint32_t>::max(); }
+
+public:
+  constexpr ExtendedPcg32() noexcept { mTable.initialize(Pcg32()); }
+
+  constexpr ExtendedPcg32(uint64_t seed) noexcept { mTable.initialize(Pcg32(seed)); }
+
+  constexpr ExtendedPcg32(uint64_t seed, uint64_t seq) noexcept { mTable.initialize(Pcg32(seed, seq)); }
+
+  constexpr ExtendedPcg32(std::seed_seq seed) noexcept { mTable.initialize(seed); }
+
+  [[nodiscard]] uint32_t operator()() noexcept { return mTable(); }
+
+private:
+  struct Table {
+    constexpr void initialize(Pcg32 gen) noexcept {
+      mGen = gen;
+      uint32_t valueA = mGen();
+      uint32_t valueB = mGen();
+      uint32_t valueC = valueA - valueB;
+      for (uint32_t &value : mTable) value = mGen() ^ valueC;
+    }
+
+    void initialize(std::seed_seq seq) noexcept {
+      uint32_t seed[4]{};
+      seq.generate(&seed[0], &seed[0] + 4);
+      seq.generate(&mTable[0], &mTable[0] + TableSize);
+      mGen = Pcg32(
+        (uint64_t(seed[0]) << 32) | uint64_t(seed[1]), //
+        (uint64_t(seed[2]) << 32) | uint64_t(seed[3]));
+    }
+
+    [[nodiscard]] constexpr uint32_t operator()() noexcept {
+      uint64_t state = mGen.state;
+      uint32_t index = uint32_t(state & (TableSize - 1));
+      if ((state & 65535) == 0) advance();
+      return mGen() ^ mTable[index];
+    }
+
+    constexpr void advance() noexcept {
+      bool carry = false;
+      for (size_t i = 0; i < TableSize; i++) {
+        carry = carry ? advance(mTable[i], i + 1) : false;
+        carry = advance(mTable[i], i + 1) || carry;
+      }
+    }
+
+    [[nodiscard]] static constexpr bool advance(uint32_t &state, uint32_t i) noexcept {
+      return (state = output(unoutput(state) * 747796405U + 2891336453U + i * 2)) == 0;
+    }
+
+    [[nodiscard]] static constexpr uint32_t output(uint32_t state) noexcept {
+      state = xorshr(state, 4 + ((state >> 28) & 15)) * 277803737U;
+      state = xorshr(state, 22);
+      return state;
+    }
+
+    [[nodiscard]] static constexpr uint32_t unoutput(uint32_t state) noexcept {
+      state = unxorshr(state, 22) * 2897767785U;
+      state = unxorshr(state, 4 + ((state >> 28) & 15));
+      return state;
+    }
+
+    [[nodiscard]] static constexpr uint32_t unxorshr(uint32_t value, size_t shift, size_t bits = 32) noexcept {
+      if (2 * shift >= bits || shift == 0) return xorshr(value, shift);
+      uint32_t mask1 = (1UL << (bits - shift * 2)) - 1;
+      uint32_t mask2 = (1UL << (bits - shift)) - 1;
+      uint32_t hibits = xorshr(value, shift) & ~mask1;
+      uint32_t lobits = unxorshr((hibits | (value & mask1)) & mask2, shift, bits - shift) & mask1;
+      return hibits | lobits;
+    }
+
+    Pcg32 mGen;
+
+    uint32_t mTable[TableSize]{};
+  };
+
+  Table mTable;
+};
+
+} // namespace mi
