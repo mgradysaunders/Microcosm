@@ -79,7 +79,6 @@ public:
     }
 
   public:
-
     /// Is on path from camera?
     [[nodiscard]] bool isFromCamera() const noexcept { return runtime.kind == Kind::Camera; }
 
@@ -189,7 +188,8 @@ public:
         /// source vertices.
         uint8_t isDeltaDirection : 1 {0};
 
-        uint8_t isDeltaScattering : 1{0};
+        /// Is the vertex scattering direction (omegaI) sampled from a Dirac delta distribution?
+        uint8_t isDeltaScattering : 1 {0}; // TODO Just use isDeltaDirection to signify this?
 
         /// Is known to be an opaque surface? (i.e., blocks visibility checks?) When performing
         /// visibility checks, this flag can be used to instantly fail the check without having to
@@ -365,25 +365,27 @@ private:
 }
 
 inline void Path::Vertex::recalculateForwardPathPDF(const Vertex &prev) noexcept {
-  if (prev.runtime.flags.isDeltaScattering)
+  if (prev.runtime.flags.isDeltaScattering) {
     runtime.pathPDF.forward = 1;
-  else
+  } else {
     runtime.pathPDF.forward =
       (runtime.kind == prev.runtime.kind ? prev.runtime.scatteringPDF.forward : prev.runtime.scatteringPDF.reverse) *
       convertSolidAngleToPath(prev, *this);
+  }
 }
 
 inline void Path::Vertex::recalculateReversePathPDF(const Vertex &next) noexcept {
   // If the vertex is intangible, then no matter what it is not possible to randomly stumble across it
   // by the conjugate method.
-  if (runtime.flags.isIntangible)
+  if (runtime.flags.isIntangible) {
     runtime.pathPDF.reverse = 0;
-  else if (next.runtime.flags.isDeltaScattering)
+  } else if (next.runtime.flags.isDeltaScattering) {
     runtime.pathPDF.reverse = 1;
-  else
+  } else {
     runtime.pathPDF.reverse =
       (runtime.kind == next.runtime.kind ? next.runtime.scatteringPDF.reverse : next.runtime.scatteringPDF.forward) *
       convertSolidAngleToPath(next, *this);
+  }
 }
 
 /// This is the primary logic for forward radiance estimation in a standard unidirectional Monte Carlo
