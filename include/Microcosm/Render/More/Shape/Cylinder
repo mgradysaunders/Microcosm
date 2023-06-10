@@ -1,0 +1,47 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/More/Shape/Primitive"
+
+namespace mi::render {
+
+/// A cylinder.
+struct MI_RENDER_API Cylinder final : public Primitive {
+public:
+  using shape_tag = std::true_type;
+
+  Cylinder(double radius = 1, double heightA = -1, double heightB = +1) noexcept
+    : mRadius(radius), mHeightA(heightA), mHeightB(heightB) {}
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override { return 2 * Pi * mRadius * abs(mHeightB - mHeightA); }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = parameterization(sampleU);
+    return 1 / area();
+  }
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override {
+    return manifoldOf(
+      {mRadius * cos(TwoPi * parameters[1]), //
+       mRadius * sin(TwoPi * parameters[1]), //
+       lerp(parameters[0], mHeightA, mHeightB)});
+  }
+  /// \}
+
+private:
+  double mRadius{1};
+  double mHeightA{-1};
+  double mHeightB{+1};
+
+  [[nodiscard]] Manifold manifoldOf(Vector3d point) const noexcept;
+};
+
+} // namespace mi::render

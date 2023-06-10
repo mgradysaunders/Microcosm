@@ -205,7 +205,7 @@ auto HalfEdgeMesh::Face::innerProduct(float lambda) noexcept -> MatrixNxNf {
   auto matrixU = sharp();
   auto matrixP = MatrixNxNf(-dot(flat(), matrixU));
   diag(matrixP) += 1.0f;
-  return area * dot(transpose(matrixU), matrixU).execute() + lambda * dot(transpose(matrixP), matrixP).execute();
+  return area * dot(transpose(matrixU), matrixU).doIt() + lambda * dot(transpose(matrixP), matrixP).doIt();
 }
 
 auto HalfEdgeMesh::Face::laplacian(float lambda) noexcept -> MatrixNxNf {

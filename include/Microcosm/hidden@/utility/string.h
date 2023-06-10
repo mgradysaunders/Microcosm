@@ -719,3 +719,24 @@ inline void saveStringToFile(const std::string &filename, const std::string &str
 }
 
 } // namespace mi
+
+template <typename T, typename Char> struct fmt::formatter<std::complex<T>, Char> : public fmt::formatter<T, Char> {
+  auto format(const std::complex<T> &value, auto &ctx) const -> decltype(ctx.out()) {
+    T realValue = std::real(value);
+    T imagValue = std::imag(value);
+    if (imagValue == 0) {
+      fmt::formatter<T, Char>::format(realValue, ctx);
+    } else if (realValue == 0) {
+      fmt::formatter<T, Char>::format(imagValue, ctx);
+      *ctx.out()++ = 'i';
+    } else {
+      fmt::formatter<T, Char>::format(realValue, ctx);
+      *ctx.out()++ = ' ';
+      *ctx.out()++ = std::signbit(imagValue) ? '-' : '+';
+      *ctx.out()++ = ' ';
+      fmt::formatter<T, Char>::format(std::abs(imagValue), ctx);
+      *ctx.out()++ = 'i';
+    }
+    return ctx.out();
+  }
+};

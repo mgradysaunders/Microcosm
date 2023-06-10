@@ -1,5 +1,5 @@
 #include "Microcosm/Render/More/Shape/Follicle"
-#include "Microcosm/Render/More/Shape/Primitives"
+#include "Microcosm/Render/More/Shape/Sphere"
 
 namespace mi::render {
 

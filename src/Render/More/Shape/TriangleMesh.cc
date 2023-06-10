@@ -1,5 +1,5 @@
 #include "Microcosm/Render/More/Shape/TriangleMesh"
-#include "Microcosm/Render/More/Shape/Primitives"
+#include "Microcosm/Render/More/Shape/Triangle"
 
 namespace mi::render {
 

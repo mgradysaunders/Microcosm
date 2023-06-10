@@ -132,7 +132,7 @@ template <typename Expr> requires(concepts::tensor_with_rank<Expr, 2>) [[nodisca
   } else if constexpr (std::same_as<Shape, TensorShape<2, 2>>) {
     return expr(0, 0) * expr(1, 1) - expr(0, 1) * expr(1, 0);
   } else if constexpr (std::same_as<Shape, TensorShape<3, 3>>) {
-    auto matrix = expr.execute();
+    auto matrix = expr.doIt();
     auto vectorX = matrix[0];
     auto vectorY = matrix[1];
     auto vectorZ = matrix[2];

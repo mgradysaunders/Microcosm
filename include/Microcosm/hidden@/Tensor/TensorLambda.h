@@ -83,7 +83,7 @@ public:
   /// invoke this explicitly.
   ///
   template <typename Result = Tensor<value_type, Shape, 0>> //
-  [[nodiscard, strong_inline]] constexpr auto execute() const {
+  [[nodiscard, strong_inline]] constexpr auto doIt() const {
     Result result{shape};
     result.shape.forEach([&](auto i) constexpr { result(i) = lambda(i); });
     return result;
@@ -185,21 +185,21 @@ requires(concepts::tensor_tensor_op2<ExprA, ExprB> && RankA <= 2 && RankB <= 2)
         return exprA.shape.template take<0>().append(exprB.shape.template take<1>());
       }
     };
-    return TensorLambda( //
-             shape(),
-             [exprA = capture_in_tensor_lambda(std::forward<ExprA>(exprA)),
-              exprB = capture_in_tensor_lambda(std::forward<ExprB>(exprB))](auto i) constexpr {
-               Result result{};
-               if constexpr (RankA == 2 && RankB == 1)
-                 for (size_t k = 0; k < exprB.shape.size(); k++) result += exprA(IndexVector{i[0], k}) * exprB(k);
-               else if constexpr (RankA == 1 && RankB == 2)
-                 for (size_t k = 0; k < exprA.shape.size(); k++) result += exprA(k) * exprB(IndexVector{k, i[0]});
-               else if constexpr (RankA == 2 && RankB == 2)
-                 for (size_t k = 0; k < exprA.shape.cols(); k++)
-                   result += exprA(IndexVector{i[0], k}) * exprB(IndexVector{k, i[1]});
-               return result;
-             })
-      .execute(); // It is not generally safe/intuitive to leave this unrealized.
+    return          //
+      TensorLambda( //
+        shape(),
+        [exprA = capture_in_tensor_lambda(std::forward<ExprA>(exprA)),
+         exprB = capture_in_tensor_lambda(std::forward<ExprB>(exprB))](auto i) constexpr {
+          Result result{};
+          if constexpr (RankA == 2 && RankB == 1)
+            for (size_t k = 0; k < exprB.shape.size(); k++) result += exprA(IndexVector{i[0], k}) * exprB(k);
+          else if constexpr (RankA == 1 && RankB == 2)
+            for (size_t k = 0; k < exprA.shape.size(); k++) result += exprA(k) * exprB(IndexVector{k, i[0]});
+          else if constexpr (RankA == 2 && RankB == 2)
+            for (size_t k = 0; k < exprA.shape.cols(); k++) result += exprA(IndexVector{i[0], k}) * exprB(IndexVector{k, i[1]});
+          return result;
+        })
+        .doIt(); // It is not generally safe/intuitive to leave this unrealized.
   }
 }
 

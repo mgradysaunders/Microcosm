@@ -147,21 +147,19 @@ public:
     }
   }
 
-  [[nodiscard, strong_inline]] constexpr decltype(auto) operator()(auto... i) requires(sizeof...(i) > 0) {
-    return derived().access(i...);
-  }
-
-  [[nodiscard, strong_inline]] constexpr decltype(auto) operator()(auto... i) const requires(sizeof...(i) > 0) {
-    return derived().access(i...);
-  }
-
   [[nodiscard, strong_inline]] constexpr decltype(auto) operator[](auto i) { return derived().access(i); }
 
   [[nodiscard, strong_inline]] constexpr decltype(auto) operator[](auto i) const { return derived().access(i); }
 
-  [[nodiscard, strong_inline]] constexpr auto &execute() noexcept { return derived(); }
+  [[nodiscard, strong_inline]] constexpr decltype(auto) operator()(auto i, auto... j) { return derived().access(i, j...); }
 
-  [[nodiscard, strong_inline]] constexpr auto &execute() const noexcept { return derived(); }
+  [[nodiscard, strong_inline]] constexpr decltype(auto) operator()(auto i, auto... j) const {
+    return derived().access(i, j...);
+  }
+
+  [[nodiscard, strong_inline]] constexpr auto &doIt() noexcept { return derived(); }
+
+  [[nodiscard, strong_inline]] constexpr auto &doIt() const noexcept { return derived(); }
 
   template <size_t K> void resize(auto count) requires(Shape::template IsDynamic<K> && Resizable) {
     Shape oldShape = shape;
@@ -195,7 +193,6 @@ public:
 
 public:
   // TODO Move these into the top namespace
-
   [[nodiscard, strong_inline]] constexpr auto fold(auto &&pred) const requires(Rank == 1) {
     value_type value{};
     if (!empty()) {

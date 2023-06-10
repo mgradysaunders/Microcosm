@@ -246,11 +246,11 @@ template <typename Expr>
 DecompSVD(Expr &&) -> DecompSVD<typename std::decay_t<Expr>::value_type, typename std::decay_t<Expr>::shape_type>;
 
 template <typename Expr> requires(concepts::tensor_with_rank<Expr, 2>) [[nodiscard]] inline auto orthogonalize(Expr &&expr) {
-  return DecompSVD(std::forward<Expr>(expr)).orthogonalize().execute();
+  return DecompSVD(std::forward<Expr>(expr)).orthogonalize().doIt();
 }
 
 template <typename Expr> requires(concepts::tensor_with_rank<Expr, 2>) [[nodiscard]] inline auto pseudoInverse(Expr &&expr) {
-  return DecompSVD(std::forward<Expr>(expr)).pseudoInverse().execute();
+  return DecompSVD(std::forward<Expr>(expr)).pseudoInverse().doIt();
 }
 
 } // namespace mi

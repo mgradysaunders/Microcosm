@@ -1,0 +1,49 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/More/Shape/Primitive"
+
+namespace mi::render {
+
+struct MI_RENDER_API Triangle final : public Primitive, public ArrayLike<Triangle> {
+public:
+  using shape_tag = std::true_type;
+
+  static constexpr double Eps = 1e-7;
+
+  constexpr Triangle() noexcept = default;
+
+  constexpr Triangle(const Vector3d &pointA, const Vector3d &pointB, const Vector3d &pointC) noexcept
+    : mPoints{pointA, pointB, pointC} {}
+
+public:
+  MI_ARRAY_LIKE_CONSTEXPR_DATA(&mPoints[0])
+
+  MI_ARRAY_LIKE_STATIC_CONSTEXPR_SIZE(3)
+
+public:
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override {
+    return fastLength(cross(mPoints[1] - mPoints[0], mPoints[2] - mPoints[0])) / 2;
+  }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = parameterization(uniformTriangleSample(sampleU));
+    return 1 / area();
+  }
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override;
+  /// \}
+
+private:
+  Vector3d mPoints[3]{};
+};
+
+} // namespace mi::render

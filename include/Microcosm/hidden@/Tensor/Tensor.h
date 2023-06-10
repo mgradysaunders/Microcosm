@@ -70,7 +70,7 @@ public:
   }
 
   template <typename Other> requires(concepts::tensor_lambda<Other>) //
-  [[strong_inline]] constexpr Tensor(Other &&other) : Tensor(other.execute()) {}
+  [[strong_inline]] constexpr Tensor(Other &&other) : Tensor(other.doIt()) {}
 
   template <typename... Values> requires(
     (Rank == 1) && (std::convertible_to<Values, Value> && ...) && sizeof...(Values) > 0 &&

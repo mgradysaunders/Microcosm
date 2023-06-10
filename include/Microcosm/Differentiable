@@ -56,6 +56,7 @@ template <typename Value, typename Deriv> requires(!concepts::tensor_vector<Deri
 template <typename Value, typename Deriv> requires(concepts::tensor_vector<Deriv>) Differentiable(Value &&, Deriv &&)
   -> Differentiable<std::common_type_t<std::decay_t<Value>, value_type_t<std::decay_t<Deriv>>>, tensor_size_v<Deriv, 0>>;
 
+#if 0
 /// Extract derivatives of a vector expression into the Jacobian matrix.
 template <typename Expr> requires(concepts::tensor_vector<Expr>)
 [[nodiscard, strong_inline]] constexpr auto derivsOf(Expr &&expr) noexcept {
@@ -66,6 +67,7 @@ template <typename Expr> requires(concepts::tensor_vector<Expr>)
   for (size_t i = 0; i < Rows; i++) matrix[i].assign(expr[i].deriv());
   return matrix;
 }
+#endif
 
 template <typename Value, size_t N> struct to_float<Differentiable<Value, N>> : to_float<Value> {};
 
@@ -560,5 +562,34 @@ template <typename ValueA, typename ValueB, size_t N> requires(concepts::number<
 }
 
 template <typename Value> using Dual = Differentiable<Value, 0>;
+
+} // namespace mi
+
+namespace mi {
+
+template <typename Value, size_t N> requires(!concepts::differentiable<Value>)
+[[nodiscard]] constexpr Tensor<Differentiable<Value, N>, TensorShape<N>> nabla(Tensor<Value, TensorShape<N>> coord) noexcept {
+  Tensor<Differentiable<Value, N>, TensorShape<N>> resultCoord;
+  for (size_t i = 0; i < N; i++) {
+    resultCoord[i].value() = coord[i];
+    resultCoord[i].deriv()[i] = 1;
+  }
+  return resultCoord;
+}
+
+template <typename Value, size_t N>
+[[nodiscard]] constexpr Value divergenceOf(const Tensor<Differentiable<Value, N>, TensorShape<N>> &vector) noexcept {
+  Value divergence{};
+  for (size_t i = 0; i < N; i++) divergence += vector[i].deriv()[i];
+  return divergence;
+}
+
+template <typename Value>
+[[nodiscard]] constexpr Tensor<Value, TensorShape<3>>
+curlOf(const Tensor<Differentiable<Value, 3>, TensorShape<3>> &vector) noexcept {
+  return {
+    vector[2].deriv()[1] - vector[1].deriv()[2], vector[0].deriv()[2] - vector[2].deriv()[0],
+    vector[1].deriv()[0] - vector[0].deriv()[1]};
+}
 
 } // namespace mi

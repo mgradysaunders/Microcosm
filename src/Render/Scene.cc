@@ -87,9 +87,9 @@ Path Scene::walk(const Spectrum &waveLens, Random &random, Path::Vertex initialV
       vertex.runtime.scatteringPDF =
         vertex.material.scatterSample(random, vertex.runtime.omegaO, vertex.runtime.omegaI, ratio, isDelta);
       if (isDelta) {
-      vertex.runtime.flags.isDeltaScattering = isDelta;
-      vertex.runtime.scatteringPDF.forward = 1;
-      vertex.runtime.scatteringPDF.reverse = 1;
+        vertex.runtime.flags.isDeltaScattering = isDelta;
+        vertex.runtime.scatteringPDF.forward = 1;
+        vertex.runtime.scatteringPDF.reverse = 1;
       }
       if (
         !isPositiveAndFinite(vertex.runtime.scatteringPDF.forward) || //
@@ -107,7 +107,7 @@ Path Scene::walk(const Spectrum &waveLens, Random &random, Path::Vertex initialV
 
 bool Scene::visibility(
   const Spectrum &waveLens, Random &random, const Path::Vertex &initialVertex, Vector3d omegaI, double maxDistance,
-  Spectrum &tau) const {
+  Spectrum &tr) const {
   maxDistance *= 1 - mShadowEpsilon;
   if (!(maxDistance > mShadowEpsilon)) return true;
   Ray3d ray{initialVertex.position, normalize(omegaI), mShadowEpsilon, maxDistance};
@@ -130,10 +130,10 @@ bool Scene::visibility(
     }
 
     // Account for medium transmission.
-    lastVertex.material.medium(ray.direction).transmission(random, ray, tau);
+    lastVertex.material.medium(ray.direction).transmission(random, ray, tr);
     // If the transmission collapses to zero (or potentially explodes, but hopefully not), then
     // return false to indicate no visibility.
-    if (!isPositiveAndFinite(tau)) [[unlikely]]
+    if (!isPositiveAndFinite(tr)) [[unlikely]]
       return false;
 
     // If we did not intersect something, then we are done. We have performed intersection tests until the failure,

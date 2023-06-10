@@ -73,7 +73,7 @@ clampLengthInPlace(Expr &&expr, concepts::arithmetic auto minLen, concepts::arit
 ///
 template <typename Expr> requires(concepts::tensor_with_rank<Expr, 1>)
 [[nodiscard, strong_inline]] inline auto lengthAndDirection(Expr &&expr) {
-  auto vec = expr.execute();
+  auto vec = expr.doIt();
   auto len = LengthHelperFor<Expr>().normalizeInPlace(vec);
   return std::make_pair(len, vec);
 }
@@ -98,7 +98,7 @@ template <typename Expr> requires(concepts::tensor_with_rank<Expr, 1>)
 /// Normalize by Euclidean length. Fast version with no protection against overflow and underflow.
 template <typename Expr> requires(concepts::tensor_with_rank<Expr, 1>)
 [[nodiscard, strong_inline]] inline auto fastNormalize(Expr &&expr) {
-  auto vector = expr.execute();
+  auto vector = expr.doIt();
   auto vectorLen = fastLength(vector);
   auto vectorLenInv = vectorLen > constants::MinInv<decltype(vectorLen)> ? 1 / vectorLen : 0;
   vector *= vectorLenInv;
@@ -113,8 +113,8 @@ template <typename ExprA, typename ExprB> requires(concepts::tensor_with_rank<Ex
   using ValueA = value_type_t<ExprA>;
   using ValueB = value_type_t<ExprB>;
   using Float = to_float_t<ValueA, ValueB>;
-  auto vectorU = exprA.template cast<Float>().execute();
-  auto vectorV = exprB.template cast<Float>().execute();
+  auto vectorU = exprA.template cast<Float>().doIt();
+  auto vectorV = exprB.template cast<Float>().doIt();
   LengthHelper<Float, Shape> lengthHelper;
   volatile Float minLen = lengthHelper.length(vectorU);
   volatile Float maxLen = lengthHelper.length(vectorV);
@@ -167,8 +167,8 @@ template <
   typename Result = decltype(ValueA() * ValueB())>
 requires(concepts::tensor_with_shape<ExprA, 3> && concepts::tensor_with_shape<ExprB, 3>)
 [[nodiscard, strong_inline]] constexpr Vector3<Result> cross(ExprA &&exprA, ExprB &&exprB) {
-  auto vectorA = exprA.execute();
-  auto vectorB = exprB.execute();
+  auto vectorA = exprA.doIt();
+  auto vectorB = exprB.doIt();
   return {
     vectorA[1] * vectorB[2] - vectorA[2] * vectorB[1], //
     vectorA[2] * vectorB[0] - vectorA[0] * vectorB[2], //

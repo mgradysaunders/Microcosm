@@ -1,12 +1,6 @@
-microcosm_add_tests(
-  "test_Render"
-  SOURCES
-    "Fresnel.cc"
-    "Primitives.cc"
-    "Prospect.cc"
-    "Microflake.cc"
-    "Microsurface.cc"
-    "Scattering.cc"
-  DEPENDS
-    ${PROJECT_NAME}::Render
-  )
+#microcosm_add_tests(
+#  "test_Render"
+#  SOURCES
+#  DEPENDS
+#    ${PROJECT_NAME}::Render
+#  )

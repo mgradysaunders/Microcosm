@@ -1,0 +1,61 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/Manifold"
+
+namespace mi::render {
+
+/// This defines an interface to primitive shapes, which readily support everything we might
+/// want to do when rendering. That is: calculating bounding boxes, testing for ray intersections,
+/// finding nearest points, and sampling random points with respect to surface area as well as
+/// solid angle.
+///
+/// The motivation for using an ordinary virtual interface here instead of reverse polymorphism is that
+/// the scope here is limited (we demand that every implementation support everything), and it is more convenient
+/// and performant to have defaulted virtual functions specifically concering solid angle sampling and density
+/// evaluation, which can easily lean on the guaranteed-to-be-present area sampling and intersection routines
+/// to prevent self-shadowing. Also note: all of the implementations operate in a rather restricted local space.
+/// If you need to do instance-like transforms, it is understood that this can be accomplished by binding the
+/// primitive to the relevant reverse polymorphic interfaces and then applying the transform there.
+struct MI_RENDER_API Primitive {
+public:
+  virtual ~Primitive() = default;
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] virtual BoundBox3d box() const noexcept = 0;
+
+  [[nodiscard]] virtual std::optional<double> intersect(Ray3d ray) const noexcept {
+    Manifold manifold;
+    return intersect(ray, manifold);
+  }
+
+  [[nodiscard]] virtual std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept = 0;
+
+  [[nodiscard]] virtual std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept = 0;
+
+  [[nodiscard]] virtual double area() const noexcept = 0;
+
+  [[nodiscard]] virtual double areaPDF(Manifold) const noexcept { return 1 / area(); }
+
+  [[nodiscard]] virtual double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept = 0;
+
+  [[nodiscard]] virtual double solidAnglePDF(Vector3d referencePoint, Manifold manifold) const noexcept {
+    return convertAreaToSolidAngle(referencePoint, manifold) * areaPDF(manifold);
+  }
+
+  [[nodiscard]] virtual double solidAngleSample(Vector2d sampleU, Vector3d referencePoint, Manifold &manifold) const noexcept {
+    double density{areaSample(sampleU, manifold)};
+    if (density *= convertAreaToSolidAngle(referencePoint, manifold);
+        density > 0 && !intersect(shadowRayBetween(referencePoint, manifold.point))) {
+      return density;
+    } else {
+      return 0;
+    }
+  }
+
+  [[nodiscard]] virtual Manifold parameterization(Vector2d parameters) const noexcept = 0;
+  /// \}
+};
+
+} // namespace mi::render

@@ -428,7 +428,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA + exprB;
     else
-      return (exprA + exprB).execute();
+      return (exprA + exprB).doIt();
   }());
 }
 
@@ -438,7 +438,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA - exprB;
     else
-      return (exprA - exprB).execute();
+      return (exprA - exprB).doIt();
   }());
 }
 
@@ -448,7 +448,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA * exprB;
     else
-      return (exprA * exprB).execute();
+      return (exprA * exprB).doIt();
   }());
 }
 
@@ -458,7 +458,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA / exprB;
     else
-      return (exprA / exprB).execute();
+      return (exprA / exprB).doIt();
   }());
 }
 
@@ -468,7 +468,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA % exprB;
     else
-      return (exprA % exprB).execute();
+      return (exprA % exprB).doIt();
   }());
 }
 
@@ -478,7 +478,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA & exprB;
     else
-      return (exprA & exprB).execute();
+      return (exprA & exprB).doIt();
   }());
 }
 
@@ -488,7 +488,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA | exprB;
     else
-      return (exprA | exprB).execute();
+      return (exprA | exprB).doIt();
   }());
 }
 
@@ -498,7 +498,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA ^ exprB;
     else
-      return (exprA ^ exprB).execute();
+      return (exprA ^ exprB).doIt();
   }());
 }
 
@@ -508,7 +508,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA >> exprB;
     else
-      return (exprA >> exprB).execute();
+      return (exprA >> exprB).doIt();
   }());
 }
 
@@ -518,7 +518,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA << exprB;
     else
-      return (exprA << exprB).execute();
+      return (exprA << exprB).doIt();
   }());
 }
 

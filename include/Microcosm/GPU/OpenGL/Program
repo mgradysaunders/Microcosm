@@ -100,9 +100,9 @@ inline void uniform(GLint location, const Tensor<Value, TensorShape<M, N>> &valu
   static_assert(M >= 1 && M <= 4);
   static_assert(N >= 1 && N <= 4);
   if constexpr (M == 1) {
-    uniform(location, value.row(0).execute());
+    uniform(location, value.row(0).doIt());
   } else if constexpr (N == 1) {
-    uniform(location, value.col(0).execute());
+    uniform(location, value.col(0).doIt());
   } else if constexpr (M == 2) {
     if constexpr (std::same_as<Value, GLfloat>) {
       if constexpr (N == 2) glUniformMatrix2fv(location, 1, GL_TRUE, &value[0][0]);

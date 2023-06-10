@@ -1,0 +1,48 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/More/Shape/Primitive"
+
+namespace mi::render {
+
+/// A sphere.
+struct MI_RENDER_API Sphere final : public Primitive {
+public:
+  using shape_tag = std::true_type;
+
+  constexpr Sphere(double radius = 1) noexcept : mRadius(radius) {}
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override { return 4 * Pi * sqr(mRadius); }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = manifoldOf(mRadius * uniformSphereSample(sampleU));
+    return 1 / area();
+  }
+
+  [[nodiscard]] double solidAnglePDF(Vector3d referencePoint, Manifold manifold) const noexcept override;
+
+  [[nodiscard]] double solidAngleSample(Vector2d sampleU, Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override {
+    return manifoldOf(
+      {mRadius * sin(Pi * parameters[0]) * cos(TwoPi * parameters[1]), //
+       mRadius * sin(Pi * parameters[0]) * sin(TwoPi * parameters[1]), //
+       mRadius * cos(Pi * parameters[0])});
+  }
+  /// \}
+
+private:
+  double mRadius{1};
+
+  [[nodiscard]] Manifold manifoldOf(Vector3d point) const noexcept;
+};
+
+} // namespace mi::render

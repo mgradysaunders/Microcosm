@@ -22,7 +22,7 @@ template <concepts::arithmetic Arith, std::floating_point Float = to_float_t<Ari
 }
 
 template <typename Value> requires(concepts::tensor_rgb_or_rgba<Value>) [[nodiscard]] inline auto encodeSRGB(Value &&value) {
-  auto result = value.execute();
+  auto result = value.doIt();
   result[0] = encodeSRGB(result[0]);
   result[1] = encodeSRGB(result[1]);
   result[2] = encodeSRGB(result[2]);
@@ -42,7 +42,7 @@ template <concepts::arithmetic Arith, std::floating_point Float = to_float_t<Ari
 }
 
 template <typename Value> requires(concepts::tensor_rgb_or_rgba<Value>) [[nodiscard]] inline auto decodeSRGB(Value &&value) {
-  auto result = value.execute();
+  auto result = value.doIt();
   result[0] = decodeSRGB(result[0]);
   result[1] = decodeSRGB(result[1]);
   result[2] = decodeSRGB(result[2]);

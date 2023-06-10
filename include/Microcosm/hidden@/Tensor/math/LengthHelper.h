@@ -81,7 +81,7 @@ public:
   /// Normalize by Euclidean length.
   template <typename Expr> requires(concepts::tensor_with_rank<Expr, 1>)
   [[nodiscard, strong_inline]] auto normalize(Expr &&expr) {
-    auto vec = expr.template cast<Field>().execute();
+    auto vec = expr.template cast<Field>().doIt();
     void(normalizeInPlace(vec));
     return vec;
   }
@@ -103,7 +103,7 @@ public:
   /// Clamp Euclidean length.
   template <typename Expr> requires(concepts::tensor_with_rank<Expr, 1>)
   [[nodiscard, strong_inline]] auto clampLength(Expr &&expr, Float minLen, Float maxLen) {
-    auto vec = expr.template cast<Field>().execute();
+    auto vec = expr.template cast<Field>().doIt();
     void(clampLengthInPlace(vec, minLen, maxLen));
     return vec;
   }

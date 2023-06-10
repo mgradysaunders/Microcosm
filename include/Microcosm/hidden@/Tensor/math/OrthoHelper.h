@@ -138,11 +138,19 @@ public:
     // Force diagonal and positive.
     for (size_t i = 0; i < mRows; i++) {
       for (size_t j = 0; j < mCols; j++) {
-        if (i != j)
+        if (i != j) {
           mCoeffsX(i, j) = Field(0);
-        else {
-          if constexpr (EnableU)
-            if (mCoeffsX(i, i) != Float(0)) mCoeffsU[i] *= sign(mCoeffsX(i, i));
+        } else {
+          if constexpr (!std::floating_point<Field>) {
+            if (mCoeffsX(i, i) != Float(0)) {
+              auto sqrtSign = sqrt(sign(mCoeffsX(i, i)));
+              if constexpr (EnableU) mCoeffsU.row(i) *= sqrtSign;
+              if constexpr (EnableV) mCoeffsV.col(i) *= sqrtSign;
+            }
+          } else {
+            if constexpr (EnableU)
+              if (mCoeffsX(i, i) != Float(0)) mCoeffsU[i] *= sign(mCoeffsX(i, i));
+          }
           mCoeffsX(i, i) = abs(mCoeffsX(i, i));
         }
       }
@@ -267,20 +275,19 @@ private:
   /// Diagonalize with alternating Givens rotations. This is the core of the SVD algorithm.
   template <Float Thresh, char SideU, char SideV> [[strong_inline]] void diagonalizeWithGivensRotations(auto &&matrixY) {
     static_assert((SideU == 'U' && SideV == 'V') || (SideU == 'V' && SideV == 'U'));
-    size_t n = matrixY.cols();
+    size_t n{matrixY.cols()};
     // Divide out largest value on the non-zero bidiagonal for basic preconditioning.
-    Float factor = 0;
+    Float factor{};
     for (size_t k = 0; k + 1 < n; k++) {
       factor = max(factor, abs(matrixY(k, k)));
       factor = max(factor, abs(matrixY(k, k + 1)));
     }
     factor = max(factor, abs(matrixY(n - 1, n - 1)));
-    if (factor > 16 * constants::MinInv<Float>) [[likely]] {
-      Float factorInv = 1 / factor;
-      for (size_t k = 0; k + 1 < n; k++) matrixY(k, k) *= factorInv, matrixY(k, k + 1) *= factorInv;
-      matrixY(n - 1, n - 1) *= factorInv;
-    } else if (factor > 0) {
-      for (size_t k = 0; k + 1 < n; k++) matrixY(k, k) /= factor, matrixY(k, k + 1) /= factor;
+    if (factor > 0) {
+      for (size_t k = 0; k + 1 < n; k++) {
+        matrixY(k, k) /= factor;
+        matrixY(k, k + 1) /= factor;
+      }
       matrixY(n - 1, n - 1) /= factor;
     }
     // Diagonalize.
@@ -290,24 +297,24 @@ private:
       while (t + 1 < n && norm(matrixY(t, t + 1)) > sqr(Thresh)) ++t;
       if (t == n) break;
       // Form Gram submatrix terms.
-      Field coeffY0 = s + 1 < t ? matrixY(t - 2, t - 1) : Field(0);
-      Field coeffY1 = matrixY(t - 1, t);
-      Field coeffZ0 = matrixY(t - 1, t - 1);
-      Field coeffZ1 = matrixY(t, t);
-      Float coeffG00 = norm(coeffY0) + norm(coeffZ0);
-      Float coeffG11 = norm(coeffY1) + norm(coeffZ1);
-      Float coeffG01 = norm(coeffZ0) * norm(coeffY1);
+      Field coeffY0{s + 1 < t ? matrixY(t - 2, t - 1) : Field(0)};
+      Field coeffY1{matrixY(t - 1, t)};
+      Field coeffZ0{matrixY(t - 1, t - 1)};
+      Field coeffZ1{matrixY(t, t)};
+      Float coeffG00{norm(coeffY0) + norm(coeffZ0)};
+      Float coeffG11{norm(coeffY1) + norm(coeffZ1)};
+      Float coeffG01{norm(coeffZ0) * norm(coeffY1)};
       // Solve quadratic characteristic polynomial for eigenvalues.
-      Float coeffB = (coeffG00 + coeffG11) * Float(0.5);
-      Float coeffC = (coeffG00 * coeffG11) - coeffG01;
-      Float coeffD = max(coeffB * coeffB - coeffC, Float(0));
-      Float lambda0 = coeffB + copysign(sqrt(coeffD), coeffB);
-      Float lambda1 = coeffC / lambda0;
+      Float coeffB{(coeffG00 + coeffG11) * Float(0.5)};
+      Float coeffC{(coeffG00 * coeffG11) - coeffG01};
+      Float coeffD{max(coeffB * coeffB - coeffC, Float(0))};
+      Float lambda0{coeffB + copysign(sqrt(coeffD), coeffB)};
+      Float lambda1{coeffC / lambda0};
       assert(isfinite(lambda0));
       assert(isfinite(lambda1));
       // Do Givens rotations.
-      Field coeffF = norm(matrixY(s, s));
-      Field coeffG = conj(matrixY(s, s)) * matrixY(s, s + 1);
+      Field coeffF{norm(matrixY(s, s))};
+      Field coeffG{conj(matrixY(s, s)) * matrixY(s, s + 1)};
       coeffF -= abs(lambda0 - coeffG11) < abs(lambda1 - coeffG11) ? lambda0 : lambda1;
       for (size_t k = s; k < t; k++) {
         rotateGivens<SideV>(k, k + 1, coeffF, coeffG);
@@ -322,8 +329,9 @@ private:
           coeffG = matrixY(k, k + 2);
         }
       }
-      if (numIters > 4096) [[unlikely]]
+      if (numIters > 4096) [[unlikely]] {
         throw Error(std::runtime_error("Diagonalization failed to converge!"));
+      }
     }
     // Re-apply preconditioning factor.
     for (size_t k = 0; k < n; k++) matrixY(k, k) *= factor;

@@ -58,7 +58,7 @@ template <typename ExprA, typename ExprB> requires(concepts::lvalue_tensor<ExprA
     if constexpr (concepts::number<ExprB> || concepts::lvalue_tensor<ExprB>)
       return exprA #{op2} exprB;
     else
-      return (exprA #{op2} exprB).execute();
+      return (exprA #{op2} exprB).doIt();
   }());
 }
 

@@ -1,0 +1,45 @@
+/*-*- C++ -*-*/
+#pragma once
+
+#include "Microcosm/Render/More/Shape/Primitive"
+
+namespace mi::render {
+
+/// A planar disk.
+struct MI_RENDER_API Disk final : public Primitive {
+public:
+  using shape_tag = std::true_type;
+
+  constexpr Disk(double radius = 1, double offset = 0) noexcept : mRadius(radius), mOffset(offset) {}
+
+  /// \name Primitive API
+  /// \{
+  [[nodiscard]] BoundBox3d box() const noexcept override;
+
+  [[nodiscard]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
+
+  [[nodiscard]] double area() const noexcept override { return Pi * sqr(mRadius); }
+
+  [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
+    manifold = manifoldOf(Vector2d(mRadius * uniformDiskSample(sampleU)).append(mOffset));
+    return 1 / area();
+  }
+
+  [[nodiscard]] Manifold parameterization(Vector2d parameters) const noexcept override {
+    return manifoldOf(
+      {mRadius * parameters[0] * cos(TwoPi * parameters[1]), //
+       mRadius * parameters[0] * sin(TwoPi * parameters[1]), //
+       mOffset});
+  }
+  /// \}
+
+private:
+  double mRadius{1}; ///< The radius.
+  double mOffset{0}; ///< The offset in Z.
+
+  [[nodiscard]] Manifold manifoldOf(Vector3d point) const noexcept;
+};
+
+} // namespace mi::render

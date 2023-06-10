@@ -24,16 +24,14 @@ public:
   void setShadowEpsilon(double value) noexcept { mShadowEpsilon = value; }
 
 public:
-  /// Randomly walk through the scene to construct a path. This accepts the first vertex and initial direction
-  /// as parameters. Therefore, the returned path is guaranteed to have at least this vertex.
-  [[nodiscard]] Path walk(const Spectrum &waveLens, Random &random, Path::Vertex initialVertex, int maxDepth = -1) const;
+  /// Randomly walk through the scene.
+  [[nodiscard]] Path walk( //
+    const Spectrum &waveLens, Random &random, Path::Vertex initialVertex, int maxDepth = -1) const;
 
-  /// Determine boolean visibility, keeping track of path transmission along the way. Note: The transmission is not
-  /// overwritten, but instead modified in-place. This is consistent with how DirectLighting expects visibility
-  /// checks to work.
+  /// Determine boolean visibility, keeping track of path transmission along the way.
   [[nodiscard]] bool visibility(
     const Spectrum &waveLens, Random &random, const Path::Vertex &initialVertex, Vector3d omegaI, double maxDistance,
-    Spectrum &tau) const;
+    Spectrum &tr) const;
 
 private:
   /// The surface intersection routine.
