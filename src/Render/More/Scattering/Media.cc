@@ -3,9 +3,7 @@
 
 namespace mi::render {
 
-void HomogeneousMedium::transmission(Random &, Ray3d ray, Spectrum &tr) const {
-  DoesntAlias(tr) *= exp(-mSigmaT * min(ray.segmentLength(), constants::Max<double>));
-}
+void HomogeneousMedium::transmission(Random &, Ray3d ray, Spectrum &tr) const { DoesntAlias(tr) *= exp(-mSigmaT * min(ray.segmentLength(), constants::Max<double>)); }
 
 std::optional<VolumeScattering> HomogeneousMedium::transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const {
   // Normalize the ray to guarantee the length of the direction vector is one and the minimum
@@ -83,8 +81,7 @@ void HeterogeneousDeltaTrackingMedium::transmission(Random &random, Ray3d ray, S
   }
 }
 
-std::optional<VolumeScattering> HeterogeneousDeltaTrackingMedium::transmissionSample( //
-  Random &random, Ray3d ray, Spectrum &ratio) const {                                 //
+std::optional<VolumeScattering> HeterogeneousDeltaTrackingMedium::transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const {
   if (auto params = mBoundBox.rayCast(ray)) {
     // Restrict ray parameter range, normalize the ray, and declare distance tracking variables.
     ray.minParam = max(ray.minParam, params->first);
