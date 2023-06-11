@@ -27,18 +27,15 @@ concept is_bsdf = std::same_as<typename std::decay_t<Value>::bsdf_tag, std::true
 /// explicitly factors this term out into the rest of the path tracing. However, at least for
 /// the scope of this project, it is much cleaner to allow it to be truly implicit.
 ///
-struct MI_RENDER_API Scattering final : public Any {
+struct MI_RENDER_API Scattering final : public AsAny {
 public:
-  using Scatter = std::function<BidirPDF( //
-    const Scattering &self, Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f)>;
+  using Scatter = std::function<BidirPDF(const Scattering &self, Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f)>;
 
-  using ScatterSample = std::function<BidirPDF(
-    const Scattering &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta)>;
+  using ScatterSample = std::function<BidirPDF(const Scattering &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta)>;
 
   Scattering() noexcept = default;
 
-  explicit Scattering(std::in_place_t, std::any any, Scatter scatter, ScatterSample scatterSample)
-    : Any(std::move(any)), mScatter(std::move(scatter)), mScatterSample(std::move(scatterSample)) {}
+  explicit Scattering(std::in_place_t, std::any any, Scatter scatter, ScatterSample scatterSample) : AsAny(std::move(any)), mScatter(std::move(scatter)), mScatterSample(std::move(scatterSample)) {}
 
   /// Construct from BSDF.
   template <typename Value> requires is_bsdf<Value> Scattering(Value &&value)
@@ -48,25 +45,25 @@ public:
           constexpr bool HasDeterministicScatterMethod = requires {
             { self.template as<Value>().scatter(omegaO, omegaI, f) } -> std::same_as<BidirPDF>;
           };
-          if constexpr (HasDeterministicScatterMethod)
+          if constexpr (HasDeterministicScatterMethod) {
             return self.template as<Value>().scatter(omegaO, omegaI, f);
-          else
+          } else {
             return self.template as<Value>().scatter(random, omegaO, omegaI, f);
+          }
         },
         [](auto &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) -> BidirPDF {
           constexpr bool AcceptsDeltaFlag = requires {
             { self.template as<Value>().scatterSample(random, omegaO, omegaI, ratio, isDelta) } -> std::same_as<BidirPDF>;
           };
-          if constexpr (AcceptsDeltaFlag)
+          if constexpr (AcceptsDeltaFlag) {
             return self.template as<Value>().scatterSample(random, omegaO, omegaI, ratio, isDelta);
-          else
+          } else {
             return self.template as<Value>().scatterSample(random, omegaO, omegaI, ratio);
+          }
         }) {}
 
 public:
-  [[strong_inline]] BidirPDF scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const {
-    return mScatter(*this, random, omegaO, omegaI, f);
-  }
+  [[strong_inline]] BidirPDF scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const { return mScatter(*this, random, omegaO, omegaI, f); }
 
   [[strong_inline]] BidirPDF scatterSample( //
     Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) const {
@@ -89,14 +86,12 @@ public:
         fastNormalize(inverseTransform.applyLinear(omegaO)), //
         fastNormalize(inverseTransform.applyLinear(omegaI)), f);
     };
-    mScatterSample =                                  //
-      [=, scatterSample = std::move(mScatterSample)]( //
-        auto &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) {
-        auto density{scatterSample(self, random, fastNormalize(inverseTransform.applyLinear(omegaO)), omegaI, ratio, isDelta)};
-        omegaI = forwardTransform.applyLinear(omegaI);
-        omegaI = fastNormalize(omegaI);
-        return density;
-      };
+    mScatterSample = [=, scatterSample = std::move(mScatterSample)](auto &self, Random &random, Vector3d omegaO, Vector3d &omegaI, Spectrum &ratio, bool &isDelta) {
+      auto density{scatterSample(self, random, fastNormalize(inverseTransform.applyLinear(omegaO)), omegaI, ratio, isDelta)};
+      omegaI = forwardTransform.applyLinear(omegaI);
+      omegaI = fastNormalize(omegaI);
+      return density;
+    };
   }
 
 private:

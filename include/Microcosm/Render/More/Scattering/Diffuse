@@ -13,9 +13,7 @@ public:
 
   LambertBSDF(Spectrum valueR, Spectrum valueT) noexcept;
 
-  LambertBSDF(Spectrum valueR, Spectrum valueT, double probR) noexcept : LambertBSDF(std::move(valueR), std::move(valueT)) {
-    mProbR = saturate(probR);
-  }
+  LambertBSDF(Spectrum valueR, Spectrum valueT, double probR) noexcept : LambertBSDF(std::move(valueR), std::move(valueT)) { mProbR = saturate(probR); }
 
   BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept;
 

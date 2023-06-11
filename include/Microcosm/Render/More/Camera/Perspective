@@ -13,9 +13,7 @@ public:
     focalLen = 0.5 * abs(size[1]) / tan(0.5 * fov);
   }
 
-  void initializeFromFOVAndAspectRatio(double fov, double aspectRatio) noexcept {
-    initializeFromFOVAndSize(fov, {1.0, 1.0 / aspectRatio});
-  }
+  void initializeFromFOVAndAspectRatio(double fov, double aspectRatio) noexcept { initializeFromFOVAndSize(fov, {1.0, 1.0 / aspectRatio}); }
 
   void takeSubsetOfImage(Vector2d fractionA, Vector2d fractionB) noexcept {
     fractionA = lerp(fractionA, imageA, imageB);

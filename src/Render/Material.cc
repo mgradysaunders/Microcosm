@@ -16,8 +16,6 @@ BidirPDF Material::scatterSample(Random &random, Vector3d omegaO, Vector3d &omeg
   return scattering->scatterSample(random, omegaO, omegaI, ratio, isDelta);
 }
 
-void Material::throwLogicErrorNoScattering(const char *functionName) {
-  throw Error(std::logic_error("Tried to call Material::{} on material without scattering functions!"_format(functionName)));
-}
+void Material::throwLogicErrorNoScattering(const char *functionName) { throw Error(std::logic_error("Tried to call Material::{} on material without scattering functions!"_format(functionName))); }
 
 } // namespace mi::render

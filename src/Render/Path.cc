@@ -13,8 +13,7 @@ void Path::Vertex::assertValidInitialSurfaceVertex(const std::source_location &l
     : runtime.flags.isDeltaDirection ? "Flagged as delta direction"
                                      : nullptr};
   if (reason) [[unlikely]]
-    throw Error(std::logic_error("Call to Path::Vertex::assertValidInitialSurfaceVertex() from {}:{} failed! Reason: {}"_format(
-      location.file_name(), location.line(), reason)));
+    throw Error(std::logic_error("Call to Path::Vertex::assertValidInitialSurfaceVertex() from {}:{} failed! Reason: {}"_format(location.file_name(), location.line(), reason)));
 }
 
 void Path::Vertex::assertValidInitialVolumeVertex(const std::source_location &location) {
@@ -29,14 +28,11 @@ void Path::Vertex::assertValidInitialVolumeVertex(const std::source_location &lo
     : runtime.flags.isKnownOpaque    ? "Flagged as known opaque"
                                      : nullptr};
   if (reason) [[unlikely]]
-    throw Error(std::logic_error("Call to Path::Vertex::assertValidInitialVolumeVertex() from {}:{} failed! Reason: {}"_format(
-      location.file_name(), location.line(), reason)));
+    throw Error(std::logic_error("Call to Path::Vertex::assertValidInitialVolumeVertex() from {}:{} failed! Reason: {}"_format(location.file_name(), location.line(), reason)));
 }
 
 void Path::Vertex::invokeMaterialProvider(const Spectrum &waveLens) {
-  if (!materialProvider)
-    throw Error(
-      std::logic_error("Tried to call Path::Vertex::invokeMaterialProvider(), but the vertex has no material provider!"));
+  if (!materialProvider) throw Error(std::logic_error("Tried to call Path::Vertex::invokeMaterialProvider(), but the vertex has no material provider!"));
   material = materialProvider(waveLens);
 }
 
@@ -53,16 +49,14 @@ void PathConnector::connectTerm(Random &random, PathView pathA, PathView pathB, 
     Path::Kind kind{vertexP.runtime.kind};
     if (mTruncation(vertexP)) {
       if (vertexP.runtime.kind != kind) [[unlikely]]
-        throw Error(std::logic_error(
-          "Call to PathConnector::connectTerm() failed! Reason: Truncation operator must return same kind of vertex!"));
+        throw Error(std::logic_error("Call to PathConnector::connectTerm() failed! Reason: Truncation operator must return same kind of vertex!"));
       receiver(pathA, pathB, multipleImportanceWeight(pathA, pathB), vertexP.runtime.ratio);
     }
   };
   auto doCompletion = [&](Path::Vertex &vertexP, Path::Vertex &vertexQ) -> std::optional<Spectrum> {
     if (mCompletion(vertexP, vertexQ)) {
       if (vertexP.runtime.kind == vertexQ.runtime.kind) [[unlikely]]
-        throw Error(std::logic_error(
-          "Call to PathConnector::connectTerm() failed! Reason: Completion operator must return opposite kind of vertex!"));
+        throw Error(std::logic_error("Call to PathConnector::connectTerm() failed! Reason: Completion operator must return opposite kind of vertex!"));
       Vector3d omegaI{vertexP.omega(vertexQ)};
       Spectrum fP{spectrumZerosLike(vertexP.runtime.ratio)};
       vertexP.runtime.scatteringPDF = vertexP.material.scatter(random, vertexP.runtime.omegaO, omegaI, fP);
@@ -86,12 +80,10 @@ void PathConnector::connectTerm(Random &random, PathView pathA, PathView pathB, 
     return;
   } else if (pathA.size() == 1) { // Implied: && pathB.size() > 1
     Path::Vertex vertexA;
-    if (auto L = doCompletion(pathB.back(), vertexA))
-      receiver(PathView(&vertexA, 1), pathB, multipleImportanceWeight(PathView(&vertexA, 1), pathB), *L);
+    if (auto L = doCompletion(pathB.back(), vertexA)) receiver(PathView(&vertexA, 1), pathB, multipleImportanceWeight(PathView(&vertexA, 1), pathB), *L);
   } else if (pathB.size() == 1) { // Implied: && pathA.size() > 1
     Path::Vertex vertexB;
-    if (auto L = doCompletion(pathA.back(), vertexB))
-      receiver(pathA, PathView(&vertexB, 1), multipleImportanceWeight(pathA, PathView(&vertexB, 1)), *L);
+    if (auto L = doCompletion(pathA.back(), vertexB)) receiver(pathA, PathView(&vertexB, 1), multipleImportanceWeight(pathA, PathView(&vertexB, 1)), *L);
   } else {
     // Connect paths.
     auto &vertexA{pathA.back()};

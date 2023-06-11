@@ -6,9 +6,7 @@
 namespace mi::render {
 
 /// The difference over the sum, for convenience.
-[[nodiscard]] constexpr auto differenceOverSum(auto valueA, auto valueB) noexcept {
-  return (valueA - valueB) / (valueA + valueB);
-}
+[[nodiscard]] constexpr auto differenceOverSum(auto valueA, auto valueB) noexcept { return (valueA - valueB) / (valueA + valueB); }
 
 /// Calculate the critical angle in radians. This is the angle beyond which Total Internal Reflection (TIR) occurs.
 [[nodiscard]] inline double criticalAngle(double etaI, double etaT) noexcept { return asin(min(etaT / etaI, 1.0)); }
@@ -23,20 +21,15 @@ namespace mi::render {
 }
 
 /// \overload
-[[nodiscard]] inline double schlickApproximation(double cosThetaI, double etaI, double etaT) noexcept {
-  return schlickApproximation(cosThetaI, etaI / etaT);
-}
+[[nodiscard]] inline double schlickApproximation(double cosThetaI, double etaI, double etaT) noexcept { return schlickApproximation(cosThetaI, etaI / etaT); }
 
 struct MI_RENDER_API FresnelTerms {
   FresnelTerms() noexcept = default;
 
   explicit FresnelTerms(auto cosThetaI, complex<double> eta) noexcept
-    : eta(eta), cosThetaI(cosThetaI), cosThetaT(sign(cosThetaI) * sqrt(1.0 - sqr(eta) * (1.0 - sqr(cosThetaI)))),
-      Rs(differenceOverSum(eta * cosThetaI, cosThetaT)), Rp(differenceOverSum(cosThetaI, eta * cosThetaT)), Ts((1.0 + Rs)),
-      Tp((1.0 + Rp) * eta) {}
+    : eta(eta), cosThetaI(cosThetaI), cosThetaT(sign(cosThetaI) * sqrt(1.0 - sqr(eta) * (1.0 - sqr(cosThetaI)))), Rs(differenceOverSum(eta * cosThetaI, cosThetaT)), Rp(differenceOverSum(cosThetaI, eta * cosThetaT)), Ts((1.0 + Rs)), Tp((1.0 + Rp) * eta) {}
 
-  explicit FresnelTerms(auto cosThetaI, complex<double> etaI, complex<double> etaT) noexcept
-    : FresnelTerms(cosThetaI, etaI / etaT) {}
+  explicit FresnelTerms(auto cosThetaI, complex<double> etaI, complex<double> etaT) noexcept : FresnelTerms(cosThetaI, etaI / etaT) {}
 
   /// The reflectance for the s-polarization mode.
   [[nodiscard]] double powerRs() const noexcept { return norm(Rs); }

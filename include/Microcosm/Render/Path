@@ -74,9 +74,7 @@ public:
     Vertex &withReversePathPDF(double density) noexcept { return runtime.pathPDF.reverse = density, *this; }
 
     /// Initialize user variable.
-    template <typename Value> Vertex &withUserVar(std::string name, Value &&value) {
-      return userVars.set(std::move(name), std::forward<Value>(value)), *this;
-    }
+    template <typename Value> Vertex &withUserVar(std::string name, Value &&value) { return userVars.set(std::move(name), std::forward<Value>(value)), *this; }
 
   public:
     /// Is on path from camera?
@@ -98,9 +96,7 @@ public:
     [[nodiscard]] bool isOnSurface() const noexcept { return manifold.has_value(); }
 
     /// Is on opaque surface? (i.e., blocks visibility checks?)
-    [[nodiscard]] bool isOnOpaqueSurface() const noexcept {
-      return runtime.flags.isKnownOpaque || material.isOnOpaqueSurface();
-    }
+    [[nodiscard]] bool isOnOpaqueSurface() const noexcept { return runtime.flags.isKnownOpaque || material.isOnOpaqueSurface(); }
 
     /// If applicable, the correct normal at the surface.
     [[nodiscard]] Vector3d correctNormal() const noexcept { return manifold ? manifold->correct.normal : Vector3d(); }
@@ -109,14 +105,10 @@ public:
     [[nodiscard]] Vector3d shadingNormal() const noexcept { return manifold ? manifold->shading.normal : Vector3d(); }
 
     /// If applicable, the absolute cosine projection term with the correct normal at the surface. If not on surface, 1.
-    [[nodiscard]] double correctAbsCosTheta(Vector3d omegaI) const noexcept {
-      return manifold ? absDot(manifold->correct.normal, omegaI) : 1;
-    }
+    [[nodiscard]] double correctAbsCosTheta(Vector3d omegaI) const noexcept { return manifold ? absDot(manifold->correct.normal, omegaI) : 1; }
 
     /// If applicable, the absolute cosine projection term with the shading normal at the surface. If not on surface, 1.
-    [[nodiscard]] double shadingAbsCosTheta(Vector3d omegaI) const noexcept {
-      return manifold ? absDot(manifold->shading.normal, omegaI) : 1;
-    }
+    [[nodiscard]] double shadingAbsCosTheta(Vector3d omegaI) const noexcept { return manifold ? absDot(manifold->shading.normal, omegaI) : 1; }
 
     /// The direction to the other vertex.
     [[nodiscard]] Vector3d omega(const Vertex &other) const noexcept { return normalize(other.position - position); }
@@ -325,12 +317,10 @@ private:
   struct PathBackup {
   public:
     PathBackup(PathView pathView) : mPathView(pathView) {
-      for (ptrdiff_t i = 0, j = max(mPathView.size() - 2, 0); j < mPathView.size(); i++, j++)
-        mRuntimes[i] = mPathView[j].runtime;
+      for (ptrdiff_t i = 0, j = max(mPathView.size() - 2, 0); j < mPathView.size(); i++, j++) mRuntimes[i] = mPathView[j].runtime;
     }
     ~PathBackup() {
-      for (ptrdiff_t i = 0, j = max(mPathView.size() - 2, 0); j < mPathView.size(); i++, j++)
-        mPathView[j].runtime = std::move(mRuntimes[i]);
+      for (ptrdiff_t i = 0, j = max(mPathView.size() - 2, 0); j < mPathView.size(); i++, j++) mPathView[j].runtime = std::move(mRuntimes[i]);
     }
 
   private:
@@ -368,9 +358,7 @@ inline void Path::Vertex::recalculateForwardPathPDF(const Vertex &prev) noexcept
   if (prev.runtime.flags.isDeltaScattering) {
     runtime.pathPDF.forward = 1;
   } else {
-    runtime.pathPDF.forward =
-      (runtime.kind == prev.runtime.kind ? prev.runtime.scatteringPDF.forward : prev.runtime.scatteringPDF.reverse) *
-      convertSolidAngleToPath(prev, *this);
+    runtime.pathPDF.forward = (runtime.kind == prev.runtime.kind ? prev.runtime.scatteringPDF.forward : prev.runtime.scatteringPDF.reverse) * convertSolidAngleToPath(prev, *this);
   }
 }
 
@@ -382,9 +370,7 @@ inline void Path::Vertex::recalculateReversePathPDF(const Vertex &next) noexcept
   } else if (next.runtime.flags.isDeltaScattering) {
     runtime.pathPDF.reverse = 1;
   } else {
-    runtime.pathPDF.reverse =
-      (runtime.kind == next.runtime.kind ? next.runtime.scatteringPDF.reverse : next.runtime.scatteringPDF.forward) *
-      convertSolidAngleToPath(next, *this);
+    runtime.pathPDF.reverse = (runtime.kind == next.runtime.kind ? next.runtime.scatteringPDF.reverse : next.runtime.scatteringPDF.forward) * convertSolidAngleToPath(next, *this);
   }
 }
 
@@ -392,10 +378,9 @@ inline void Path::Vertex::recalculateReversePathPDF(const Vertex &next) noexcept
 /// path tracer. We visit each vertex in the path and calculate an estimate of the direct lighting contribution,
 /// then scale it by the cumulative ratio at the vertex and add it to the total radiance estimate. This is a
 /// very simple loop, so this is inlined with templates instead of using std::function. The function is invoked with
-/// each vertex, and must return a Spectrum that is an unbiased estimate of the direct lighting contribution at the 
+/// each vertex, and must return a Spectrum that is an unbiased estimate of the direct lighting contribution at the
 /// vertex, accounting for shadowing and transmission.
-template <std::invocable<const Path::Vertex &> DirectLightingEstimate>
-[[nodiscard]] inline Spectrum forwardRadianceEstimate(const Path &path, DirectLightingEstimate &&directLightingEstimate) {
+template <std::invocable<const Path::Vertex &> DirectLightingEstimate> [[nodiscard]] inline Spectrum forwardRadianceEstimate(const Path &path, DirectLightingEstimate &&directLightingEstimate) {
   if (path.empty()) [[unlikely]]
     return {};
   Spectrum estimate{spectrumZerosLike(path[0].runtime.ratio)};

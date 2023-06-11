@@ -40,14 +40,11 @@ public:
 
   [[nodiscard]] virtual double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept = 0;
 
-  [[nodiscard]] virtual double solidAnglePDF(Vector3d referencePoint, Manifold manifold) const noexcept {
-    return convertAreaToSolidAngle(referencePoint, manifold) * areaPDF(manifold);
-  }
+  [[nodiscard]] virtual double solidAnglePDF(Vector3d referencePoint, Manifold manifold) const noexcept { return convertAreaToSolidAngle(referencePoint, manifold) * areaPDF(manifold); }
 
   [[nodiscard]] virtual double solidAngleSample(Vector2d sampleU, Vector3d referencePoint, Manifold &manifold) const noexcept {
     double density{areaSample(sampleU, manifold)};
-    if (density *= convertAreaToSolidAngle(referencePoint, manifold);
-        density > 0 && !intersect(shadowRayBetween(referencePoint, manifold.point))) {
+    if (density *= convertAreaToSolidAngle(referencePoint, manifold); density > 0 && !intersect(shadowRayBetween(referencePoint, manifold.point))) {
       return density;
     } else {
       return 0;

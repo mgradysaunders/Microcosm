@@ -13,8 +13,7 @@ public:
 
   constexpr Triangle() noexcept = default;
 
-  constexpr Triangle(const Vector3d &pointA, const Vector3d &pointB, const Vector3d &pointC) noexcept
-    : mPoints{pointA, pointB, pointC} {}
+  constexpr Triangle(const Vector3d &pointA, const Vector3d &pointB, const Vector3d &pointC) noexcept : mPoints{pointA, pointB, pointC} {}
 
 public:
   MI_ARRAY_LIKE_CONSTEXPR_DATA(&mPoints[0])
@@ -30,9 +29,7 @@ public:
 
   [[nodiscard]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const noexcept override;
 
-  [[nodiscard]] double area() const noexcept override {
-    return fastLength(cross(mPoints[1] - mPoints[0], mPoints[2] - mPoints[0])) / 2;
-  }
+  [[nodiscard]] double area() const noexcept override { return fastLength(cross(mPoints[1] - mPoints[0], mPoints[2] - mPoints[0])) / 2; }
 
   [[nodiscard]] double areaSample(Vector2d sampleU, Manifold &manifold) const noexcept override {
     manifold = parameterization(uniformTriangleSample(sampleU));

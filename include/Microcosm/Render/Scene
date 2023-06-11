@@ -25,13 +25,10 @@ public:
 
 public:
   /// Randomly walk through the scene.
-  [[nodiscard]] Path walk( //
-    const Spectrum &waveLens, Random &random, Path::Vertex initialVertex, int maxDepth = -1) const;
+  [[nodiscard]] Path walk(const Spectrum &waveLens, Random &random, Path::Vertex firstVertex, int maxDepth = -1) const;
 
   /// Determine boolean visibility, keeping track of path transmission along the way.
-  [[nodiscard]] bool visibility(
-    const Spectrum &waveLens, Random &random, const Path::Vertex &initialVertex, Vector3d omegaI, double maxDistance,
-    Spectrum &tr) const;
+  [[nodiscard]] bool visibility(const Spectrum &waveLens, Random &random, const Path::Vertex &firstVertex, Vector3d omegaI, double maxDistance, Spectrum &tr) const;
 
 private:
   /// The surface intersection routine.

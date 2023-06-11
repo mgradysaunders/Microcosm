@@ -5,16 +5,14 @@
 
 namespace mi::render {
 
-struct MI_RENDER_API MLTRandom final {
+struct MI_RENDER_API PSMLTRandom final {
 public:
   using random_tag = std::true_type;
 
-  MLTRandom(Random random) noexcept : mRandom(std::move(random)) {}
-
-  /// The generate function required to bind to the Random interface.
-  void generate(IteratorRange<double *> sampleU) {
-    for (double &each : sampleU) each = nextSample();
-  }
+  PSMLTRandom(Random random, double smallStepSigma = 0.01, double largeStepProbability = 0.3) noexcept
+    : mRandom(std::move(random)),      //
+      mSmallStepSigma(smallStepSigma), //
+      mLargeStepProbability(largeStepProbability) {}
 
   /// Advance to the next iteration.
   void nextIteration();
@@ -27,6 +25,11 @@ public:
 
   /// Finish the iteration and either accept or reject the mutation with the given acceptance probability.
   void finish(bool accept);
+
+  /// The generate function required to bind to the Random interface.
+  void generate(IteratorRange<double *> sampleU) {
+    for (double &each : sampleU) each = nextSample();
+  }
 
 private:
   struct Sample {
@@ -46,9 +49,9 @@ private:
 
   size_t mIterationOfLastLargeStep{};
 
-  double mSmallStepSigma{0.01};
+  const double mSmallStepSigma{0.01};
 
-  double mLargeStepProbability{0.3};
+  const double mLargeStepProbability{0.3};
 
   bool mIsLargeStep{true};
 
@@ -57,6 +60,59 @@ private:
   size_t mSequenceCount{0};
 
   std::vector<std::vector<Sample>> mSequences{};
+};
+
+struct MI_RENDER_API PSMLTIntegrator final {
+public:
+  struct Options final {
+    /// The random seed.
+    size_t seed{0};
+
+    /// The small-step standard deviation.
+    double smallStepSigma{0.01};
+
+    /// The large-step probability.
+    double largeStepProbability{0.3};
+
+    /// The maximum depth of the transport paths.
+    size_t maxDepth{5};
+
+    /// The number of bootstrap paths to initialize the algorithm.
+    size_t numBootstrap{50'000};
+
+    /// The number of mutations.
+    ///
+    /// Typically this is the number of desired mutations per pixel times the number of
+    /// pixels in the image, though it is important to note that the mutations will not
+    /// be perfectly distributed across pixels in general, and that is by design. The
+    /// nature of Metropolis is to focus more effort in the areas of highest
+    /// contribution.
+    size_t numMutations{5'000'000};
+
+    /// The number of Markov chains.
+    size_t numChains{1000};
+  };
+
+  struct Contribution final {
+    /// The subpath traced from the camera.
+    Path subpathFromCamera;
+
+    /// The subpath traced from the light.
+    Path subpathFromLight;
+
+    /// The path contribution.
+    Spectrum pathL{};
+
+    /// The path contribution intensity measure which guides the acceptance probability.
+    double pathI{};
+  };
+
+  using SampleContribution = std::function<std::optional<Contribution>(Random &random, size_t depthFromCamera, size_t depthFromLight)>;
+
+  using RecordContribution = std::function<void(const Contribution &contribution, double coefficient)>;
+
+private:
+  Options mOptions{};
 };
 
 } // namespace mi::render

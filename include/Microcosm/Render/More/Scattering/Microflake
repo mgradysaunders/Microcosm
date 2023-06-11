@@ -11,17 +11,11 @@ public:
 
   Microflake(const Matrix3d &matrix);
 
-  [[nodiscard]] double projectedArea(Vector3d omegaO) const noexcept {
-    return finiteOrZero(sqrt(dot(omegaO, mMatrix, omegaO)));
-  }
+  [[nodiscard]] double projectedArea(Vector3d omegaO) const noexcept { return finiteOrZero(sqrt(dot(omegaO, mMatrix, omegaO))); }
 
-  [[nodiscard]] double normalPDF(Vector3d omegaM) const noexcept {
-    return finiteOrZero(OneOverPi / (sqrt(mMatrixDet) * sqr(dot(omegaM, mMatrixInv, omegaM))));
-  }
+  [[nodiscard]] double normalPDF(Vector3d omegaM) const noexcept { return finiteOrZero(OneOverPi / (sqrt(mMatrixDet) * sqr(dot(omegaM, mMatrixInv, omegaM)))); }
 
-  [[nodiscard]] double visibleNormalPDF(Vector3d omegaO, Vector3d omegaM) const noexcept {
-    return finiteOrZero(normalPDF(omegaM) * max(dot(omegaO, omegaM), 0.0) / projectedArea(omegaO));
-  }
+  [[nodiscard]] double visibleNormalPDF(Vector3d omegaO, Vector3d omegaM) const noexcept { return finiteOrZero(normalPDF(omegaM) * max(dot(omegaO, omegaM), 0.0) / projectedArea(omegaO)); }
 
   [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO) const noexcept;
 

@@ -6,9 +6,8 @@
 
 namespace mi::render {
 
-void Any::throwLogicErrorBadCast(const std::type_info &type, const std::type_info &internType) {
-  throw Error(std::logic_error("Can't access any as<{}>(): has type {}"_format( //
-    typenameString(type), typenameString(internType))));
+void AsAny::throwLogicErrorBadCast(const std::type_info &type, const std::type_info &internType) { //
+  throw Error(std::logic_error("Can't access any as<{}>(): has type {}"_format(typenameString(type), typenameString(internType))));
 }
 
 void AnyLookup::clear() noexcept { mLookup.clear(); }
@@ -21,13 +20,12 @@ bool AnyLookup::has(std::string_view name, const std::type_info &type) const {
   return itr->second.type() == type;
 }
 
-void AnyLookup::throwLogicErrorNotFound(std::string_view name, const std::type_info &type) {
+void AnyLookup::throwLogicErrorNotFound(std::string_view name, const std::type_info &type) { //
   throw Error(std::logic_error("Can't get<{}>({}): variable not found"_format(typenameString(type), show(name))));
 }
 
 void AnyLookup::throwLogicErrorBadCast(std::string_view name, const std::type_info &type, const std::type_info &internType) {
-  throw Error(std::logic_error("Can't get<{}>({}): variable has type {}"_format( //
-    typenameString(type), show(name), typenameString(internType))));
+  throw Error(std::logic_error("Can't get<{}>({}): variable has type {}"_format(typenameString(type), show(name), typenameString(internType))));
 }
 
 void Progress::increment() {

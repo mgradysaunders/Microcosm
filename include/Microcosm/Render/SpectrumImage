@@ -20,8 +20,7 @@ public:
 
   SpectrumImage(const SpectrumImage &) = delete;
 
-  SpectrumImage(SpectrumImage &&other) noexcept
-    : mNumBands(steal(other.mNumBands)), mSizeX(steal(other.mSizeX)), mSizeY(steal(other.mSizeY)), mData(steal(other.mData)) {}
+  SpectrumImage(SpectrumImage &&other) noexcept : mNumBands(steal(other.mNumBands)), mSizeX(steal(other.mSizeX)), mSizeY(steal(other.mSizeY)), mData(steal(other.mData)) {}
 
   ~SpectrumImage() { clear(); }
 
@@ -48,9 +47,7 @@ public:
 
   [[nodiscard]] int imageSizeInBytes() const noexcept { return mSizeX * mSizeY * pixelSizeInBytes(); }
 
-  [[nodiscard]] int pixelSizeInBytes() const noexcept {
-    return sizeof(AtomicUInt64) + sizeof(AtomicDouble) + sizeof(AtomicDouble) * mNumBands;
-  }
+  [[nodiscard]] int pixelSizeInBytes() const noexcept { return sizeof(AtomicUInt64) + sizeof(AtomicDouble) + sizeof(AtomicDouble) * mNumBands; }
 
   struct PixelReference {
     AtomicUInt64 &num;
@@ -66,9 +63,7 @@ public:
       reinterpret_cast<AtomicDouble *>(ptr + sizeof(AtomicUInt64) + sizeof(AtomicDouble))};
   }
 
-  [[nodiscard]] bool isIndexValid(Vector2i index) const noexcept {
-    return 0 <= index[0] && index[0] < mSizeX && 0 <= index[1] && index[1] < mSizeY;
-  }
+  [[nodiscard]] bool isIndexValid(Vector2i index) const noexcept { return 0 <= index[0] && index[0] < mSizeX && 0 <= index[1] && index[1] < mSizeY; }
 
   void add(Vector2i index, const Spectrum &values, double weight = 1);
 

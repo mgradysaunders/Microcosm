@@ -40,8 +40,7 @@ BidirPDF LambertBSDF::scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3d 
   }
 }
 
-OrenNayarBRDF::OrenNayarBRDF(Spectrum valueR, Spectrum sigma) noexcept
-  : mValueR(std::move(valueR)), mCoeffA(sigma.shape), mCoeffB(sigma.shape) {
+OrenNayarBRDF::OrenNayarBRDF(Spectrum valueR, Spectrum sigma) noexcept : mValueR(std::move(valueR)), mCoeffA(sigma.shape), mCoeffB(sigma.shape) {
   for (size_t i = 0; i < sigma.size(); i++) {
     mCoeffA[i] = 1;
     mCoeffB[i] = 0;
@@ -78,8 +77,7 @@ BidirPDF OrenNayarBRDF::scatterSample(Vector2d sampleU, Vector3d omegaO, Vector3
   return BidirPDF{OneOverPi * cosThetaI, OneOverPi * cosThetaO};
 }
 
-DisneyDiffuseBRDF::DisneyDiffuseBRDF(Spectrum valueR, Spectrum retro, Spectrum sheen, Spectrum roughness) noexcept
-  : mValueR(std::move(valueR)), mRetro(std::move(retro)), mSheen(std::move(sheen)), mRoughness(std::move(roughness)) {
+DisneyDiffuseBRDF::DisneyDiffuseBRDF(Spectrum valueR, Spectrum retro, Spectrum sheen, Spectrum roughness) noexcept : mValueR(std::move(valueR)), mRetro(std::move(retro)), mSheen(std::move(sheen)), mRoughness(std::move(roughness)) {
   if (mRetro.empty()) mRetro = spectrumZerosLike(mValueR);
   if (mSheen.empty()) mSheen = spectrumZerosLike(mValueR);
   if (mRoughness.empty()) mRoughness = spectrumZerosLike(mValueR);
@@ -92,10 +90,7 @@ BidirPDF DisneyDiffuseBRDF::scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &
     double cosThetaI{abs(omegaI[2])}, schlickI{nthPow(1 - cosThetaI, 5)};
     double cosThetaM{abs(omegaM[2])}, schlickM{nthPow(1 - cosThetaM, 5)};
     Spectrum roughR{2 * sqr(dot(omegaO, omegaM)) * mRoughness};
-    f.assign(
-      OneOverPi * cosThetaI *
-      ((1 - 0.5 * schlickO) * (1 - 0.5 * schlickI) * mValueR +
-       (schlickO + schlickI - schlickO * schlickI * (1 - roughR)) * roughR * mRetro + schlickM * mSheen));
+    f.assign(OneOverPi * cosThetaI * ((1 - 0.5 * schlickO) * (1 - 0.5 * schlickI) * mValueR + (schlickO + schlickI - schlickO * schlickI * (1 - roughR)) * roughR * mRetro + schlickM * mSheen));
     return BidirPDF{OneOverPi * cosThetaI, OneOverPi * cosThetaO};
   } else {
     f = 0;
@@ -110,9 +105,7 @@ BidirPDF DisneyDiffuseBRDF::scatterSample(Vector2d sampleU, Vector3d omegaO, Vec
   double cosThetaI{abs(omegaI[2])}, schlickI{nthPow(1 - cosThetaI, 5)};
   double cosThetaM{abs(omegaM[2])}, schlickM{nthPow(1 - cosThetaM, 5)};
   Spectrum roughR{2 * sqr(dot(omegaO, omegaM)) * mRoughness};
-  DoesntAlias(ratio) *=
-    ((1 - 0.5 * schlickO) * (1 - 0.5 * schlickI) * mValueR +
-     (schlickO + schlickI - schlickO * schlickI * (1 - roughR)) * roughR * mRetro + schlickM * mSheen);
+  DoesntAlias(ratio) *= ((1 - 0.5 * schlickO) * (1 - 0.5 * schlickI) * mValueR + (schlickO + schlickI - schlickO * schlickI * (1 - roughR)) * roughR * mRetro + schlickM * mSheen);
   return BidirPDF{OneOverPi * cosThetaI, OneOverPi * cosThetaO};
 }
 

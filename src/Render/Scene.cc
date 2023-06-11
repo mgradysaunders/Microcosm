@@ -2,13 +2,13 @@
 
 namespace mi::render {
 
-Path Scene::walk(const Spectrum &waveLens, Random &random, Path::Vertex initialVertex, int maxDepth) const {
+Path Scene::walk(const Spectrum &waveLens, Random &random, Path::Vertex firstVertex, int maxDepth) const {
   if (maxDepth == 0) return {};
-  Ray3d ray{initialVertex.position, initialVertex.runtime.omegaI, mShadowEpsilon, Inf};
-  Medium medium{initialVertex.material.medium(ray.direction)};
-  Spectrum ratio{initialVertex.runtime.ratio};
+  Ray3d ray{firstVertex.position, firstVertex.runtime.omegaI, mShadowEpsilon, Inf};
+  Medium medium{firstVertex.material.medium(ray.direction)};
+  Spectrum ratio{firstVertex.runtime.ratio};
   Path path;
-  path.push(std::move(initialVertex));
+  path.push(std::move(firstVertex));
   for (int depth = 1; depth < maxDepth || maxDepth < 0; depth++) {
     {
       bool intersected{false};       // Intersected anything?
@@ -84,8 +84,7 @@ Path Scene::walk(const Spectrum &waveLens, Random &random, Path::Vertex initialV
     // to indicate rejection, then stop.
     if (vertex.material.hasScattering()) [[likely]] {
       bool isDelta{false};
-      vertex.runtime.scatteringPDF =
-        vertex.material.scatterSample(random, vertex.runtime.omegaO, vertex.runtime.omegaI, ratio, isDelta);
+      vertex.runtime.scatteringPDF = vertex.material.scatterSample(random, vertex.runtime.omegaO, vertex.runtime.omegaI, ratio, isDelta);
       if (isDelta) {
         vertex.runtime.flags.isDeltaScattering = isDelta;
         vertex.runtime.scatteringPDF.forward = 1;
@@ -105,13 +104,11 @@ Path Scene::walk(const Spectrum &waveLens, Random &random, Path::Vertex initialV
   return path;
 }
 
-bool Scene::visibility(
-  const Spectrum &waveLens, Random &random, const Path::Vertex &initialVertex, Vector3d omegaI, double maxDistance,
-  Spectrum &tr) const {
+bool Scene::visibility(const Spectrum &waveLens, Random &random, const Path::Vertex &firstVertex, Vector3d omegaI, double maxDistance, Spectrum &tr) const {
   maxDistance *= 1 - mShadowEpsilon;
   if (!(maxDistance > mShadowEpsilon)) return true;
-  Ray3d ray{initialVertex.position, normalize(omegaI), mShadowEpsilon, maxDistance};
-  Path::Vertex lastVertex{initialVertex};
+  Ray3d ray{firstVertex.position, normalize(omegaI), mShadowEpsilon, maxDistance};
+  Path::Vertex lastVertex{firstVertex};
   Path::Vertex vertex;
   while (true) {
     // First use the surface intersection routine to find the nearest surface vertex. If the surface has

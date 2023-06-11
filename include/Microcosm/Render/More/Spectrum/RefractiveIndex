@@ -7,8 +7,7 @@ namespace mi::render {
 
 template <typename Value = double> struct RefractiveIndex {
 public:
-  RefractiveIndex(double minWaveLen, double maxWaveLen, auto &&func)
-    : mMinKnownWaveLen(minWaveLen), mMaxKnownWaveLen(maxWaveLen), mFunction(auto_forward(func)) {}
+  RefractiveIndex(double minWaveLen, double maxWaveLen, auto &&func) : mMinKnownWaveLen(minWaveLen), mMaxKnownWaveLen(maxWaveLen), mFunction(auto_forward(func)) {}
 
   [[nodiscard]] constexpr double minKnownWaveLen() const noexcept { return mMinKnownWaveLen; }
 
@@ -50,8 +49,7 @@ enum class KnownMetal {
   Zn      ///< Zinc.
 };
 
-MI_RENDER_API [[nodiscard]] DielectricRefractiveIndex
-refractiveIndexOfAir(double temperatureC = 15, double pressurekPa = 101.33);
+MI_RENDER_API [[nodiscard]] DielectricRefractiveIndex refractiveIndexOfAir(double temperatureC = 15, double pressurekPa = 101.33);
 
 MI_RENDER_API [[nodiscard]] DielectricRefractiveIndex refractiveIndexOf(KnownGlass knownGlass);
 

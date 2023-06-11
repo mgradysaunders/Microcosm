@@ -15,8 +15,7 @@ public:
 
   IsotropicPhaseWithOneParameter() noexcept = default;
 
-  IsotropicPhaseWithOneParameter(Spectrum param, Phase phase, PhaseSample phaseSample) noexcept
-    : mParam(std::move(param)), mPhase(std::move(phase)), mPhaseSample(std::move(phaseSample)) {}
+  IsotropicPhaseWithOneParameter(Spectrum param, Phase phase, PhaseSample phaseSample) noexcept : mParam(std::move(param)), mPhase(std::move(phase)), mPhaseSample(std::move(phaseSample)) {}
 
 public:
   BidirPDF scatter(Vector3d omegaO, Vector3d omegaI, Spectrum &f) const;
@@ -35,8 +34,7 @@ struct MI_RENDER_API HenyeyGreensteinPhase final : IsotropicPhaseWithOneParamete
 public:
   HenyeyGreensteinPhase() noexcept = default;
 
-  HenyeyGreensteinPhase(Spectrum meanCosTheta) noexcept
-    : IsotropicPhaseWithOneParameter(std::move(meanCosTheta), &phase, &phaseSample) {}
+  HenyeyGreensteinPhase(Spectrum meanCosTheta) noexcept : IsotropicPhaseWithOneParameter(std::move(meanCosTheta), &phase, &phaseSample) {}
 
   [[nodiscard]] static double phase(double meanCosTheta, double cosTheta) noexcept {
     if (abs(meanCosTheta) > 0.00001) {
@@ -50,9 +48,7 @@ public:
 
   [[nodiscard]] static double phaseSample(double meanCosTheta, double sampleU) noexcept {
     if (abs(meanCosTheta) > 0.00001) {
-      return saturateSigned(
-        (1 + sqr(meanCosTheta) - sqr((1 - sqr(meanCosTheta)) / (1 - meanCosTheta + 2 * meanCosTheta * sampleU))) /
-        (2 * meanCosTheta));
+      return saturateSigned((1 + sqr(meanCosTheta) - sqr((1 - sqr(meanCosTheta)) / (1 - meanCosTheta + 2 * meanCosTheta * sampleU))) / (2 * meanCosTheta));
     } else {
       return saturateSigned(2 * sampleU - 1);
     }

@@ -10,10 +10,7 @@ void SpectrumImage::resize(int newNumBands, Vector2i newSize) noexcept {
   mData = static_cast<std::byte *>(std::malloc(imageSizeInBytes()));
 }
 
-void SpectrumImage::clear() noexcept {
-  mSizeX = mSizeY = mNumBands = 0;
-  std::free(mData), mData = nullptr;
-}
+void SpectrumImage::clear() noexcept { mSizeX = mSizeY = mNumBands = 0, std::free(mData), mData = nullptr; }
 
 void SpectrumImage::add(Vector2i index, const Spectrum &values, double weight) {
   const char *error = //

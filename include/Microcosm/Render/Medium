@@ -9,7 +9,7 @@ namespace mi::render {
 template <typename Value>
 concept is_medium = std::same_as<typename std::decay_t<Value>::medium_tag, std::true_type>;
 
-struct MI_RENDER_API Medium final : Any {
+struct MI_RENDER_API Medium final : AsAny {
 public:
   /// The transmission function. The transmission along the given ray should be applied to
   /// the given spectrum multiplicatively (do not simply overwrite it!).
@@ -23,32 +23,27 @@ public:
   ///
   /// Note: The ratio should be applied to the given spectrum multiplicatively (do not simply overwrite it!).
   ///
-  using TransmissionSample =
-    std::function<std::optional<VolumeScattering>(const Medium &self, Random &random, Ray3d ray, Spectrum &ratio)>;
+  using TransmissionSample = std::function<std::optional<VolumeScattering>(const Medium &self, Random &random, Ray3d ray, Spectrum &ratio)>;
 
   Medium() noexcept = default;
 
   explicit Medium(std::in_place_t, std::any any, Transmission transmission, TransmissionSample transmissionSample) noexcept
-    : Any(std::move(any)),                    //
+    : AsAny(std::move(any)),                  //
       mTransmission(std::move(transmission)), //
       mTransmissionSample(std::move(transmissionSample)) {}
 
   template <typename Value> requires(is_medium<Value>) Medium(Value &&value) noexcept
     : Medium(
-        std::in_place, std::any(std::forward<Value>(value)),
-        [](auto &self, Random &random, Ray3d ray, Spectrum &tr) { self.template as<Value>().transmission(random, ray, tr); },
-        [](auto &self, Random &random, Ray3d ray, Spectrum &ratio) -> std::optional<VolumeScattering> {
-          return self.template as<Value>().transmissionSample(random, ray, ratio);
-        }) {}
+        std::in_place, std::any(std::forward<Value>(value)),                                                                  //
+        [](auto &self, Random &random, Ray3d ray, Spectrum &tr) { self.template as<Value>().transmission(random, ray, tr); }, //
+        [](auto &self, Random &random, Ray3d ray, Spectrum &ratio) -> std::optional<VolumeScattering> { return self.template as<Value>().transmissionSample(random, ray, ratio); }) {}
 
 public:
   void transmission(Random &random, Ray3d ray, Spectrum &tr) const {
     if (mTransmission) mTransmission(*this, random, ray, tr);
   }
 
-  [[nodiscard]] std::optional<VolumeScattering> transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const {
-    return mTransmissionSample ? mTransmissionSample(*this, random, ray, ratio) : std::optional<VolumeScattering>();
-  }
+  [[nodiscard]] std::optional<VolumeScattering> transmissionSample(Random &random, Ray3d ray, Spectrum &ratio) const { return mTransmissionSample ? mTransmissionSample(*this, random, ray, ratio) : std::optional<VolumeScattering>(); }
 
 private:
   Transmission mTransmission{};
@@ -79,9 +74,7 @@ public:
   [[nodiscard]] bool isOnSurface() const noexcept { return mNormal.has_value(); }
 
   /// Select medium for the given direction.
-  [[nodiscard]] const Medium &operator()(Vector3d omega) const noexcept {
-    return (!isOnSurface() || dot(omega, *mNormal) >= 0) ? mMediumAbove : mMediumBelow;
-  }
+  [[nodiscard]] const Medium &operator()(Vector3d omega) const noexcept { return (!isOnSurface() || dot(omega, *mNormal) >= 0) ? mMediumAbove : mMediumBelow; }
 
 private:
   /// If applicable, the surface normal.

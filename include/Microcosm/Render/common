@@ -16,11 +16,11 @@
 
 namespace mi::render {
 
-struct MI_RENDER_API Any {
+struct MI_RENDER_API AsAny {
 public:
-  Any() noexcept = default;
+  AsAny() noexcept = default;
 
-  Any(std::any any) noexcept : mAny(std::move(any)) {}
+  AsAny(std::any any) noexcept : mAny(std::move(any)) {}
 
   template <typename Value> [[nodiscard, strong_inline]] bool is() const { return mAny.type() == typeid(std::decay_t<Value>); }
 
@@ -55,9 +55,7 @@ public:
 
   [[nodiscard]] bool has(std::string_view name, const std::type_info &type) const;
 
-  template <typename Value> void set(std::string name, Value &&value) {
-    mLookup.insert_or_assign(std::move(name), std::any(std::forward<Value>(value)));
-  }
+  template <typename Value> void set(std::string name, Value &&value) { mLookup.insert_or_assign(std::move(name), std::any(std::forward<Value>(value))); }
 
   template <typename Value> [[nodiscard]] auto &get(std::string_view name) const {
     auto itr = mLookup.find(name);
@@ -118,18 +116,11 @@ constexpr double TwoPi = constants::TwoPi<double>;
 
 constexpr double Inf = constants::Inf<double>;
 
-template <std::floating_point Float>
-[[nodiscard]] inline bool isNegativeAndFinite(Float value, std::type_identity_t<Float> epsilon = 0) noexcept {
-  return value < -epsilon && isfinite(value);
-}
+template <std::floating_point Float> [[nodiscard]] inline bool isNegativeAndFinite(Float value, std::type_identity_t<Float> epsilon = 0) noexcept { return value < -epsilon && isfinite(value); }
 
-template <std::floating_point Float>
-[[nodiscard]] inline bool isPositiveAndFinite(Float value, std::type_identity_t<Float> epsilon = 0) noexcept {
-  return value > +epsilon && isfinite(value);
-}
+template <std::floating_point Float> [[nodiscard]] inline bool isPositiveAndFinite(Float value, std::type_identity_t<Float> epsilon = 0) noexcept { return value > +epsilon && isfinite(value); }
 
-template <typename Values> requires(concepts::tensor_vector<Values>)
-[[nodiscard]] inline bool isNegativeAndFinite(Values &&values, to_float_t<Values> epsilon = 0) noexcept {
+template <typename Values> requires(concepts::tensor_vector<Values>) [[nodiscard]] inline bool isNegativeAndFinite(Values &&values, to_float_t<Values> epsilon = 0) noexcept {
   bool someNegative = false;
   for (auto &&value : auto_forward(values)) {
     if (value > 0 || !isfinite(value)) return false;
@@ -138,8 +129,7 @@ template <typename Values> requires(concepts::tensor_vector<Values>)
   return someNegative;
 }
 
-template <typename Values> requires(concepts::tensor_vector<Values>)
-[[nodiscard]] inline bool isPositiveAndFinite(Values &&values, to_float_t<Values> epsilon = 0) noexcept {
+template <typename Values> requires(concepts::tensor_vector<Values>) [[nodiscard]] inline bool isPositiveAndFinite(Values &&values, to_float_t<Values> epsilon = 0) noexcept {
   bool somePositive = false;
   for (auto &&value : auto_forward(values)) {
     if (value < 0 || !isfinite(value)) return false;
@@ -176,9 +166,7 @@ template <typename Values> requires(concepts::tensor_vector<Values>)
 }
 
 /// Is in the same Z hemisphere?
-[[nodiscard]] inline bool isSameHemisphere(Vector3d omegaO, Vector3d omegaI) noexcept {
-  return signbit(omegaO[2]) == signbit(omegaI[2]);
-}
+[[nodiscard]] inline bool isSameHemisphere(Vector3d omegaO, Vector3d omegaI) noexcept { return signbit(omegaO[2]) == signbit(omegaI[2]); }
 
 /// Is in the upper Z hemisphere?
 [[nodiscard]] constexpr bool isUpperHemisphere(Vector3d omega) noexcept { return omega[2] >= 0; }
@@ -193,14 +181,10 @@ template <typename Values> requires(concepts::tensor_vector<Values>)
 [[nodiscard]] constexpr Vector3d lowerHemisphere(Vector3d omega) noexcept { return omega[2] > 0 ? -omega : omega; }
 
 /// Reflect omegaI through omegaN.
-[[nodiscard]] constexpr Vector3d reflect(Vector3d omegaI, Vector3d omegaN) noexcept {
-  return 2 * dot(omegaI, omegaN) * omegaN - omegaI;
-}
+[[nodiscard]] constexpr Vector3d reflect(Vector3d omegaI, Vector3d omegaN) noexcept { return 2 * dot(omegaI, omegaN) * omegaN - omegaI; }
 
 /// Refract omegaI through omegaN, with cosThetaT already computed.
-[[nodiscard]] constexpr Vector3d refract(Vector3d omegaI, Vector3d omegaN, double eta, double cosThetaT) noexcept {
-  return -eta * omegaI + (eta * dot(omegaI, omegaN) + cosThetaT) * omegaN;
-}
+[[nodiscard]] constexpr Vector3d refract(Vector3d omegaI, Vector3d omegaN, double eta, double cosThetaT) noexcept { return -eta * omegaI + (eta * dot(omegaI, omegaN) + cosThetaT) * omegaN; }
 
 /// Refract omegaI through omegaN.
 [[nodiscard]] inline Vector3d refract(Vector3d omegaI, Vector3d omegaN, double eta) noexcept {
@@ -211,55 +195,35 @@ template <typename Values> requires(concepts::tensor_vector<Values>)
 
 [[nodiscard]] constexpr Vector3d reflectionHalfVector(Vector3d omegaI, Vector3d omegaR) noexcept { return omegaI + omegaR; }
 
-[[nodiscard]] constexpr Vector3d refractionHalfVector(Vector3d omegaI, Vector3d omegaT, double eta) noexcept {
-  return -(eta * omegaI + omegaT);
-}
+[[nodiscard]] constexpr Vector3d refractionHalfVector(Vector3d omegaI, Vector3d omegaT, double eta) noexcept { return -(eta * omegaI + omegaT); }
 
 /// Same as reflectionHalfVector(), but normalizes to return a proper direction.
-[[nodiscard]] inline Vector3d reflectionHalfDirection(Vector3d omegaI, Vector3d omegaR) noexcept {
-  return fastNormalize(reflectionHalfVector(omegaI, omegaR));
-}
+[[nodiscard]] inline Vector3d reflectionHalfDirection(Vector3d omegaI, Vector3d omegaR) noexcept { return fastNormalize(reflectionHalfVector(omegaI, omegaR)); }
 
 /// Same as refractionHalfVector(), but normalizes to return a proper direction.
-[[nodiscard]] inline Vector3d refractionHalfDirection(Vector3d omegaI, Vector3d omegaT, double eta) noexcept {
-  return fastNormalize(refractionHalfVector(omegaI, omegaT, eta));
-}
+[[nodiscard]] inline Vector3d refractionHalfDirection(Vector3d omegaI, Vector3d omegaT, double eta) noexcept { return fastNormalize(refractionHalfVector(omegaI, omegaT, eta)); }
 
 /// The solid-angle Jacobian of the reflection half vector from omegaI to omegaR.
-[[nodiscard]] inline double reflectionHalfVectorJacobian(Vector3d omegaI, Vector3d omegaR) noexcept {
-  return 0.25 / dot(omegaR, reflectionHalfDirection(omegaI, omegaR));
-}
+[[nodiscard]] inline double reflectionHalfVectorJacobian(Vector3d omegaI, Vector3d omegaR) noexcept { return 0.25 / dot(omegaR, reflectionHalfDirection(omegaI, omegaR)); }
 
 /// The solid-angle Jacobian of the refraction half vector from omegaI to omegaT.
-[[nodiscard]] inline double refractionHalfVectorJacobian(Vector3d omegaI, Vector3d omegaT, double eta) noexcept {
-  return absDot(omegaT, refractionHalfDirection(omegaI, omegaT, eta)) / lengthSquare(refractionHalfVector(omegaI, omegaT, eta));
-}
+[[nodiscard]] inline double refractionHalfVectorJacobian(Vector3d omegaI, Vector3d omegaT, double eta) noexcept { return absDot(omegaT, refractionHalfDirection(omegaI, omegaT, eta)) / lengthSquare(refractionHalfVector(omegaI, omegaT, eta)); }
 
 [[nodiscard]] inline double correctRefractiveIndex(double eta, bool isOutside) noexcept { return isOutside ? eta : 1 / eta; }
 
-[[nodiscard]] inline double correctRefractiveIndex(double eta, Vector3d omega) noexcept {
-  return correctRefractiveIndex(eta, isUpperHemisphere(omega));
-}
+[[nodiscard]] inline double correctRefractiveIndex(double eta, Vector3d omega) noexcept { return correctRefractiveIndex(eta, isUpperHemisphere(omega)); }
 
 /// Convert XY slope to normal direction.
-[[nodiscard]] inline Vector3d convertSlopeToNormal(Vector2d slope) noexcept {
-  return fastNormalize(Vector3d(-slope[0], -slope[1], 1));
-}
+[[nodiscard]] inline Vector3d convertSlopeToNormal(Vector2d slope) noexcept { return fastNormalize(Vector3d(-slope[0], -slope[1], 1)); }
 
 /// Convert normal direction to XY slope.
-[[nodiscard]] inline Vector2d convertNormalToSlope(Vector3d omega) noexcept {
-  return Vector2d{-omega[0], -omega[1]} / clamp(omega[2], -1, +1);
-}
+[[nodiscard]] inline Vector2d convertNormalToSlope(Vector3d omega) noexcept { return Vector2d{-omega[0], -omega[1]} / clamp(omega[2], -1, +1); }
 
 /// Convert area measurement to solid angle measurement.
-[[nodiscard]] inline double convertAreaToSolidAngle(Vector3d pointA, Vector3d pointB, Vector3d normalAtB) noexcept {
-  return finiteOrZero(lengthSquare(pointB - pointA) / absDot(normalize(normalAtB), normalize(pointB - pointA)));
-}
+[[nodiscard]] inline double convertAreaToSolidAngle(Vector3d pointA, Vector3d pointB, Vector3d normalAtB) noexcept { return finiteOrZero(lengthSquare(pointB - pointA) / absDot(normalize(normalAtB), normalize(pointB - pointA))); }
 
 /// Convert solid angle measurement to area measurement.
-[[nodiscard]] inline double convertSolidAngleToArea(Vector3d pointA, Vector3d pointB, Vector3d normalAtB) noexcept {
-  return finiteOrZero(absDot(normalize(normalAtB), normalize(pointB - pointA)) / lengthSquare(pointB - pointA));
-}
+[[nodiscard]] inline double convertSolidAngleToArea(Vector3d pointA, Vector3d pointB, Vector3d normalAtB) noexcept { return finiteOrZero(absDot(normalize(normalAtB), normalize(pointB - pointA)) / lengthSquare(pointB - pointA)); }
 
 /// The probability density for the uniform Z-cone with the given coordinate limits.
 [[nodiscard]] constexpr double uniformConePDF(double minZ, double maxZ = 1.0) noexcept { return (1 / TwoPi) / (maxZ - minZ); }
@@ -283,9 +247,7 @@ template <typename Values> requires(concepts::tensor_vector<Values>)
 [[nodiscard]] inline Vector3d uniformSphereSample(Vector2d sampleU) noexcept { return uniformConeSample(sampleU, -1.0, +1.0); }
 
 /// Sample a uniformly distributed direction from the unit hemisphere.
-[[nodiscard]] inline Vector3d uniformHemisphereSample(Vector2d sampleU) noexcept {
-  return uniformConeSample(sampleU, +0.0, +1.0);
-}
+[[nodiscard]] inline Vector3d uniformHemisphereSample(Vector2d sampleU) noexcept { return uniformConeSample(sampleU, +0.0, +1.0); }
 
 /// Sample a uniformly distributed position from the unit disk. (Note: This uses the standard partitioning
 /// scheme to better preserve stratified samples. This is essentially a piecewise continuous mapping from the unit
@@ -315,24 +277,20 @@ template <typename Values> requires(concepts::tensor_vector<Values>)
 }
 
 /// \overload
-[[nodiscard]] inline Vector3d cosineHemisphereSample(Vector2d sampleU, Vector3d omegaM) noexcept {
-  return normalize(dot(Matrix3d::orthonormalBasis(omegaM), cosineHemisphereSample(sampleU)));
-}
+[[nodiscard]] inline Vector3d cosineHemisphereSample(Vector2d sampleU, Vector3d omegaM) noexcept { return normalize(dot(Matrix3d::orthonormalBasis(omegaM), cosineHemisphereSample(sampleU))); }
 
 /// Sample a uniformly distributed parameter for any uniform triangle.
-[[nodiscard]] inline Vector2d uniformTriangleSample(Vector2d sampleU) noexcept {
-  return sqrt(sampleU[0]) * Vector2d(sampleU[1], 1 - sampleU[1]);
-}
+[[nodiscard]] inline Vector2d uniformTriangleSample(Vector2d sampleU) noexcept { return sqrt(sampleU[0]) * Vector2d(sampleU[1], 1 - sampleU[1]); }
 
 template <typename Value>
 concept is_random = std::same_as<typename std::decay_t<Value>::random_tag, std::true_type>;
 
-struct MI_RENDER_API Random final : Any {
+struct MI_RENDER_API Random final : AsAny {
 public:
   using Generate = std::function<void(Random &self, IteratorRange<double *> sampleU)>;
 
   Random(std::in_place_t, std::any any, Generate generate) noexcept //
-    : Any(std::move(any)), mGenerate(std::move(generate)) {}
+    : AsAny(std::move(any)), mGenerate(std::move(generate)) {}
 
   template <std::uniform_random_bit_generator Generator>
   Random(Generator generator)
@@ -343,10 +301,7 @@ public:
 
   Random() : Random(Pcg32()) {}
 
-  template <typename Value> requires is_random<Value> Random(Value &&value)
-    : Random(std::in_place, std::any(std::forward<Value>(value)), [](auto &self, IteratorRange<double *> sampleU) {
-        return self.template as<Value>().generate(sampleU);
-      }) {}
+  template <typename Value> requires is_random<Value> Random(Value &&value) : Random(std::in_place, std::any(std::forward<Value>(value)), [](auto &self, IteratorRange<double *> sampleU) { return self.template as<Value>().generate(sampleU); }) {}
 
 public:
   [[nodiscard, strong_inline]] int generateIndex(int count) { return clamp(int(generate1() * count), 0, count - 1); }
@@ -424,8 +379,7 @@ public:
       indexPrev = max(indexB - 2, 0);
       indexNext = min(indexB + 1, int(coords.size()) - 1);
     }
-    return catmullRom(
-      unlerp(coord, coords[indexA], coords[indexB]), values[indexPrev], values[indexA], values[indexB], values[indexNext]);
+    return catmullRom(unlerp(coord, coords[indexA], coords[indexB]), values[indexPrev], values[indexA], values[indexB], values[indexNext]);
   }
 
 public:
@@ -436,8 +390,6 @@ public:
   int indexNext{0};
 };
 
-[[nodiscard]] constexpr Ray3d shadowRayBetween(Vector3d pointA, Vector3d pointB, double eps = 1e-5) {
-  return Ray3d(pointA, pointB - pointA, eps, 1 - eps);
-}
+[[nodiscard]] constexpr Ray3d shadowRayBetween(Vector3d pointA, Vector3d pointB, double eps = 1e-5) { return Ray3d(pointA, pointB - pointA, eps, 1 - eps); }
 
 } // namespace mi::render

@@ -4,8 +4,7 @@ namespace mi::render {
 
 /* TODO Not entirely sure if this is correct. Followed what I found online and it seems to match up to
         the standard FresnelTerms in the case of a single layer, which is good at least. */
-FresnelTerms
-FresnelTerms::forLayers(double cosThetaI, double eta0, IteratorRange<const Layer *> layers, double waveLen) noexcept {
+FresnelTerms FresnelTerms::forLayers(double cosThetaI, double eta0, IteratorRange<const Layer *> layers, double waveLen) noexcept {
   Matrix2cd transferMs = {{1.0, 0.0}, {0.0, 1.0}};
   Matrix2cd transferMp = {{1.0, 0.0}, {0.0, 1.0}};
   complex<double> lastCosTheta{cosThetaI};

@@ -17,7 +17,7 @@ concept is_microsurface_height = std::same_as<typename std::decay_t<Value>::micr
 template <typename Value>
 concept is_microsurface_slope = std::same_as<typename std::decay_t<Value>::microsurface_slope_tag, std::true_type>;
 
-struct MI_RENDER_API MicrosurfaceHeight final : Any {
+struct MI_RENDER_API MicrosurfaceHeight final : AsAny {
 public:
   using HeightPDF = std::function<double(const MicrosurfaceHeight &self, double value)>;
 
@@ -30,16 +30,16 @@ public:
   MicrosurfaceHeight(
     std::in_place_t, std::any any, HeightPDF heightPDF, HeightCDF heightCDF,
     HeightSample heightSample) noexcept
-    : Any(std::move(any)),              //
+    : AsAny(std::move(any)),            //
       mHeightPDF(std::move(heightPDF)), //
       mHeightCDF(std::move(heightCDF)), //
       mHeightSample(std::move(heightSample)) {}
 
   template <typename Value> requires is_microsurface_height<Value> MicrosurfaceHeight(Value &&value)
     : MicrosurfaceHeight(
-        std::in_place, std::any(std::forward<Value>(value)),
-        [](auto &self, double value) { return self.template as<Value>().heightPDF(value); },
-        [](auto &self, double value) { return self.template as<Value>().heightCDF(value); },
+        std::in_place, std::any(std::forward<Value>(value)),                                 //
+        [](auto &self, double value) { return self.template as<Value>().heightPDF(value); }, //
+        [](auto &self, double value) { return self.template as<Value>().heightCDF(value); }, //
         [](auto &self, double sampleU) { return self.template as<Value>().heightSample(sampleU); }) {}
 
 public:
@@ -65,9 +65,7 @@ public:
 
   [[nodiscard]] double heightCDF(double value) const noexcept { return distributions::Uniform(-1, 1).distributionCDF(value); }
 
-  [[nodiscard]] double heightSample(double sampleU) const noexcept {
-    return distributions::Uniform(-1, 1).distributionSample(sampleU);
-  }
+  [[nodiscard]] double heightSample(double sampleU) const noexcept { return distributions::Uniform(-1, 1).distributionSample(sampleU); }
 };
 
 struct MI_RENDER_API NormalMicrosurfaceHeight final {
@@ -78,16 +76,14 @@ public:
 
   [[nodiscard]] double heightCDF(double value) const noexcept { return distributions::Normal(0, 1).distributionCDF(value); }
 
-  [[nodiscard]] double heightSample(double sampleU) const noexcept {
-    return distributions::Normal(0, 1).distributionSample(sampleU);
-  }
+  [[nodiscard]] double heightSample(double sampleU) const noexcept { return distributions::Normal(0, 1).distributionSample(sampleU); }
 };
 
 MI_RENDER_API extern const MicrosurfaceHeight uniformMicrosurfaceHeight;
 
 MI_RENDER_API extern const MicrosurfaceHeight normalMicrosurfaceHeight;
 
-struct MI_RENDER_API MicrosurfaceSlope final : Any {
+struct MI_RENDER_API MicrosurfaceSlope final : AsAny {
 public:
   using SmithLambda = std::function<double(const MicrosurfaceSlope &self, double slopeO)>;
 
@@ -97,18 +93,17 @@ public:
 
   MicrosurfaceSlope() noexcept = default;
 
-  MicrosurfaceSlope(
-    std::in_place_t, std::any any, SmithLambda smithLambda, SlopePDF slopePDF, VisibleSlopeSample visibleSlopeSample) noexcept
-    : Any(std::move(any)),                  //
+  MicrosurfaceSlope(std::in_place_t, std::any any, SmithLambda smithLambda, SlopePDF slopePDF, VisibleSlopeSample visibleSlopeSample) noexcept
+    : AsAny(std::move(any)),                //
       mSmithLambda(std::move(smithLambda)), //
       mSlopePDF(std::move(slopePDF)),       //
       mVisibleSlopeSample(std::move(visibleSlopeSample)) {}
 
   template <typename Value> requires is_microsurface_slope<Value> MicrosurfaceSlope(Value &&value)
     : MicrosurfaceSlope(
-        std::in_place, std::any(std::forward<Value>(value)),
-        [](auto &self, auto &&...args) { return self.template as<Value>().smithLambda(auto_forward(args)...); },
-        [](auto &self, auto &&...args) { return self.template as<Value>().slopePDF(auto_forward(args)...); },
+        std::in_place, std::any(std::forward<Value>(value)),                                                     //
+        [](auto &self, auto &&...args) { return self.template as<Value>().smithLambda(auto_forward(args)...); }, //
+        [](auto &self, auto &&...args) { return self.template as<Value>().slopePDF(auto_forward(args)...); },    //
         [](auto &self, auto &&...args) { return self.template as<Value>().visibleSlopeSample(auto_forward(args)...); }) {}
 
 public:
@@ -116,9 +111,7 @@ public:
 
   [[nodiscard, strong_inline]] double slopePDF(Vector2d slopeM) const { return mSlopePDF(*this, slopeM); }
 
-  [[nodiscard, strong_inline]] Vector2d visibleSlopeSample(Vector2d sampleU, double cosThetaO) const {
-    return mVisibleSlopeSample(*this, sampleU, cosThetaO);
-  }
+  [[nodiscard, strong_inline]] Vector2d visibleSlopeSample(Vector2d sampleU, double cosThetaO) const { return mVisibleSlopeSample(*this, sampleU, cosThetaO); }
 
 private:
   SmithLambda mSmithLambda{};
@@ -133,9 +126,7 @@ struct MI_RENDER_API GGXMicrosurfaceSlope final {
 public:
   using microsurface_slope_tag = std::true_type;
 
-  [[nodiscard]] double smithLambda(double slopeO) const noexcept {
-    return copysign(0.5, slopeO) * sqrt(1 + 1 / sqr(slopeO)) - 0.5;
-  }
+  [[nodiscard]] double smithLambda(double slopeO) const noexcept { return copysign(0.5, slopeO) * sqrt(1 + 1 / sqr(slopeO)) - 0.5; }
 
   [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept { return OneOverPi / sqr(1 + lengthSquare(slopeM)); }
 
@@ -147,9 +138,7 @@ struct MI_RENDER_API BeckmannMicrosurfaceSlope final {
 public:
   using microsurface_slope_tag = std::true_type;
 
-  [[nodiscard]] double smithLambda(double slopeO) const noexcept {
-    return 0.5 * OneOverSqrtPi * exp(-sqr(slopeO)) / slopeO - 0.5 * erfc(slopeO);
-  }
+  [[nodiscard]] double smithLambda(double slopeO) const noexcept { return 0.5 * OneOverSqrtPi * exp(-sqr(slopeO)) / slopeO - 0.5 * erfc(slopeO); }
 
   [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept { return OneOverPi * exp(-lengthSquare(slopeM)); }
 
@@ -164,16 +153,10 @@ struct MI_RENDER_API Microsurface final {
 public:
   Microsurface() noexcept = default;
 
-  Microsurface(
-    Vector2d roughness,                                           //
-    const MicrosurfaceHeight &height = uniformMicrosurfaceHeight, //
-    const MicrosurfaceSlope &slope = ggxMicrosurfaceSlope)
-    : mRoughness(roughness), mHeight(height), mSlope(slope) {}
+  Microsurface(Vector2d roughness, const MicrosurfaceHeight &height = uniformMicrosurfaceHeight, const MicrosurfaceSlope &slope = ggxMicrosurfaceSlope) : mRoughness(roughness), mHeight(height), mSlope(slope) {}
 
   /// The Smith lambda function.
-  [[nodiscard]] double smithLambda(Vector3d omega) const noexcept {
-    return mSlope.smithLambda(omega[2] / hypot(mRoughness[0] * omega[0], mRoughness[1] * omega[1]));
-  }
+  [[nodiscard]] double smithLambda(Vector3d omega) const noexcept { return mSlope.smithLambda(omega[2] / hypot(mRoughness[0] * omega[0], mRoughness[1] * omega[1])); }
 
   /// The projected area.
   [[nodiscard]] double projectedArea(Vector3d omega) const noexcept { //
@@ -181,14 +164,10 @@ public:
   }
 
   /// The shadowing function. Note: This is the expectation of G1(ω, h0) over all heights.
-  [[nodiscard]] double shadowG1(Vector3d omega) const noexcept {
-    return isUpperHemisphere(omega) ? 1 / (1 + smithLambda(omega)) : 0;
-  }
+  [[nodiscard]] double shadowG1(Vector3d omega) const noexcept { return isUpperHemisphere(omega) ? 1 / (1 + smithLambda(omega)) : 0; }
 
   /// The height-specific shadowing function.
-  [[nodiscard]] double shadowG1(Vector3d omega, double h0) const noexcept {
-    return isUpperHemisphere(omega) ? finiteOrZero(pow(mHeight.heightCDF(h0), smithLambda(omega))) : 0;
-  }
+  [[nodiscard]] double shadowG1(Vector3d omega, double h0) const noexcept { return isUpperHemisphere(omega) ? finiteOrZero(pow(mHeight.heightCDF(h0), smithLambda(omega))) : 0; }
 
   /// The bidirectional masking-shadowing function. Note: Intuitively, G2(ωo, ωi) is approximately equal to
   /// the product of G1(ωo) and G1(ωi), and at least historically it was commonly defined this way. However, the
@@ -201,14 +180,11 @@ public:
     // BTDF: G2(ωo, ωi) = B(1 + Λ(ωo), 1 + Λ(ωi))
     double smithLambdaOmegaO{smithLambda(upperHemisphere(omegaO))};
     double smithLambdaOmegaI{smithLambda(upperHemisphere(omegaI))};
-    return isSameHemisphere(omegaO, omegaI) ? 1 / (1 + smithLambdaOmegaO + smithLambdaOmegaI)
-                                            : std::beta(1 + smithLambdaOmegaO, 1 + smithLambdaOmegaI);
+    return isSameHemisphere(omegaO, omegaI) ? 1 / (1 + smithLambdaOmegaO + smithLambdaOmegaI) : std::beta(1 + smithLambdaOmegaO, 1 + smithLambdaOmegaI);
   }
 
   /// The slope Probability Density Function (PDF).
-  [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept {
-    return finiteOrZero(mSlope.slopePDF(slopeM / mRoughness) / mRoughness.product());
-  }
+  [[nodiscard]] double slopePDF(Vector2d slopeM) const noexcept { return finiteOrZero(mSlope.slopePDF(slopeM / mRoughness) / mRoughness.product()); }
 
   /// The normal Probability Density Function (PDF).
   [[nodiscard]] double normalPDF(Vector3d omegaM) const noexcept;
@@ -218,9 +194,7 @@ public:
 
   [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO) const noexcept;
 
-  [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO, bool isOutsideO) const noexcept {
-    return isOutsideO ? Vector3d(+visibleNormalSample(sampleU, +omegaO)) : Vector3d(-visibleNormalSample(sampleU, -omegaO));
-  }
+  [[nodiscard]] Vector3d visibleNormalSample(Vector2d sampleU, Vector3d omegaO, bool isOutsideO) const noexcept { return isOutsideO ? Vector3d(+visibleNormalSample(sampleU, +omegaO)) : Vector3d(-visibleNormalSample(sampleU, -omegaO)); }
 
 public:
   /// \name Height Distribution
@@ -250,9 +224,7 @@ public:
   /// \name Volume Scattering Interpretation
   /// \{
 
-  [[nodiscard]] double smithExtinction(Vector3d omega, double h) const noexcept {
-    return finiteOrZero(projectedArea(omega) * mHeight.heightPDF(h) / mHeight.heightCDF(h));
-  }
+  [[nodiscard]] double smithExtinction(Vector3d omega, double h) const noexcept { return finiteOrZero(projectedArea(omega) * mHeight.heightPDF(h) / mHeight.heightCDF(h)); }
 
   [[nodiscard]] double smithTransmission(Vector3d omega, double h0, double h1) const noexcept {
     if (h0 < h1 && omega[2] < 0) return 0; // Increasing height but pointing down?
@@ -273,9 +245,7 @@ public:
 
   [[nodiscard]] SpecularTerms specularRefraction(Vector3d omegaO, Vector3d omegaI, double eta) const noexcept;
 
-  [[nodiscard]] SpecularTerms specularRefraction(Vector3d omegaO, Vector3d omegaI, double etaO, double etaI) const noexcept {
-    return specularRefraction(omegaO, omegaI, etaO / etaI);
-  }
+  [[nodiscard]] SpecularTerms specularRefraction(Vector3d omegaO, Vector3d omegaI, double etaO, double etaI) const noexcept { return specularRefraction(omegaO, omegaI, etaO / etaI); }
 
 private:
   Vector2d mRoughness{0.5, 0.5};

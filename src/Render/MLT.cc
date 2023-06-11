@@ -2,13 +2,13 @@
 
 namespace mi::render {
 
-void MLTRandom::nextIteration() {
+void PSMLTRandom::nextIteration() {
   mIteration++;
   mIsLargeStep = double(mRandom) < mLargeStepProbability;
   mSampleCount = mSequenceCount = 0;
 }
 
-void MLTRandom::nextSequence() {
+void PSMLTRandom::nextSequence() {
   mSampleCount = 0;
   mSequenceCount++;
   if (mSequences.size() < mSequenceCount) [[unlikely]] {
@@ -17,7 +17,7 @@ void MLTRandom::nextSequence() {
   }
 }
 
-double MLTRandom::nextSample() {
+double PSMLTRandom::nextSample() {
   auto &sequence{mSequences[mSequenceCount - 1]};
   mSampleCount++;
   if (sequence.size() < mSampleCount) sequence.resize(mSampleCount);
@@ -32,15 +32,14 @@ double MLTRandom::nextSample() {
     active.value = double(mRandom);
     active.iteration = mIteration;
   } else {
-    active.value +=
-      distributions::Normal(0, mSmallStepSigma * sqrt(mIteration - active.iteration)).distributionSample(double(mRandom));
+    active.value += distributions::Normal(0, mSmallStepSigma * sqrt(mIteration - active.iteration)).distributionSample(double(mRandom));
     active.value -= floor(active.value);
     active.iteration = mIteration;
   }
   return active.value;
 }
 
-void MLTRandom::finish(bool accept) {
+void PSMLTRandom::finish(bool accept) {
   if (accept) {
     // If necessary, remember iteration of last large step.
     if (mIsLargeStep) mIterationOfLastLargeStep = mIteration;

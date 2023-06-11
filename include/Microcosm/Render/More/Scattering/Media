@@ -13,12 +13,9 @@ public:
 
   HomogeneousMedium() noexcept = default;
 
-  HomogeneousMedium(Spectrum sigmaS, Spectrum sigmaA, ScatteringProvider scatteringProvider = {})
-    : mSigmaS(std::move(sigmaS)), mSigmaT(mSigmaS + std::move(sigmaA)), mScatteringProvider(std::move(scatteringProvider)) {}
+  HomogeneousMedium(Spectrum sigmaS, Spectrum sigmaA, ScatteringProvider scatteringProvider = {}) : mSigmaS(std::move(sigmaS)), mSigmaT(mSigmaS + std::move(sigmaA)), mScatteringProvider(std::move(scatteringProvider)) {}
 
-  HomogeneousMedium(Spectrum sigmaS, Spectrum sigmaA, Scattering scattering)
-    : mSigmaS(std::move(sigmaS)), mSigmaT(mSigmaS + std::move(sigmaA)),
-      mScatteringProvider([scattering = std::move(scattering)](Vector3d) -> Scattering { return scattering; }) {}
+  HomogeneousMedium(Spectrum sigmaS, Spectrum sigmaA, Scattering scattering) : mSigmaS(std::move(sigmaS)), mSigmaT(mSigmaS + std::move(sigmaA)), mScatteringProvider([scattering = std::move(scattering)](Vector3d) -> Scattering { return scattering; }) {}
 
 public:
   void transmission(Random &random, Ray3d ray, Spectrum &tr) const;
@@ -58,10 +55,8 @@ public:
 
   HeterogeneousDeltaTrackingMedium() noexcept = default;
 
-  HeterogeneousDeltaTrackingMedium(
-    BoundBox3d boundBox, double maxSigmaT, SigmaProvider sigmaProvider, ScatteringProvider scatteringProvider) noexcept
-    : mBoundBox(boundBox), mMaxSigmaT(maxSigmaT), mSigmaProvider(std::move(sigmaProvider)),
-      mScatteringProvider(std::move(scatteringProvider)) {}
+  HeterogeneousDeltaTrackingMedium(BoundBox3d boundBox, double maxSigmaT, SigmaProvider sigmaProvider, ScatteringProvider scatteringProvider) noexcept
+    : mBoundBox(boundBox), mMaxSigmaT(maxSigmaT), mSigmaProvider(std::move(sigmaProvider)), mScatteringProvider(std::move(scatteringProvider)) {}
 
 public:
   void transmission(Random &random, Ray3d ray, Spectrum &tr) const;

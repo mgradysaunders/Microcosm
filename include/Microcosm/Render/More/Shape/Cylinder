@@ -10,8 +10,7 @@ struct MI_RENDER_API Cylinder final : public Primitive {
 public:
   using shape_tag = std::true_type;
 
-  Cylinder(double radius = 1, double heightA = -1, double heightB = +1) noexcept
-    : mRadius(radius), mHeightA(heightA), mHeightB(heightB) {}
+  Cylinder(double radius = 1, double heightA = -1, double heightB = +1) noexcept : mRadius(radius), mHeightA(heightA), mHeightB(heightB) {}
 
   /// \name Primitive API
   /// \{

@@ -50,9 +50,7 @@ public:
   /// The triangle bounding volume hierarchy.
   geometry::ImmutableBVH3 triangleBVH;
 
-  void onSerialize(auto &&serializer) {
-    serializer <=> positions <=> texcoords <=> normals <=> tangents <=> materials <=> triangleBVH;
-  }
+  void onSerialize(auto &&serializer) { serializer <=> positions <=> texcoords <=> normals <=> tangents <=> materials <=> triangleBVH; }
 
 private:
   void interpolateShading(Manifold &manifold) const noexcept;

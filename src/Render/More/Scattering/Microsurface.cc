@@ -17,8 +17,7 @@ Vector2d GGXMicrosurfaceSlope::visibleSlopeSample(Vector2d sampleU, double cosTh
   else
     sampleU[1] = saturate(1 - 2 * sampleU[1]), slopeY = -1;
   slopeY *= sqrt(1 + sqr(slopeX));
-  slopeY *= (sampleU[1] * (sampleU[1] * (sampleU[1] * 0.273850 - 0.733690) + 0.463410)) /
-            (sampleU[1] * (sampleU[1] * (sampleU[1] * 0.093073 + 0.309420) - 1.000000) + 0.597999);
+  slopeY *= (sampleU[1] * (sampleU[1] * (sampleU[1] * 0.273850 - 0.733690) + 0.463410)) / (sampleU[1] * (sampleU[1] * (sampleU[1] * 0.093073 + 0.309420) - 1.000000) + 0.597999);
   return {slopeX, slopeY};
 }
 
@@ -41,8 +40,8 @@ Vector2d BeckmannMicrosurfaceSlope::visibleSlopeSample(Vector2d sampleU, double 
     x = xMax - (1 + xMax) * pow(1 - sampleU[0], x);
     // Do numerical inversion.
     if (solveNewton(
-          x, xMin, xMax, sampleU[0], 1e-6,
-          [&](double x) { return x >= cotThetaO ? 1 : visibleCDFNorm * visibleCDF(erfInverse(x)); },
+          x, xMin, xMax, sampleU[0], 1e-6,                                                           //
+          [&](double x) { return x >= cotThetaO ? 1 : visibleCDFNorm * visibleCDF(erfInverse(x)); }, //
           [&](double x) { return visibleCDFNorm / 2 * (cosThetaO - erfInverse(x) * sinThetaO); }))
       return {erfInverse(x), erfInverse(2 * sampleU[1] - 1)};
   }
@@ -93,9 +92,7 @@ double Microsurface::visibleHeightPDF(Vector3d omega, double h0, double h1) cons
   if (h0 < h1 && omega[2] < 0) return 0; // Increasing height but pointing down?
   if (h0 > h1 && omega[2] > 0) return 0; // Decreasing height but pointing up?
   double smithLambdaOmega{smithLambda(omega)};
-  return finiteOrZero(
-    abs(smithLambdaOmega) * mHeight.heightPDF(h1) * pow(mHeight.heightCDF(h0), smithLambdaOmega) /
-    pow(mHeight.heightCDF(h1), 1 + smithLambdaOmega));
+  return finiteOrZero(abs(smithLambdaOmega) * mHeight.heightPDF(h1) * pow(mHeight.heightCDF(h0), smithLambdaOmega) / pow(mHeight.heightCDF(h1), 1 + smithLambdaOmega));
 }
 
 double Microsurface::visibleHeightCDF(Vector3d omega, double h0, double h1) const noexcept {
@@ -121,11 +118,7 @@ Microsurface::SpecularTerms Microsurface::specularReflection(Vector3d omegaO, Ve
   double smithLambdaOmegaO{smithLambda(omegaO)}, projectedAreaOmegaO{(1 + smithLambdaOmegaO) * omegaO[2]};
   double smithLambdaOmegaI{smithLambda(omegaI)}, projectedAreaOmegaI{(1 + smithLambdaOmegaI) * omegaI[2]};
   double shadowing{1 / (1 + smithLambdaOmegaO + smithLambdaOmegaI)};
-  return SpecularTerms{
-    finiteOrZero(normalTermOver4 * shadowing / omegaO[2]),
-    BidirPDF{
-      finiteOrZero(normalTermOver4 / projectedAreaOmegaO), //
-      finiteOrZero(normalTermOver4 / projectedAreaOmegaI)}};
+  return SpecularTerms{finiteOrZero(normalTermOver4 * shadowing / omegaO[2]), BidirPDF{finiteOrZero(normalTermOver4 / projectedAreaOmegaO), finiteOrZero(normalTermOver4 / projectedAreaOmegaI)}};
 }
 
 Microsurface::SpecularTerms Microsurface::specularRefraction(Vector3d omegaO, Vector3d omegaI, double eta) const noexcept {
@@ -144,10 +137,7 @@ Microsurface::SpecularTerms Microsurface::specularRefraction(Vector3d omegaO, Ve
   double smithLambdaOmegaI{smithLambda(-omegaI)}, projectedAreaOmegaI{(1 + smithLambdaOmegaI) * -omegaI[2]};
   double shadowing{std::beta(1 + smithLambdaOmegaO, 1 + smithLambdaOmegaI)};
   return SpecularTerms{
-    finiteOrZero(normalTerm * forwardJacobian * +cosThetaO * shadowing / omegaO[2] * eta), // Note: symmetrized by eta!
-    BidirPDF{
-      finiteOrZero(normalTerm * forwardJacobian * +cosThetaO / projectedAreaOmegaO),
-      finiteOrZero(normalTerm * reverseJacobian * -cosThetaI / projectedAreaOmegaI)}};
+    finiteOrZero(normalTerm * forwardJacobian * +cosThetaO * shadowing / omegaO[2]), BidirPDF{finiteOrZero(normalTerm * forwardJacobian * +cosThetaO / projectedAreaOmegaO), finiteOrZero(normalTerm * reverseJacobian * -cosThetaI / projectedAreaOmegaI)}};
 }
 
 } // namespace mi::render

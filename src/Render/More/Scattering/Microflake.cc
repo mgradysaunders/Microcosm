@@ -36,9 +36,7 @@ BidirPDF SpecularMicroflakePhase::scatterSample( //
   Vector3d omegaM{mMicroflake.visibleNormalSample(sampleU, omegaO)};
   omegaI = normalize(-omegaO + 2 * dot(omegaO, omegaM) * omegaM);
   double normalPDF{mMicroflake.normalPDF(omegaM)};
-  return {
-    finiteOrZero(normalPDF / (4 * mMicroflake.projectedArea(omegaO))),
-    finiteOrZero(normalPDF / (4 * mMicroflake.projectedArea(omegaI)))};
+  return {finiteOrZero(normalPDF / (4 * mMicroflake.projectedArea(omegaO))), finiteOrZero(normalPDF / (4 * mMicroflake.projectedArea(omegaI)))};
 }
 
 BidirPDF DiffuseMicroflakePhase::scatter(Random &random, Vector3d omegaO, Vector3d omegaI, Spectrum &f) const noexcept {

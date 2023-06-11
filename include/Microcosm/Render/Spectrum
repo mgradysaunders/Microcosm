@@ -11,9 +11,7 @@ using Spectrum = SpectrumOf<double>;
 
 using ComplexSpectrum = SpectrumOf<std::complex<double>>;
 
-template <typename Other> [[nodiscard, strong_inline]] inline auto spectrumZerosLike(Other &&other) noexcept {
-  return SpectrumOf<value_type_t<Other>>{with_shape, other.size()};
-}
+template <typename Other> [[nodiscard, strong_inline]] inline auto spectrumZerosLike(Other &&other) noexcept { return SpectrumOf<value_type_t<Other>>{with_shape, other.size()}; }
 
 template <typename Other> [[nodiscard, strong_inline]] inline auto spectrumLike(Other &&other, const auto &value) noexcept {
   SpectrumOf<value_type_t<Other>> spectrum{with_shape, other.size()};
@@ -43,29 +41,19 @@ MI_RENDER_API [[nodiscard]] Spectrum convertRGBToSpectrumIllumination(const Spec
 MI_RENDER_API [[nodiscard]] Spectrum spectrumIlluminantD(const Spectrum &waveLens, const Vector2d &chromaticity) noexcept;
 
 /// CIE Illuminant D50 (daylight) spectrum, with color temperature of 5003K. Non-zero for wavelengths between 0.30-0.83μm.
-[[nodiscard]] inline Spectrum spectrumIlluminantD50(const Spectrum &waveLens) noexcept {
-  return spectrumIlluminantD(waveLens, convertCCTToXY(5003.0));
-}
+[[nodiscard]] inline Spectrum spectrumIlluminantD50(const Spectrum &waveLens) noexcept { return spectrumIlluminantD(waveLens, convertCCTToXY(5003.0)); }
 
 /// CIE Illuminant D55 (daylight) spectrum, with color temperature of 5503K. Non-zero for wavelengths between 0.30-0.83μm.
-[[nodiscard]] inline Spectrum spectrumIlluminantD55(const Spectrum &waveLens) noexcept {
-  return spectrumIlluminantD(waveLens, convertCCTToXY(5503.0));
-}
+[[nodiscard]] inline Spectrum spectrumIlluminantD55(const Spectrum &waveLens) noexcept { return spectrumIlluminantD(waveLens, convertCCTToXY(5503.0)); }
 
 /// CIE Illuminant D65 (daylight) spectrum, with color temperature of 6504K. Non-zero for wavelengths between 0.30-0.83μm.
-[[nodiscard]] inline Spectrum spectrumIlluminantD65(const Spectrum &waveLens) noexcept {
-  return spectrumIlluminantD(waveLens, convertCCTToXY(6504.0));
-}
+[[nodiscard]] inline Spectrum spectrumIlluminantD65(const Spectrum &waveLens) noexcept { return spectrumIlluminantD(waveLens, convertCCTToXY(6504.0)); }
 
 /// CIE Illuminant D75 (daylight) spectrum, with color temperature of 7504K. Non-zero for wavelengths between 0.30-0.83μm.
-[[nodiscard]] inline Spectrum spectrumIlluminantD75(const Spectrum &waveLens) noexcept {
-  return spectrumIlluminantD(waveLens, convertCCTToXY(7504.0));
-}
+[[nodiscard]] inline Spectrum spectrumIlluminantD75(const Spectrum &waveLens) noexcept { return spectrumIlluminantD(waveLens, convertCCTToXY(7504.0)); }
 
 /// CIE Illuminant D93 (daylight) spectrum, with color temperature of 9305K. Non-zero for wavelengths between 0.30-0.83μm.
-[[nodiscard]] inline Spectrum spectrumIlluminantD93(const Spectrum &waveLens) noexcept {
-  return spectrumIlluminantD(waveLens, convertCCTToXY(9305.0));
-}
+[[nodiscard]] inline Spectrum spectrumIlluminantD93(const Spectrum &waveLens) noexcept { return spectrumIlluminantD(waveLens, convertCCTToXY(9305.0)); }
 
 /// CIE Illuminant F (fluorescent) spectrum, given the number between 1 and 12 inclusive.
 MI_RENDER_API [[nodiscard]] Spectrum spectrumIlluminantF(const Spectrum &waveLens, int number = 1) noexcept;

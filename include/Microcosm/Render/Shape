@@ -8,7 +8,7 @@ namespace mi::render {
 template <typename Value>
 concept is_shape = std::same_as<typename std::decay_t<Value>::shape_tag, std::true_type>;
 
-struct MI_RENDER_API Shape final : public Any {
+struct MI_RENDER_API Shape final : public AsAny {
 public:
   /// The ray intersection routine.
   using Intersect = std::function<std::optional<double>(const Shape &self, Ray3d ray, Manifold &manifold)>;
@@ -19,40 +19,31 @@ public:
   Shape() noexcept = default;
 
   explicit Shape(std::in_place_t, std::any any, BoundBox3d box, Intersect intersect, NearestTo nearestTo) noexcept
-    : Any(std::move(any)),              //
+    : AsAny(std::move(any)),            //
       mBox(std::move(box)),             //
       mIntersect(std::move(intersect)), //
       mNearestTo(std::move(nearestTo)) {}
 
   template <typename Value> requires is_shape<Value> Shape(Value &&value)
     : Shape(
-        std::in_place, std::any(std::forward<Value>(value)), BoundBox3d(),
-        [](auto &self, Ray3d ray, Manifold &manifold) -> std::optional<double> {
-          return self.template as<Value>().intersect(ray, manifold);
-        },
-        [](auto &self, Vector3d referencePoint, Manifold &manifold) -> std::optional<double> {
-          return self.template as<Value>().nearestTo(referencePoint, manifold);
-        }) {
+        std::in_place, std::any(std::forward<Value>(value)), BoundBox3d(),                                                              //
+        [](auto &self, auto &&...args) -> std::optional<double> { return self.template as<Value>().intersect(auto_forward(args)...); }, //
+        [](auto &self, auto &&...args) -> std::optional<double> { return self.template as<Value>().nearestTo(auto_forward(args)...); }) {
     mBox = this->template as<Value>().box();
   }
 
 public:
   [[nodiscard, strong_inline]] const BoundBox3d &box() const { return mBox; }
 
-  [[nodiscard, strong_inline]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const {
-    return mIntersect(*this, ray, manifold);
-  }
+  [[nodiscard, strong_inline]] std::optional<double> intersect(Ray3d ray, Manifold &manifold) const { return mIntersect(*this, ray, manifold); }
 
-  [[nodiscard, strong_inline]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const {
-    return mNearestTo(*this, referencePoint, manifold);
-  }
+  [[nodiscard, strong_inline]] std::optional<double> nearestTo(Vector3d referencePoint, Manifold &manifold) const { return mNearestTo(*this, referencePoint, manifold); }
 
   void onTransform(auto &&transform) {
     auto forwardTransform{transform};
     auto inverseTransform{inverse(transform)};
     mBox >>= forwardTransform;
-    mIntersect = [=, intersect = std::move(mIntersect)]( //
-                   const Shape &self, Ray3d ray, Manifold &manifold) -> std::optional<double> {
+    mIntersect = [=, intersect = std::move(mIntersect)](const Shape &self, Ray3d ray, Manifold &manifold) -> std::optional<double> {
       if (auto param = intersect(self, (ray >>= inverseTransform), manifold)) {
         manifold >>= forwardTransform;
         return param;
@@ -60,8 +51,7 @@ public:
         return {};
       }
     };
-    mNearestTo = [=, nearestTo = std::move(mNearestTo)](
-                   const Shape &self, Vector3d referencePoint, Manifold &manifold) -> std::optional<double> {
+    mNearestTo = [=, nearestTo = std::move(mNearestTo)](const Shape &self, Vector3d referencePoint, Manifold &manifold) -> std::optional<double> {
       if (auto param = nearestTo(self, inverseTransform.applyAffine(referencePoint), manifold)) {
         manifold >>= forwardTransform;
         return param;
