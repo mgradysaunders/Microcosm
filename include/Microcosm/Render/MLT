@@ -74,7 +74,15 @@ public:
     /// The large-step probability.
     double largeStepProbability{0.3};
 
-    /// The maximum depth of the transport paths.
+    /// Exclude direct lighting? 
+    ///
+    /// It can be useful to allow the Metropolis algorithm to focus exclusively on indirect
+    /// transport paths, then add the results back to a direct-only contribution calculated
+    /// separately, because sometimes the overall direct contributions can "distract" the
+    /// algorithm from the finer details of, e.g., caustic patterns.
+    bool excludeDirect{false};
+
+    /// The maximum depth, or path length.
     size_t maxDepth{5};
 
     /// The number of bootstrap paths to initialize the algorithm.
@@ -109,7 +117,9 @@ public:
 
   using SampleContribution = std::function<std::optional<Contribution>(Random &random, size_t depthFromCamera, size_t depthFromLight)>;
 
-  using RecordContribution = std::function<void(const Contribution &contribution, double coefficient)>;
+  using RecordContribution = std::function<void(const Contribution &contribution, double multiplier)>;
+
+  // TODO
 
 private:
   Options mOptions{};
