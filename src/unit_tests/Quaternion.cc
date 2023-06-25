@@ -1,13 +1,8 @@
 #include "Microcosm/Quaternion"
 #include "testing.h"
 
-template <std::floating_point Float, typename Field>
-static mi::Quaternion<Field> bruteForceSlerpDeriv( //
-  Float mu,
-  const mi::Quaternion<Field> &quaternionQ,
-  const mi::Quaternion<Field> &quaternionR) {
-  return (mi::slerp(mu + Float(0.5e-3), quaternionQ, quaternionR) - mi::slerp(mu - Float(0.5e-3), quaternionQ, quaternionR)) /
-         Float(1e-3);
+template <std::floating_point Float, typename Field> static mi::Quaternion<Field> bruteForceSlerpDeriv(Float mu, const mi::Quaternion<Field> &quaternionQ, const mi::Quaternion<Field> &quaternionR) {
+  return (mi::slerp(mu + Float(0.5e-3), quaternionQ, quaternionR) - mi::slerp(mu - Float(0.5e-3), quaternionQ, quaternionR)) / Float(1e-3);
 }
 
 TEST_CASE("Quaternion") {
@@ -71,8 +66,7 @@ TEST_CASE("DualQuaternion") {
     CHECK(mi::isNear<1e-5f>(quat.translation(), offs));
     CHECK(mi::isNear<1e-5f>(mi::DualQuaternionf(mi::Matrix4f(quat)).real(), quat.real()));
     CHECK(mi::isNear<1e-5f>(mi::DualQuaternionf(mi::Matrix4f(quat)).dual(), quat.dual()));
-    CHECK(mi::isNear<1e-5f>(
-      quat.applyAffine(mi::Vector3f(-1, 2, 7)), mi::dot(mi::Matrix4f(quat), mi::Vector4f(-1, 2, 7, 1))[mi::Slice<0, 3>()]));
+    CHECK(mi::isNear<1e-5f>(quat.applyAffine(mi::Vector3f(-1, 2, 7)), mi::dot(mi::Matrix4f(quat), mi::Vector4f(-1, 2, 7, 1))[mi::Slice<0, 3>()]));
   }
   SUBCASE("Inverse") {
     CHECK(mi::isNear<1e-4f>(quat * mi::inverse(quat), mi::DualQuaternionf::identity()));

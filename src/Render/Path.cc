@@ -47,14 +47,14 @@ void PathConnector::connect(Random &random, PathView pathA, PathView pathB, cons
 void PathConnector::connectTerm(Random &random, PathView pathA, PathView pathB, const Receiver &receiver) const {
   auto doTruncation = [&](Path::Vertex &vertexP) -> void {
     Path::Kind kind{vertexP.runtime.kind};
-    if (mTruncation(vertexP)) {
+    if (mTruncater(vertexP)) {
       if (vertexP.runtime.kind != kind) [[unlikely]]
         throw Error(std::logic_error("Call to PathConnector::connectTerm() failed! Reason: Truncation operator must return same kind of vertex!"));
       receiver(pathA, pathB, multipleImportanceWeight(pathA, pathB), vertexP.runtime.ratio);
     }
   };
   auto doCompletion = [&](Path::Vertex &vertexP, Path::Vertex &vertexQ) -> std::optional<Spectrum> {
-    if (mCompletion(vertexP, vertexQ)) {
+    if (mCompleter(vertexP, vertexQ)) {
       if (vertexP.runtime.kind == vertexQ.runtime.kind) [[unlikely]]
         throw Error(std::logic_error("Call to PathConnector::connectTerm() failed! Reason: Completion operator must return opposite kind of vertex!"));
       Vector3d omegaI{vertexP.omega(vertexQ)};
@@ -63,7 +63,7 @@ void PathConnector::connectTerm(Random &random, PathView pathA, PathView pathB, 
       if (Spectrum L{
             vertexP.runtime.ratio * fP * //
             vertexQ.runtime.ratio};
-          isPositiveAndFinite(L) && mVisibility(vertexP, vertexQ, L)) {
+          isPositiveAndFinite(L) && mVisibilityTester(vertexP, vertexQ, L)) {
         return L;
       }
     }
@@ -102,7 +102,7 @@ void PathConnector::connectTerm(Random &random, PathView pathA, PathView pathB, 
           vertexA.runtime.ratio * fA * //
           vertexB.runtime.ratio * fB * //
           (1.0 / distanceSquare(vertexA.position, vertexB.position))};
-        isPositiveAndFinite(L) && mVisibility(vertexA, vertexB, L)) {
+        isPositiveAndFinite(L) && mVisibilityTester(vertexA, vertexB, L)) {
       receiver(pathA, pathB, multipleImportanceWeight(pathA, pathB), L);
     }
   }

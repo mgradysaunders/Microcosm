@@ -40,14 +40,10 @@ public:
   }
 
   /// __Only in 2 dimensions!__ The side of the given point, positive (+1) if above and negative (-1) if below.
-  [[nodiscard]] constexpr int sideOf(const Vector<Float, N> &point) const noexcept requires(N == 2) {
-    return dot(normal(), point - mPoints[0]) < 0 ? -1 : +1;
-  }
+  [[nodiscard]] constexpr int sideOf(const Vector<Float, N> &point) const noexcept requires(N == 2) { return dot(normal(), point - mPoints[0]) < 0 ? -1 : +1; }
 
   /// Calculate the point at the given parameter.
-  [[nodiscard]] constexpr Vector<Float, N> operator()(Float param) const noexcept {
-    return lerp(param, mPoints[0], mPoints[1]);
-  }
+  [[nodiscard]] constexpr Vector<Float, N> operator()(Float param) const noexcept { return lerp(param, mPoints[0], mPoints[1]); }
 
   /// Calculate the parameter of the given point.
   [[nodiscard]] constexpr Float parameterOf(const Vector<Float, N> &point, bool clampToSeg = true) const noexcept {

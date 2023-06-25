@@ -18,8 +18,7 @@ public:
 
   Noise(Y value) : mValue([value](X) -> Y { return value; }) {}
 
-  template <typename F> requires(std::invocable<F, X> && !std::same_as<std::decay_t<F>, Noise>)
-  Noise(F &&func) : mValue(std::forward<F>(func)) {}
+  template <typename F> requires(std::invocable<F, X> && !std::same_as<std::decay_t<F>, Noise>) Noise(F &&func) : mValue(std::forward<F>(func)) {}
 
   [[nodiscard, strong_inline]] Y operator()(X coord) const { return mValue(coord); }
 
@@ -34,81 +33,61 @@ public:
   std::function<Y(X)> mValue = [](X) -> Y { return Y(); };
 };
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator+(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> [[nodiscard, strong_inline]] inline Noise<C(X)> operator+(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
   return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) + noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator-(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> [[nodiscard, strong_inline]] inline Noise<C(X)> operator-(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
   return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) - noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator*(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> [[nodiscard, strong_inline]] inline Noise<C(X)> operator*(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
   return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) * noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>>
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator/(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> [[nodiscard, strong_inline]] inline Noise<C(X)> operator/(Noise<A(X)> noiseA, Noise<B(X)> noiseB) {
   return [noiseA = std::move(noiseA), noiseB = std::move(noiseB)](X coord) -> C { return noiseA(coord) / noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator+(Noise<A(X)> noiseA, B valueB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator+(Noise<A(X)> noiseA, B valueB) {
   return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) + valueB; };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator-(Noise<A(X)> noiseA, B valueB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator-(Noise<A(X)> noiseA, B valueB) {
   return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) - valueB; };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator*(Noise<A(X)> noiseA, B valueB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator*(Noise<A(X)> noiseA, B valueB) {
   return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) * valueB; };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator/(Noise<A(X)> noiseA, B valueB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<B, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator/(Noise<A(X)> noiseA, B valueB) {
   return [noiseA = std::move(noiseA), valueB = std::move(valueB)](X coord) -> C { return noiseA(coord) / valueB; };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator+(A valueA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator+(A valueA, Noise<B(X)> noiseB) {
   return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA + noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator-(A valueA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator-(A valueA, Noise<B(X)> noiseB) {
   return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA - noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator*(A valueA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator*(A valueA, Noise<B(X)> noiseB) {
   return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA * noiseB(coord); };
 }
 
-template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>)
-[[nodiscard, strong_inline]] inline Noise<C(X)> operator/(A valueA, Noise<B(X)> noiseB) {
+template <typename X, typename A, typename B, typename C = std::common_type_t<A, B>> requires(!concepts::match<A, Noise>) [[nodiscard, strong_inline]] inline Noise<C(X)> operator/(A valueA, Noise<B(X)> noiseB) {
   return [valueA = std::move(valueA), noiseB = std::move(noiseB)](X coord) -> C { return valueA / noiseB(coord); };
 }
 
-template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator+=(Noise<Y(X)> &noise, auto &&other) {
-  return noise = (std::move(noise) + auto_forward(other));
-}
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator+=(Noise<Y(X)> &noise, auto &&other) { return noise = (std::move(noise) + auto_forward(other)); }
 
-template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator-=(Noise<Y(X)> &noise, auto &&other) {
-  return noise = (std::move(noise) - auto_forward(other));
-}
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator-=(Noise<Y(X)> &noise, auto &&other) { return noise = (std::move(noise) - auto_forward(other)); }
 
-template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator*=(Noise<Y(X)> &noise, auto &&other) {
-  return noise = (std::move(noise) * auto_forward(other));
-}
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator*=(Noise<Y(X)> &noise, auto &&other) { return noise = (std::move(noise) * auto_forward(other)); }
 
-template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator/=(Noise<Y(X)> &noise, auto &&other) {
-  return noise = (std::move(noise) / auto_forward(other));
-}
+template <typename X, typename Y> [[strong_inline]] inline Noise<Y(X)> &operator/=(Noise<Y(X)> &noise, auto &&other) { return noise = (std::move(noise) / auto_forward(other)); }
 
 namespace noise_generators {
 
@@ -117,13 +96,10 @@ template <typename Float> [[nodiscard]] inline Noise<Vector<Float, 2>(Vector<Flo
 }
 
 template <typename Float> [[nodiscard]] inline Noise<Vector<Float, 4>(Vector<Float, 2>)> CliffordTorus() {
-  return [](Vector<Float, 2> coord) -> Vector<Float, 4> {
-    return {cos(coord[0]), sin(coord[0]), cos(coord[1]), sin(coord[1])};
-  };
+  return [](Vector<Float, 2> coord) -> Vector<Float, 4> { return {cos(coord[0]), sin(coord[0]), cos(coord[1]), sin(coord[1])}; };
 }
 
-template <typename Value, size_t N, typename Easing>
-[[nodiscard]] inline Noise<Value(Vector<Value, N>)> Simplex(uint64_t seed, Easing easing) {
+template <typename Value, size_t N, typename Easing> [[nodiscard]] inline Noise<Value(Vector<Value, N>)> Simplex(uint64_t seed, Easing easing) {
   using Float = to_float_t<Value>;
   return [=](Vector<Value, N> position) -> Value {
     auto SurroundingCorners = [seed](Vector<Float, N> position) noexcept {
@@ -162,8 +138,7 @@ template <typename Value, size_t N, typename Easing>
         // not so careful and the noise often featured yucky correlated patterns.
         random = Pcg32(murmurHash3(seed, index.size() * sizeof(int), &index[0]));
         random.discard(10657331232548839);
-        for (Float &gradientValue : corner.gradient)
-          gradientValue = 2 * random(GradientGranularity) / Float(GradientGranularity - 1) - 1;
+        for (Float &gradientValue : corner.gradient) gradientValue = 2 * random(GradientGranularity) / Float(GradientGranularity - 1) - 1;
 
         // Step to the next corner.
         if (i != N) ++index[order[i]], ++indexSum;
@@ -182,9 +157,7 @@ template <typename Value, size_t N, typename Easing>
   };
 }
 
-template <typename Value, size_t N> [[nodiscard]] inline Noise<Value(Vector<Value, N>)> Simplex(uint64_t seed = 0) {
-  return Simplex<Value, N>(seed, ease::Feed(ease::SmoothStop(2), ease::SmoothStart(2)));
-}
+template <typename Value, size_t N> [[nodiscard]] inline Noise<Value(Vector<Value, N>)> Simplex(uint64_t seed = 0) { return Simplex<Value, N>(seed, ease::Feed(ease::SmoothStop(2), ease::SmoothStart(2))); }
 
 /* octaves = 6.73
    lacunarity = 2.16

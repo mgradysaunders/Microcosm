@@ -214,8 +214,7 @@ inline Serializer &operator<=>(Serializer &serializer, RefPtr<Serializable> &val
 }
 
 /// Serialize anything defining a serialize member function.
-template <typename Value> requires concepts::overrides_serialize_method<Value>
-inline Serializer &operator<=>(Serializer &serializer, Value &value) {
+template <typename Value> requires concepts::overrides_serialize_method<Value> inline Serializer &operator<=>(Serializer &serializer, Value &value) {
   value.onSerialize(serializer);
   return serializer;
 }
@@ -243,9 +242,7 @@ template <typename Value, size_t N> inline Serializer &operator<=>(Serializer &s
 }
 
 /// Serialize array-like constant-size containers as ordinary arrays by default.
-template <typename Container>
-requires(concepts::array_like_constant_size<Container> && !concepts::overrides_serialize_method<Container>)
-inline Serializer &operator<=>(Serializer &serializer, Container &container) {
+template <typename Container> requires(concepts::array_like_constant_size<Container> && !concepts::overrides_serialize_method<Container>) inline Serializer &operator<=>(Serializer &serializer, Container &container) {
   using Value = std::ranges::range_value_t<Container>;
   if constexpr (concepts::arithmetic_or_enum<Value>) {
     serializer.readOrWrite(&container[0], Container::size(), sizeof(Value));
@@ -266,8 +263,7 @@ template <std::floating_point Float> inline Serializer &operator<=>(Serializer &
 }
 
 /// Serialize unique pointer.
-template <typename Value, typename Deleter>
-inline Serializer &operator<=>(Serializer &serializer, std::unique_ptr<Value, Deleter> &pointer) {
+template <typename Value, typename Deleter> inline Serializer &operator<=>(Serializer &serializer, std::unique_ptr<Value, Deleter> &pointer) {
   bool hasValue = false;
   if (serializer.reading()) {
     serializer <=> hasValue;
@@ -285,8 +281,7 @@ inline Serializer &operator<=>(Serializer &serializer, std::unique_ptr<Value, De
 }
 
 /// Serialize deep pointer.
-template <typename Value, typename Deleter>
-inline Serializer &operator<=>(Serializer &serializer, DeepPtr<Value, Deleter> &pointer) {
+template <typename Value, typename Deleter> inline Serializer &operator<=>(Serializer &serializer, DeepPtr<Value, Deleter> &pointer) {
   serializer <=> static_cast<std::unique_ptr<Value, Deleter> &>(pointer);
   return serializer;
 }
@@ -343,9 +338,7 @@ template <typename... Args> inline Serializer &operator<=>(Serializer &serialize
 }
 
 /// Serialize sequence-constructible container.
-template <typename Container> requires(
-  concepts::basic_container<Container> && concepts::sequence_constructible<Container> &&
-  !concepts::array_like_constant_size<Container> && !concepts::overrides_serialize_method<Container>)
+template <typename Container> requires(concepts::basic_container<Container> && concepts::sequence_constructible<Container> && !concepts::array_like_constant_size<Container> && !concepts::overrides_serialize_method<Container>)
 inline Serializer &operator<=>(Serializer &serializer, Container &container) {
   uint32_t size = container.size();
   serializer <=> size;

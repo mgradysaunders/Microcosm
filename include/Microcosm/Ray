@@ -39,9 +39,7 @@ public:
   /// Compute the point at an arbitrary parameter.
   [[nodiscard, strong_inline]] constexpr auto operator()(auto t) const noexcept { return origin + direction * t; }
 
-  template <std::floating_point Other> [[nodiscard, strong_inline]] constexpr operator Ray<Other, N>() const noexcept {
-    return Ray<Other, N>{Vector<Other, N>(origin), Vector<Other, N>(direction), Other(minParam), Other(maxParam)};
-  }
+  template <std::floating_point Other> [[nodiscard, strong_inline]] constexpr operator Ray<Other, N>() const noexcept { return Ray<Other, N>{Vector<Other, N>(origin), Vector<Other, N>(direction), Other(minParam), Other(maxParam)}; }
 
 public:
   Vector<Float, N> origin;
@@ -54,9 +52,7 @@ public:
 
   void onSerialize(auto &&serializer) { serializer <=> origin <=> direction <=> minParam <=> maxParam; }
 
-  void onTransform(auto &&transform) noexcept {
-    origin = transform.applyAffine(origin), direction = transform.applyLinear(direction);
-  }
+  void onTransform(auto &&transform) noexcept { origin = transform.applyAffine(origin), direction = transform.applyLinear(direction); }
 };
 
 template <typename Float> using Ray2 = Ray<Float, 2>;

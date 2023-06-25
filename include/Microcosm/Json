@@ -62,8 +62,7 @@ public:
 
   Json(bool value) : value(value) {}
 
-  template <typename Value> requires(concepts::arithmetic<Value> && !std::same_as<Value, bool>)
-  Json(Value value) : value(double(value)) {}
+  template <typename Value> requires(concepts::arithmetic<Value> && !std::same_as<Value, bool>) Json(Value value) : value(double(value)) {}
 
   template <concepts::scoped_enum Value> Json(Value value) : value(double(std::underlying_type_t<Value>(value))) {}
 
@@ -75,8 +74,7 @@ public:
 
   template <typename Value, size_t N> Json(const std::array<Value, N> &values) : value(array_t(values.begin(), values.end())) {}
 
-  template <typename Value, typename Alloc>
-  Json(const std::vector<Value, Alloc> &values) : value(array_t(values.begin(), values.end())) {}
+  template <typename Value, typename Alloc> Json(const std::vector<Value, Alloc> &values) : value(array_t(values.begin(), values.end())) {}
 
   template <typename... Args> Json(const std::map<std::string, Args...> &values) {
     auto &table = asTable();
@@ -124,9 +122,7 @@ public:
     return *ptr;
   }
 
-  template <typename T> [[nodiscard, strong_inline]] const T &as() const {
-    return const_cast<Json &>(*this).template as<T, /*IsConst=*/true>();
-  }
+  template <typename T> [[nodiscard, strong_inline]] const T &as() const { return const_cast<Json &>(*this).template as<T, /*IsConst=*/true>(); }
 
   [[nodiscard, strong_inline]] bool_t &asBool() { return as<bool_t>(); }
 
@@ -206,8 +202,7 @@ public:
       if (is(Kind::Number)) {
         double num = asNumber();
         if constexpr (std::integral<Value>)
-          if (!std::isfinite(num) || !(num == double(Value(num))))
-            throw std::runtime_error("{} is not representable as {}"_format(num, typenameString<Value>()));
+          if (!std::isfinite(num) || !(num == double(Value(num)))) throw std::runtime_error("{} is not representable as {}"_format(num, typenameString<Value>()));
         return num;
       }
       throw std::runtime_error("{} is not convertible to {}"_format(toString(kind()), typenameString<Value>()));
@@ -285,8 +280,7 @@ public:
       return *this;
     }
 
-    template <typename... Values>
-    Conversion &required(std::initializer_list<std::string_view> keys, std::variant<Values...> &values) {
+    template <typename... Values> Conversion &required(std::initializer_list<std::string_view> keys, std::variant<Values...> &values) {
       if (reading()) {
         size_t index = 0;
         for (auto key : keys) {

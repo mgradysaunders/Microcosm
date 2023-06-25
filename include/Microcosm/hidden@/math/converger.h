@@ -47,7 +47,7 @@ template <std::floating_point Float, std::invocable<Float> FunctionF, std::invoc
   FunctionF &&functionF, FunctionG &&functionG, int maxIters = 16, int multiplicity = 1) {
   return solveNewton(
     coord, minCoord, maxCoord, target, tolerance,
-    [functionF = std::forward<FunctionF>(functionF),
+    [functionF = std::forward<FunctionF>(functionF), //
      functionG = std::forward<FunctionG>(functionG)](Float x) -> std::pair<Float, Float> {
       return {functionF(x), functionG(x)};
     },

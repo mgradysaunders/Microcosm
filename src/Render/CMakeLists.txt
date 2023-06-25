@@ -1,3 +1,4 @@
+find_package(OpenMP REQUIRED)
 microcosm_add_library(
   "Render"
   SHARED
@@ -30,6 +31,7 @@ microcosm_add_library(
   DEPENDS 
     ${PROJECT_NAME}::Geometry
     ${PROJECT_NAME}::Quadrature
+    OpenMP::OpenMP_CXX
   EXPORT_MACRO "MI_RENDER_API"
   EXPORT_FILENAME "Microcosm/Render/Export.h"
   )

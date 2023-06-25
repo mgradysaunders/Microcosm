@@ -46,9 +46,7 @@ public:
   using MatrixNxNf = Matrix<float, Dynamic, Dynamic, /*SmallSize=*/16>;
 
   /// Build an arbitrary tangent space. This is a 3x2 matrix where the columns are orthogonal to the given normal vector.
-  [[nodiscard]] static Matrix3x2f arbitraryTangentSpace(const Vector3f &vectorN) noexcept {
-    return Matrix3x3f::orthonormalBasisDiscontinuous(vectorN).col(Slice<0, 2>());
-  }
+  [[nodiscard]] static Matrix3x2f arbitraryTangentSpace(const Vector3f &vectorN) noexcept { return Matrix3x3f::orthonormalBasisDiscontinuous(vectorN).col(Slice<0, 2>()); }
 
   struct Edge;
 
@@ -255,9 +253,7 @@ public:
     }
 
     /// The gradient operator used by `Face::gradient()`.
-    [[nodiscard]] Vector3f gradient() noexcept {
-      return 0.5f / face->area * cross(face->normal, loop.prev->position() - loop.next->position());
-    }
+    [[nodiscard]] Vector3f gradient() noexcept { return 0.5f / face->area * cross(face->normal, loop.prev->position() - loop.next->position()); }
 
     /// The sharp operator used by `Face::sharp()`.
     [[nodiscard]] Vector3f sharp() noexcept { return 1.0f / face->area * cross(face->normal, center() - face->center); }
@@ -289,9 +285,7 @@ public:
 private:
   template <typename... Elements> struct ElementsContainer {
   public:
-    template <typename Element> [[nodiscard]] auto allocate(auto... args) {
-      return listOf<Element>().append(mPool.allocate<Element>(args...));
-    }
+    template <typename Element> [[nodiscard]] auto allocate(auto... args) { return listOf<Element>().append(mPool.allocate<Element>(args...)); }
 
     template <typename Element> void deallocate(Element *elem) {
       elem = listOf<Element>().extract(elem);
@@ -309,13 +303,9 @@ private:
       mPool.clear();
     }
 
-    template <typename Element> [[nodiscard, strong_inline]] constexpr auto &listOf() noexcept {
-      return std::get<DoublyLinkedList<Element>>(mLists);
-    }
+    template <typename Element> [[nodiscard, strong_inline]] constexpr auto &listOf() noexcept { return std::get<DoublyLinkedList<Element>>(mLists); }
 
-    template <typename Element> [[nodiscard, strong_inline]] constexpr auto &listOf() const noexcept {
-      return std::get<DoublyLinkedList<Element>>(mLists);
-    }
+    template <typename Element> [[nodiscard, strong_inline]] constexpr auto &listOf() const noexcept { return std::get<DoublyLinkedList<Element>>(mLists); }
 
   private:
     std::tuple<DoublyLinkedList<Elements>...> mLists;
@@ -419,15 +409,11 @@ private:
         return copy;
       }
 
-      [[nodiscard, strong_inline]] constexpr bool operator==(Sentinel) const noexcept {
-        return !edge || (edge == firstEdge && step != 0);
-      }
+      [[nodiscard, strong_inline]] constexpr bool operator==(Sentinel) const noexcept { return !edge || (edge == firstEdge && step != 0); }
 
       [[nodiscard, strong_inline]] constexpr bool operator!=(Sentinel) const noexcept { return !operator==(Sentinel()); }
 
-      [[nodiscard, strong_inline]] constexpr reference operator*() const noexcept {
-        return Dereference(const_cast<Edge *&>(edge));
-      }
+      [[nodiscard, strong_inline]] constexpr reference operator*() const noexcept { return Dereference(const_cast<Edge *&>(edge)); }
 
       [[nodiscard, strong_inline]] constexpr operator bool() const noexcept { return operator!=(Sentinel()); }
 
@@ -719,8 +705,7 @@ public:
   /// and `relative`, and finally splitting the faces with the
   /// new vertices.
   ///
-  InsertEdgeLoopResult insertEdgeLoop(
-    Edge *first, float factor = 0.5f, bool relative = true, InsertEdgeLoopMode mode = InsertEdgeLoopMode::AcrossQuad);
+  InsertEdgeLoopResult insertEdgeLoop(Edge *first, float factor = 0.5f, bool relative = true, InsertEdgeLoopMode mode = InsertEdgeLoopMode::AcrossQuad);
 
   /// Select edge loop by naturally continuing through regular verts.
   [[nodiscard]] std::vector<Edge *> selectEdgeLoop(Edge *first);
@@ -883,12 +868,10 @@ public:
   };
 
   /// Find a path of verts connected by edges.
-  [[nodiscard]] std::vector<Vert *>
-  findPath(Vert *source, Vert *target, const FindPathOptions &options = {0, 0, 0, false}) const;
+  [[nodiscard]] std::vector<Vert *> findPath(Vert *source, Vert *target, const FindPathOptions &options = {0, 0, 0, false}) const;
 
   /// Find a path of faces connected by edges.
-  [[nodiscard]] std::vector<Face *>
-  findPath(Face *source, Face *target, const FindPathOptions &options = {0, 0, 0, false}) const;
+  [[nodiscard]] std::vector<Face *> findPath(Face *source, Face *target, const FindPathOptions &options = {0, 0, 0, false}) const;
 
   /// \}
 

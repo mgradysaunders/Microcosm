@@ -21,41 +21,23 @@ namespace mi {
 
 [[nodiscard]] constexpr auto conj(concepts::complex auto value) noexcept { return decltype(value)(real(value), -imag(value)); }
 
-[[nodiscard]] constexpr auto norm(concepts::complex auto value) noexcept {
-  return real(value) * real(value) + imag(value) * imag(value);
-}
+[[nodiscard]] constexpr auto norm(concepts::complex auto value) noexcept { return real(value) * real(value) + imag(value) * imag(value); }
 
-[[nodiscard]] inline bool isinf(concepts::complex auto value) noexcept {
-  return std::isinf(real(value)) || std::isinf(imag(value));
-}
+[[nodiscard]] inline bool isinf(concepts::complex auto value) noexcept { return std::isinf(real(value)) || std::isinf(imag(value)); }
 
-[[nodiscard]] inline bool isnan(concepts::complex auto value) noexcept {
-  return std::isnan(real(value)) || std::isnan(imag(value));
-}
+[[nodiscard]] inline bool isnan(concepts::complex auto value) noexcept { return std::isnan(real(value)) || std::isnan(imag(value)); }
 
-[[nodiscard]] inline bool isfinite(concepts::complex auto value) noexcept {
-  return std::isfinite(real(value)) && std::isfinite(imag(value));
-}
+[[nodiscard]] inline bool isfinite(concepts::complex auto value) noexcept { return std::isfinite(real(value)) && std::isfinite(imag(value)); }
 
-[[nodiscard]] inline bool isnormal(concepts::complex auto value) noexcept {
-  return std::isnormal(real(value)) && std::isnormal(imag(value));
-}
+[[nodiscard]] inline bool isnormal(concepts::complex auto value) noexcept { return std::isnormal(real(value)) && std::isnormal(imag(value)); }
 
-template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isinf(Args &&...args) noexcept {
-  return (isinf(std::forward<Args>(args)) || ...);
-}
+template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isinf(Args &&...args) noexcept { return (isinf(std::forward<Args>(args)) || ...); }
 
-template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isnan(Args &&...args) noexcept {
-  return (isnan(std::forward<Args>(args)) || ...);
-}
+template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isnan(Args &&...args) noexcept { return (isnan(std::forward<Args>(args)) || ...); }
 
-template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isfinite(Args &&...args) noexcept {
-  return (isfinite(std::forward<Args>(args)) && ...);
-}
+template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isfinite(Args &&...args) noexcept { return (isfinite(std::forward<Args>(args)) && ...); }
 
-template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isnormal(Args &&...args) noexcept {
-  return (isnormal(std::forward<Args>(args)) && ...);
-}
+template <typename... Args> requires(sizeof...(Args) > 1) [[nodiscard]] inline bool isnormal(Args &&...args) noexcept { return (isnormal(std::forward<Args>(args)) && ...); }
 
 [[nodiscard]] inline auto sign(concepts::arithmetic auto value) noexcept { return std::copysign(decltype(value)(1), value); }
 
@@ -74,10 +56,7 @@ enum class FuzzySign : int { Negative = -1, Zero = 0, Positive = +1 };
 
 [[nodiscard]] constexpr bool operator!=(FuzzySign signA, FuzzySign signB) noexcept { return int(signA) != int(signB); }
 
-template <std::floating_point Float, Float Thresh = constants::Eps<Float>>
-[[nodiscard]] constexpr auto fuzzySign(Float value) noexcept {
-  return abs(value) < Thresh ? FuzzySign::Zero : std::signbit(value) ? FuzzySign::Negative : FuzzySign::Positive;
-}
+template <std::floating_point Float, Float Thresh = constants::Eps<Float>> [[nodiscard]] constexpr auto fuzzySign(Float value) noexcept { return abs(value) < Thresh ? FuzzySign::Zero : std::signbit(value) ? FuzzySign::Negative : FuzzySign::Positive; }
 
 /// Soft-sign activation.
 [[nodiscard]] inline auto softSign(std::floating_point auto value) noexcept { return value / (1 + abs(value)); }
@@ -101,14 +80,10 @@ template <std::integral Int = int, std::floating_point Float> [[nodiscard]] cons
 }
 
 /// Fast round by int casting.
-template <std::integral Int = int, std::floating_point Float> [[nodiscard]] constexpr Int fastRound(Float value) noexcept {
-  return fastFloor<Int>(value + Float(0.5));
-}
+template <std::integral Int = int, std::floating_point Float> [[nodiscard]] constexpr Int fastRound(Float value) noexcept { return fastFloor<Int>(value + Float(0.5)); }
 
 /// Fast trunc by int casting.
-template <std::integral Int = int, std::floating_point Float> [[nodiscard]] constexpr Int fastTrunc(Float value) noexcept {
-  return static_cast<Int>(value);
-}
+template <std::integral Int = int, std::floating_point Float> [[nodiscard]] constexpr Int fastTrunc(Float value) noexcept { return static_cast<Int>(value); }
 
 /// Fraction with respect to floor.
 template <std::floating_point Float> [[nodiscard]] constexpr Float fastFract(Float value, int *intPart) noexcept {
@@ -118,9 +93,7 @@ template <std::floating_point Float> [[nodiscard]] constexpr Float fastFract(Flo
 }
 
 /// Fraction with respect to floor.
-template <std::floating_point Float> [[nodiscard]] constexpr Float fastFract(Float value) noexcept {
-  return value - fastFloor(value);
-}
+template <std::floating_point Float> [[nodiscard]] constexpr Float fastFract(Float value) noexcept { return value - fastFloor(value); }
 
 /// Is relatively tiny? (a much less than b)
 [[nodiscard]] inline bool isTiny(std::floating_point auto valueA, std::floating_point auto valueB) noexcept {
@@ -131,27 +104,19 @@ template <std::floating_point Float> [[nodiscard]] constexpr Float fastFract(Flo
 }
 
 /// Is relatively huge? (a much greater than b)
-[[nodiscard]] inline bool isHuge(std::floating_point auto valueA, std::floating_point auto valueB) noexcept {
-  return isTiny(valueB, valueA);
-}
+[[nodiscard]] inline bool isHuge(std::floating_point auto valueA, std::floating_point auto valueB) noexcept { return isTiny(valueB, valueA); }
 
 /// Finite or alternative.
-[[nodiscard]] inline auto finiteOr(concepts::arithmetic auto value, concepts::arithmetic auto value0) noexcept {
-  return isfinite(value) ? value : value0;
-}
+[[nodiscard]] inline auto finiteOr(concepts::arithmetic auto value, concepts::arithmetic auto value0) noexcept { return isfinite(value) ? value : value0; }
 
 /// Finite or zero.
-[[nodiscard]] inline auto finiteOrZero(concepts::arithmetic auto value) noexcept {
-  return finiteOr(value, std::decay_t<decltype(value)>(0));
-}
+[[nodiscard]] inline auto finiteOrZero(concepts::arithmetic auto value) noexcept { return finiteOr(value, std::decay_t<decltype(value)>(0)); }
 
 /// Safe square root.
 [[nodiscard]] inline auto safeSqrt(concepts::arithmetic auto value) noexcept { return sqrt(max(value, 0)); }
 
 /// Safe ratio of numbers, protects against NaNs due to 0/0.
-[[nodiscard]] inline auto safeRatio(const auto &numer, const auto &denom) noexcept {
-  return numer == std::decay_t<decltype(numer)>(0) ? numer : numer / denom;
-}
+[[nodiscard]] inline auto safeRatio(const auto &numer, const auto &denom) noexcept { return numer == std::decay_t<decltype(numer)>(0) ? numer : numer / denom; }
 
 /// Increment float to next representable value.
 template <std::floating_point Float> [[nodiscard]] inline Float nextFloat(Float value) noexcept {
@@ -242,18 +207,17 @@ template <std::floating_point Float> [[nodiscard]] inline Float prevFloat(Float 
 }
 
 /// An overload of `exp2()` for `std::complex`, not provided by STL.
-template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto exp2(const std::complex<Float> &value) noexcept {
-  return std::exp(constants::LnTwo<Float> * value);
-}
+template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto exp2(const std::complex<Float> &value) noexcept { return std::exp(constants::LnTwo<Float> * value); }
 
 /// An overload of `log2()` for `std::complex`, not provided by STL.
-template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto log2(const std::complex<Float> &value) noexcept {
-  return std::log(value) / constants::LnTwo<Float>;
-}
+template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto log2(const std::complex<Float> &value) noexcept { return std::log(value) / constants::LnTwo<Float>; }
 
 /// An overload of `cbrt()` for `std::complex`, not provided by STL.
-template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto cbrt(const std::complex<Float> &value) noexcept {
-  return std::pow(value, std::complex<Float>(1.0 / 3.0));
+template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto cbrt(const std::complex<Float> &value) noexcept { return std::pow(value, std::complex<Float>(1.0 / 3.0)); }
+
+// TODO
+template <std::floating_point Float> [[nodiscard, strong_inline]] inline auto atan2(const std::complex<Float> &valueY, const std::complex<Float> &valueX) noexcept {
+  return atan(valueY / valueX);
 }
 
 /// Error function inverse.
@@ -294,10 +258,7 @@ template <std::floating_point Float, size_t N> struct RealRoots final : ArrayLik
 public:
   constexpr RealRoots() noexcept = default;
 
-  constexpr RealRoots(std::floating_point auto... roots) noexcept requires(sizeof...(roots) <= N)
-    : mRoots{Float(roots)...}, mRootCount(sizeof...(roots)) {
-    std::sort(this->begin(), this->end());
-  }
+  constexpr RealRoots(std::floating_point auto... roots) noexcept requires(sizeof...(roots) <= N) : mRoots{Float(roots)...}, mRootCount(sizeof...(roots)) { std::sort(this->begin(), this->end()); }
 
   template <size_t M> requires(M < N) constexpr RealRoots(const RealRoots<Float, M> &other) noexcept {
     std::copy(other.begin(), other.end(), this->begin());
@@ -317,8 +278,7 @@ private:
   size_t mRootCount{0};
 };
 
-template <std::floating_point Float>
-[[nodiscard]] inline RealRoots<Float, 2> solveQuadratic(Float coeffA, Float coeffB, Float coeffC) noexcept {
+template <std::floating_point Float> [[nodiscard]] inline RealRoots<Float, 2> solveQuadratic(Float coeffA, Float coeffB, Float coeffC) noexcept {
   if (isTiny(coeffA, abs(coeffB) + abs(coeffC))) [[unlikely]] {
     if (Float root = -coeffC / coeffB; isfinite(root)) {
       return {root};
@@ -342,8 +302,7 @@ template <std::floating_point Float>
   }
 }
 
-template <std::floating_point Float>
-[[nodiscard]] inline RealRoots<Float, 3> solveCubic(Float coeffA, Float coeffB, Float coeffC, Float coeffD) noexcept {
+template <std::floating_point Float> [[nodiscard]] inline RealRoots<Float, 3> solveCubic(Float coeffA, Float coeffB, Float coeffC, Float coeffD) noexcept {
   if (isTiny(coeffA, abs(coeffB) + abs(coeffB) + abs(coeffC))) [[unlikely]]
     return solveQuadratic(coeffB, coeffC, coeffD);
   coeffB /= coeffA;
@@ -369,8 +328,7 @@ template <std::floating_point Float>
     Float twoSqrtCoeffQ = 2 * sqrt(-coeffQ);
     return {
       twoSqrtCoeffQ * cos(theta) - coeffBOverThree, //
-      twoSqrtCoeffQ * cos(theta + 2 * constants::Pi<Float> / 3) - coeffBOverThree,
-      twoSqrtCoeffQ * cos(theta + 4 * constants::Pi<Float> / 3) - coeffBOverThree};
+      twoSqrtCoeffQ * cos(theta + 2 * constants::Pi<Float> / 3) - coeffBOverThree, twoSqrtCoeffQ * cos(theta + 4 * constants::Pi<Float> / 3) - coeffBOverThree};
   }
 }
 
@@ -449,9 +407,7 @@ template <std::integral Int> [[nodiscard]] constexpr Int mirror(Int valueK, Int 
 }
 
 /// Wrap floating point number in range.
-template <std::floating_point Float>
-[[nodiscard]] inline Float
-repeat(Float valueX, std::type_identity_t<Float> valueA = 0, std::type_identity_t<Float> valueB = 1) noexcept {
+template <std::floating_point Float> [[nodiscard]] inline Float repeat(Float valueX, std::type_identity_t<Float> valueA = 0, std::type_identity_t<Float> valueB = 1) noexcept {
   valueX -= valueA;
   valueB -= valueA;
   Float rem = std::remainder(valueX, valueB);
@@ -461,9 +417,7 @@ repeat(Float valueX, std::type_identity_t<Float> valueA = 0, std::type_identity_
 }
 
 /// Wrap floating point number in range and mirror with each repeat.
-template <std::floating_point Float>
-[[nodiscard]] inline Float
-mirror(Float valueX, std::type_identity_t<Float> valueA = 0, std::type_identity_t<Float> valueB = 1) noexcept {
+template <std::floating_point Float> [[nodiscard]] inline Float mirror(Float valueX, std::type_identity_t<Float> valueA = 0, std::type_identity_t<Float> valueB = 1) noexcept {
   valueX -= valueA;
   valueB -= valueA;
   int quo = 0;

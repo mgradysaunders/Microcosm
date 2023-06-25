@@ -17,14 +17,11 @@ public:
 
   constexpr BoundBox(const Vector<Value, N> &coord0, const Vector<Value, N> &coord1) noexcept : mPoints{coord0, coord1} {}
 
-  template <std::ranges::range Range> requires(!concepts::tensor<Range> && !std::same_as<std::decay_t<Range>, BoundBox>)
-  [[strong_inline]] explicit constexpr BoundBox(Range &&range) {
+  template <std::ranges::range Range> requires(!concepts::tensor<Range> && !std::same_as<std::decay_t<Range>, BoundBox>) [[strong_inline]] explicit constexpr BoundBox(Range &&range) {
     for (auto &&value : std::forward<Range>(range)) *this |= value;
   }
 
-  template <std::ranges::range Range, typename Cast> requires(
-    !concepts::tensor<Range> && //
-    !std::same_as<std::decay_t<Range>, BoundBox> && std::invocable<Cast, std::ranges::range_value_t<Range>>)
+  template <std::ranges::range Range, typename Cast> requires(!concepts::tensor<Range> && !std::same_as<std::decay_t<Range>, BoundBox> && std::invocable<Cast, std::ranges::range_value_t<Range>>)
   [[strong_inline]] explicit constexpr BoundBox(Range &&range, Cast &&cast) {
     for (auto &&value : std::forward<Range>(range)) *this |= std::invoke(std::forward<Cast>(cast), value);
   }
@@ -48,14 +45,10 @@ public:
   [[nodiscard]] constexpr Vector<Value, N> center() const noexcept { return (lower() + upper()) / Value(2); }
 
   /// Overlaps the given bound?
-  [[nodiscard]] constexpr bool overlaps(const BoundBox &other) const noexcept {
-    return allTrue(lower() <= other.upper() && upper() >= other.lower());
-  }
+  [[nodiscard]] constexpr bool overlaps(const BoundBox &other) const noexcept { return allTrue(lower() <= other.upper() && upper() >= other.lower()); }
 
   /// Contains the given bound?
-  [[nodiscard]] constexpr bool contains(const BoundBox &other) const noexcept {
-    return allTrue(lower() <= other.lower() && upper() >= other.upper());
-  }
+  [[nodiscard]] constexpr bool contains(const BoundBox &other) const noexcept { return allTrue(lower() <= other.lower() && upper() >= other.upper()); }
 
   /// Hyper area.
   ///
@@ -94,9 +87,7 @@ public:
   [[nodiscard]] constexpr Value area() const noexcept requires(N == 3) { return hyperArea(); }
 
   /// Aspect ratio, as width over height.
-  [[nodiscard]] constexpr Float aspectRatio() const noexcept requires(N == 2) {
-    return Float(extent()[0]) / Float(extent()[1]);
-  }
+  [[nodiscard]] constexpr Float aspectRatio() const noexcept requires(N == 2) { return Float(extent()[0]) / Float(extent()[1]); }
 
   /// Clamp point to interior.
   [[nodiscard]] constexpr Vector<Value, N> clamp(Vector<Value, N> point) const noexcept {
@@ -119,21 +110,16 @@ public:
   }
 
   /// Pad by the given absolute amount.
-  [[nodiscard]] constexpr BoundBox padAbsolute(Value amount) const noexcept {
-    return BoundBox(lower() - amount, upper() + amount);
-  }
+  [[nodiscard]] constexpr BoundBox padAbsolute(Value amount) const noexcept { return BoundBox(lower() - amount, upper() + amount); }
 
   /// Pad by the given relative amount.
-  [[nodiscard]] constexpr BoundBox padRelative(Value amount) const noexcept requires std::floating_point<Value> {
-    return scale(1 + amount);
-  }
+  [[nodiscard]] constexpr BoundBox padRelative(Value amount) const noexcept requires std::floating_point<Value> { return scale(1 + amount); }
 
   /// Scale about the center by the given amount.
   [[nodiscard]] constexpr BoundBox scale(auto amount) const noexcept { return scaleAboutPoint(center(), amount); }
 
   /// Scale about the given point by the given amount.
-  [[nodiscard]] constexpr BoundBox scaleAboutPoint(Vector<Value, N> point, auto amount) const noexcept
-    requires std::floating_point<Value> {
+  [[nodiscard]] constexpr BoundBox scaleAboutPoint(Vector<Value, N> point, auto amount) const noexcept requires std::floating_point<Value> {
     return BoundBox(
       amount * (mPoints[0] - point) + point, //
       amount * (mPoints[1] - point) + point);
@@ -153,29 +139,17 @@ public:
 public:
   /// \name Set operators
   /// \{
-  [[nodiscard]] constexpr BoundBox operator|(const BoundBox &other) const noexcept {
-    return {min(lower(), other.lower()), max(upper(), other.upper())};
-  }
+  [[nodiscard]] constexpr BoundBox operator|(const BoundBox &other) const noexcept { return {min(lower(), other.lower()), max(upper(), other.upper())}; }
 
-  [[nodiscard]] constexpr BoundBox operator&(const BoundBox &other) const noexcept {
-    return {max(lower(), other.lower()), min(upper(), other.upper())};
-  }
+  [[nodiscard]] constexpr BoundBox operator&(const BoundBox &other) const noexcept { return {max(lower(), other.lower()), min(upper(), other.upper())}; }
 
-  [[nodiscard]] constexpr BoundBox operator|(const Vector<Value, N> &point) const noexcept {
-    return {min(lower(), point), max(upper(), point)};
-  }
+  [[nodiscard]] constexpr BoundBox operator|(const Vector<Value, N> &point) const noexcept { return {min(lower(), point), max(upper(), point)}; }
 
-  [[nodiscard]] constexpr BoundBox operator&(const Vector<Value, N> &point) const noexcept {
-    return {max(lower(), point), min(upper(), point)};
-  }
+  [[nodiscard]] constexpr BoundBox operator&(const Vector<Value, N> &point) const noexcept { return {max(lower(), point), min(upper(), point)}; }
 
-  [[nodiscard]] friend constexpr BoundBox operator|(const Vector<Value, N> &point, const BoundBox &bound) noexcept {
-    return bound | point;
-  }
+  [[nodiscard]] friend constexpr BoundBox operator|(const Vector<Value, N> &point, const BoundBox &bound) noexcept { return bound | point; }
 
-  [[nodiscard]] friend constexpr BoundBox operator&(const Vector<Value, N> &point, const BoundBox &bound) noexcept {
-    return bound & point;
-  }
+  [[nodiscard]] friend constexpr BoundBox operator&(const Vector<Value, N> &point, const BoundBox &bound) noexcept { return bound & point; }
 
   [[strong_inline]] constexpr BoundBox &operator|=(const auto &other) noexcept { return *this = *this | other; }
 
@@ -186,11 +160,7 @@ public:
   /// Implicit cast as bool. (Is hyper volume non-negative?)
   [[nodiscard]] constexpr operator bool() const noexcept { return allTrue(lower() <= upper()); }
 
-  template <typename Other> [[nodiscard]] constexpr operator BoundBox<Other, N>() const noexcept {
-    return BoundBox<Other, N>(
-      Vector<Other, N>(mPoints[0]), //
-      Vector<Other, N>(mPoints[1]));
-  }
+  template <typename Other> [[nodiscard]] constexpr operator BoundBox<Other, N>() const noexcept { return BoundBox<Other, N>(Vector<Other, N>(mPoints[0]), Vector<Other, N>(mPoints[1])); }
 
 public:
   [[nodiscard]] constexpr std::optional<std::pair<Float, Float>> rayCast(const Ray<Float, N> &ray) const noexcept {
@@ -199,8 +169,7 @@ public:
     return params;
   }
 
-  [[nodiscard]] constexpr std::optional<std::pair<Float, Float>> rayCast( //
-    const Vector<Float, N> &origin, const Vector<Float, N> &direction) const noexcept {
+  [[nodiscard]] constexpr std::optional<std::pair<Float, Float>> rayCast(const Vector<Float, N> &origin, const Vector<Float, N> &direction) const noexcept {
     Float denom{1 / direction[0]};
     Float minParam{(mPoints[0][0] - origin[0]) * denom};
     Float maxParam{(mPoints[1][0] - origin[0]) * denom};

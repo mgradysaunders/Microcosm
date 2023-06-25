@@ -1,6 +1,8 @@
 #include "Microcosm/Differentiable"
 #include "testing.h"
 
+using namespace mi::string_literals;
+
 TEST_CASE("Differentiable") {
   SUBCASE("Scalar functions") {
     auto Function1 = [](auto t) { return t * mi::log(mi::exp(t + 0.5 * mi::cos(8 * t)) + 1); };

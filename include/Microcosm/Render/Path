@@ -255,7 +255,7 @@ public:
   /// - Overwrite vertex.runtime.pathPDF.reverse with the probability density associated with the vertex position.
   /// - Overwrite vertex.runtime.scatteringPDF.reverse with the probability density for sampling vertex.runtime.omegaO.
   ///
-  using Truncation = std::function<bool(Path::Vertex &vertex)>;
+  using Truncater = std::function<bool(Path::Vertex &vertex)>;
 
   /// The path completion operator.
   ///
@@ -274,12 +274,12 @@ public:
   /// the opposite kind of path. The solid angle density associated with how the implementation truly samples vertexQ
   /// with respect to vertexP should be lumped into the denominator of the ratio.
   ///
-  using Completion = std::function<bool(const Path::Vertex &vertexP, Path::Vertex &vertexQ)>;
+  using Completer = std::function<bool(const Path::Vertex &vertexP, Path::Vertex &vertexQ)>;
 
   /// The visibility term. This must determine whether the given pair of vertices is mutually visible. If so,
   /// the implementation should return true, and apply whatever path transmission is present between the vertices to
   /// the given spectrum.
-  using Visibility = std::function<bool(const Path::Vertex &vertexP, const Path::Vertex &vertexQ, Spectrum &L)>;
+  using VisibilityTester = std::function<bool(const Path::Vertex &vertexP, const Path::Vertex &vertexQ, Spectrum &L)>;
 
   /// The receiver function, to process the contribution for each connection strategy. Note: the importanceWeight is
   /// not yet applied to the spectrum, so the implementation should do the multiplication itself in the standard use
@@ -289,10 +289,10 @@ public:
 
   PathConnector() noexcept = default;
 
-  PathConnector(Truncation truncation, Completion completion, Visibility visibility) noexcept
-    : mTruncation(std::move(truncation)), //
-      mCompletion(std::move(completion)), //
-      mVisibility(std::move(visibility)) {}
+  PathConnector(Truncater truncater, Completer completer, VisibilityTester visibilityTester) noexcept
+    : mTruncater(std::move(truncater)), //
+      mCompleter(std::move(completer)), //
+      mVisibilityTester(std::move(visibilityTester)) {}
 
 public:
   /// Connect the given paths in every possible way.
@@ -305,11 +305,11 @@ public:
   [[nodiscard]] double multipleImportanceWeight(PathView pathA, PathView pathB) const;
 
 private:
-  Truncation mTruncation{};
+  Truncater mTruncater{};
 
-  Completion mCompletion{};
+  Completer mCompleter{};
 
-  Visibility mVisibility{};
+  VisibilityTester mVisibilityTester{};
 
   /// Forming path connections involves overwriting some of the PDF calculations. This is a helper to preserve
   /// the original values. The connectTerm() implementation uses it to make sure that any temporary changes needed

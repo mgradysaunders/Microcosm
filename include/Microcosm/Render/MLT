@@ -15,16 +15,28 @@ public:
       mLargeStepProbability(largeStepProbability) {}
 
   /// Advance to the next iteration.
-  void nextIteration();
+  void nextIteration() {
+    mIteration++;
+    mIsLargeStep = double(mRandom) < mLargeStepProbability;
+    mSampleCount = mSequenceCount = 0;
+  }
 
   /// Advance to the next sequence of samples.
-  void nextSequence();
+  void nextSequence() {
+    mSampleCount = 0;
+    mSequenceCount++;
+    if (mSequences.size() < mSequenceCount) [[unlikely]] {
+      mSequences.resize(mSequenceCount);
+      mSequences.back().reserve(32);
+    }
+  }
 
   /// Advance to the next sample.
   [[nodiscard]] double nextSample();
 
-  /// Finish the iteration and either accept or reject the mutation with the given acceptance probability.
-  void finish(bool accept);
+  void finishAndAccept();
+
+  void finishAndReject();
 
   /// The generate function required to bind to the Random interface.
   void generate(IteratorRange<double *> sampleU) {
@@ -65,6 +77,9 @@ private:
 struct MI_RENDER_API PSMLTIntegrator final {
 public:
   struct Options final {
+    /// Print progress bar in terminal?
+    bool printProgress{true};
+
     /// The random seed.
     size_t seed{0};
 
@@ -74,19 +89,14 @@ public:
     /// The large-step probability.
     double largeStepProbability{0.3};
 
-    /// Exclude direct lighting? 
-    ///
-    /// It can be useful to allow the Metropolis algorithm to focus exclusively on indirect
-    /// transport paths, then add the results back to a direct-only contribution calculated
-    /// separately, because sometimes the overall direct contributions can "distract" the
-    /// algorithm from the finer details of, e.g., caustic patterns.
-    bool excludeDirect{false};
+    /// The minimum depth. 
+    size_t minBounces{0};
 
-    /// The maximum depth, or path length.
-    size_t maxDepth{5};
+    /// The maximum depth.
+    size_t maxBounces{5};
 
     /// The number of bootstrap paths to initialize the algorithm.
-    size_t numBootstrap{50'000};
+    size_t numBootstrapPaths{50'000};
 
     /// The number of mutations.
     ///
@@ -111,15 +121,24 @@ public:
     /// The path contribution.
     Spectrum pathL{};
 
-    /// The path contribution intensity measure which guides the acceptance probability.
+    /// The path contribution intensity measure which guides the acceptance probability. This
+    /// is typically luminance, but can be calculated in any way that is linear with respect 
+    /// to the path contribution itself.
     double pathI{};
+
+    /// The pixel coordinate, if necessary to keep track of it.
+    Vector2d pixelCoordinate{};
   };
 
-  using SampleContribution = std::function<std::optional<Contribution>(Random &random, size_t depthFromCamera, size_t depthFromLight)>;
+  PSMLTIntegrator() noexcept = default;
 
-  using RecordContribution = std::function<void(const Contribution &contribution, double multiplier)>;
+  PSMLTIntegrator(const Options &options) noexcept : mOptions(options) {}
 
-  // TODO
+  using RandomSampler = std::function<std::optional<Contribution>(Random &random, size_t depthFromCamera, size_t depthFromLight)>;
+
+  using Recorder = std::function<void(const Contribution &contribution, double multiplier)>;
+
+  void operator()(const RandomSampler &randomSampler, const Recorder &recorder) const;
 
 private:
   Options mOptions{};

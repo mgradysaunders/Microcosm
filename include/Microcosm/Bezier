@@ -6,21 +6,17 @@
 
 namespace mi {
 
-template <std::floating_point Float, size_t N, size_t Degree = 3>
-struct Bezier final : ArrayLike<Bezier<Float, N, Degree>, /*NegativeFromBack=*/true> {
+template <std::floating_point Float, size_t N, size_t Degree = 3> struct Bezier final : ArrayLike<Bezier<Float, N, Degree>, /*NegativeFromBack=*/true> {
 public:
   constexpr Bezier() noexcept = default;
 
-  template <typename... Args>
-  requires(sizeof...(Args) == Degree + 1 && (std::constructible_from<Vector<Float, N>, Args> && ...))
-  constexpr Bezier(Args &&...args) : mPoints{Vector<Float, N>(std::forward<Args>(args))...} {}
+  template <typename... Args> requires(sizeof...(Args) == Degree + 1 && (std::constructible_from<Vector<Float, N>, Args> && ...)) constexpr Bezier(Args &&...args) : mPoints{Vector<Float, N>(std::forward<Args>(args))...} {}
 
   template <std::floating_point OtherFloat> explicit constexpr Bezier(const Vector<OtherFloat, N> *values) noexcept {
     if (values) std::copy(values, values + Degree + 1, &mPoints[0]);
   }
 
-  template <std::floating_point OtherFloat, size_t OtherN>
-  [[nodiscard]] constexpr operator Bezier<OtherFloat, OtherN, Degree>() const noexcept {
+  template <std::floating_point OtherFloat, size_t OtherN> [[nodiscard]] constexpr operator Bezier<OtherFloat, OtherN, Degree>() const noexcept {
     Bezier<OtherFloat, OtherN, Degree> bezier;
     for (size_t i = 0; i < Degree + 1; i++) bezier[i] = Vector<OtherFloat, OtherN>(mPoints[i]);
     return bezier;
@@ -95,8 +91,7 @@ public:
   }
 
   /// Derivative.
-  template <size_t J = 1>
-  [[nodiscard, strong_inline]] constexpr Bezier<Float, N, Degree - J> derivative() const noexcept requires(Degree >= J) {
+  template <size_t J = 1> [[nodiscard, strong_inline]] constexpr Bezier<Float, N, Degree - J> derivative() const noexcept requires(Degree >= J) {
     if constexpr (J == 0) return *this;
     if constexpr (J == 1) {
       Bezier<Float, N, Degree - 1> curve;
@@ -109,8 +104,7 @@ public:
   }
 
   /// Polynomial coefficient.
-  template <size_t J>
-  [[nodiscard, strong_inline]] constexpr Vector<Float, N> coefficient() const noexcept requires(Degree >= J) {
+  template <size_t J> [[nodiscard, strong_inline]] constexpr Vector<Float, N> coefficient() const noexcept requires(Degree >= J) {
     constexpr auto weights = []() constexpr {
       Vector<Float, J + 1> weights{};
       for (size_t i = 0; i <= J; i++)
@@ -161,9 +155,7 @@ public:
   }
 
   /// Subset on range.
-  [[nodiscard]] constexpr Bezier subset(Float t0, Float t1) const noexcept {
-    return t0 <= t1 ? subsetBefore(t1).subsetAfter(t0 * t1) : subsetBefore(t0).subsetAfter(t0 * t1).reverse();
-  }
+  [[nodiscard]] constexpr Bezier subset(Float t0, Float t1) const noexcept { return t0 <= t1 ? subsetBefore(t1).subsetAfter(t0 * t1) : subsetBefore(t0).subsetAfter(t0 * t1).reverse(); }
 
   /// Cut at parameter.
   [[nodiscard]] constexpr std::pair<Bezier, Bezier> cut(Float t) const noexcept { return {subsetBefore(t), subsetAfter(t)}; }

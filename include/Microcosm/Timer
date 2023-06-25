@@ -24,26 +24,18 @@ public:
     return std::chrono::duration_cast<std::chrono::duration<Rep, Ratio>>(elapsed()).count();
   }
 
-  template <typename Rep = int64_t> [[nodiscard, strong_inline]] Rep nanoseconds() const noexcept {
-    return read<Rep, std::nano>();
-  }
+  template <typename Rep = int64_t> [[nodiscard, strong_inline]] Rep nanoseconds() const noexcept { return read<Rep, std::nano>(); }
 
-  template <typename Rep = int64_t> [[nodiscard, strong_inline]] Rep microseconds() const noexcept {
-    return read<Rep, std::micro>();
-  }
+  template <typename Rep = int64_t> [[nodiscard, strong_inline]] Rep microseconds() const noexcept { return read<Rep, std::micro>(); }
 
-  template <typename Rep = double> [[nodiscard, strong_inline]] Rep milliseconds() const noexcept {
-    return read<Rep, std::milli>();
-  }
+  template <typename Rep = double> [[nodiscard, strong_inline]] Rep milliseconds() const noexcept { return read<Rep, std::milli>(); }
 
-  template <typename Rep = double> [[nodiscard, strong_inline]] Rep seconds() const noexcept {
-    return read<Rep, std::ratio<1>>();
-  }
+  template <typename Rep = double> [[nodiscard, strong_inline]] Rep seconds() const noexcept { return read<Rep, std::ratio<1>>(); }
 
   struct HumanReadable {
     /// The number of hours.
     int64_t hours{};
-    
+
     /// The number of minutes into the current hour.
     int64_t minutes{};
 

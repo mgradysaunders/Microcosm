@@ -132,9 +132,9 @@ struct Tensor_initializers<Float, TensorShape<4, 4>> {
 
   [[nodiscard]] static Matrix4<Float> translate(const Vector3<Float> &vectorV) noexcept {
     return {
-      {Float(1), Float(0), Float(0), vectorV[0]},
-      {Float(0), Float(1), Float(0), vectorV[1]},
-      {Float(0), Float(0), Float(1), vectorV[2]},
+      {Float(1), Float(0), Float(0), vectorV[0]}, //
+      {Float(0), Float(1), Float(0), vectorV[1]}, //
+      {Float(0), Float(0), Float(1), vectorV[2]}, //
       {Float(0), Float(0), Float(0), Float(1)}};
   }
 
@@ -149,18 +149,29 @@ struct Tensor_initializers<Float, TensorShape<4, 4>> {
   /// the vector from the target location to the source location. The Y-axis is in
   /// the plane spanned by the Z-axis and the given up vector.
   ///
-  [[nodiscard]] static Matrix4<Float>
-  lookAt(const Vector3<Float> &source, const Vector3<Float> &target, const Vector3<Float> &up) noexcept {
+  [[nodiscard]] static Matrix4<Float> lookAt(const Vector3<Float> &source, const Vector3<Float> &target, const Vector3<Float> &up) noexcept {
     Vector3<Float> vectorZ = source - target;
     Vector3<Float> vectorX = cross(up, vectorZ);
     Vector3<Float> hatZ = normalize(vectorZ);
     Vector3<Float> hatX = normalize(vectorX);
     Vector3<Float> hatY = cross(hatZ, hatX);
-    return {
-      {hatX[0], hatY[0], hatZ[0], source[0]},
-      {hatX[1], hatY[1], hatZ[1], source[1]},
-      {hatX[2], hatY[2], hatZ[2], source[2]},
-      {0, 0, 0, 1}};
+    return {{hatX[0], hatY[0], hatZ[0], source[0]}, {hatX[1], hatY[1], hatZ[1], source[1]}, {hatX[2], hatY[2], hatZ[2], source[2]}, {0, 0, 0, 1}};
+  }
+
+  [[nodiscard]] static constexpr Matrix4<Float> minkowskiMetricSpacelike(Float c = 1) noexcept { return {{+1, 0, 0, 0}, {0, +1, 0, 0}, {0, 0, +1, 0}, {0, 0, 0, -sqr(c)}}; }
+
+  [[nodiscard]] static constexpr Matrix4<Float> minkowskiMetricTimelike(Float c = 1) noexcept { return {{-1, 0, 0, 0}, {0, -1, 0, 0}, {0, 0, -1, 0}, {0, 0, 0, +sqr(c)}}; }
+
+  [[nodiscard]] static Matrix4<Float> lorentzBoost(Vector3<Float> vectorV) noexcept {
+    Float gamma = 1.0 / sqrt(1.0 - lengthSquare(vectorV));
+    Vector3<Float> vectorN = normalize(vectorV);
+    Matrix4<Float> matrix;
+    matrix(Slice<0, 3>(), Slice<0, 3>()).assign(Matrix3<Float>::identity() + (gamma - 1) * outer(vectorN, vectorN));
+    matrix(0, 3) = matrix(3, 0) = -gamma * vectorV[0];
+    matrix(1, 3) = matrix(3, 1) = -gamma * vectorV[1];
+    matrix(2, 3) = matrix(3, 2) = -gamma * vectorV[2];
+    matrix(3, 3) = gamma;
+    return matrix;
   }
 };
 

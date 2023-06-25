@@ -27,8 +27,7 @@ public:
 
   DeepPtr(DeepPtr &&other) noexcept : mPtr(std::move(other.mPtr)) {}
 
-  template <typename OtherValue, typename OtherDeleter>
-  DeepPtr(DeepPtr<OtherValue, OtherDeleter> &&other) noexcept : mPtr(std::move(other.mPtr)) {}
+  template <typename OtherValue, typename OtherDeleter> DeepPtr(DeepPtr<OtherValue, OtherDeleter> &&other) noexcept : mPtr(std::move(other.mPtr)) {}
 
   DeepPtr &operator=(const DeepPtr &other) {
     if (this != &other) {
@@ -72,17 +71,11 @@ public:
 
   operator bool() const noexcept { return mPtr != nullptr; }
 
-  template <typename... Other> auto operator<=>(const DeepPtr<Other...> &other) const noexcept {
-    return mPtr.get() <=> other.mPtr.get();
-  }
+  template <typename... Other> auto operator<=>(const DeepPtr<Other...> &other) const noexcept { return mPtr.get() <=> other.mPtr.get(); }
 
-  template <typename... Other> bool operator==(const DeepPtr<Other...> &other) const noexcept {
-    return mPtr.get() == other.mPtr.get();
-  }
+  template <typename... Other> bool operator==(const DeepPtr<Other...> &other) const noexcept { return mPtr.get() == other.mPtr.get(); }
 
-  template <typename... Other> bool operator!=(const DeepPtr<Other...> &other) const noexcept {
-    return mPtr.get() != other.mPtr.get();
-  }
+  template <typename... Other> bool operator!=(const DeepPtr<Other...> &other) const noexcept { return mPtr.get() != other.mPtr.get(); }
 
   auto operator<=>(std::nullptr_t) const noexcept { return mPtr.get() <=> nullptr; }
 

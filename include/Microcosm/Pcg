@@ -210,7 +210,7 @@ private:
       for (uint32_t &value : mTable) value = mGen() ^ valueC;
     }
 
-    void initialize(std::seed_seq seq) noexcept {
+    void initialize(std::seed_seq &seq) noexcept {
       uint32_t seed[4]{};
       seq.generate(&seed[0], &seed[0] + 4);
       seq.generate(&mTable[0], &mTable[0] + TableSize);
