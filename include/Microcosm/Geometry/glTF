@@ -28,9 +28,7 @@ struct MI_GEOMETRY_API WithExtensions {
 
 struct MI_GEOMETRY_API WithNameAndExtensions : WithExtensions {
   std::string name;
-  void jsonConversion(Json::Conversion &conversion) {
-    WithExtensions::jsonConversion(conversion.optionalImplicit("name", name));
-  }
+  void jsonConversion(Json::Conversion &conversion) { WithExtensions::jsonConversion(conversion.optionalImplicit("name", name)); }
 };
 
 struct MI_GEOMETRY_API Accessor final : WithNameAndExtensions {
@@ -192,10 +190,7 @@ struct MI_GEOMETRY_API Material final : WithNameAndExtensions {
     TextureInfo metallicRoughnessTexture;
 
     void jsonConversion(Json::Conversion &conversion);
-    operator bool() const noexcept {
-      return baseColor != std::array<float, 4>{1, 1, 1, 1} || baseColorTexture || metallic != 0 || roughness != 1 ||
-             metallicRoughnessTexture;
-    }
+    operator bool() const noexcept { return baseColor != std::array<float, 4>{1, 1, 1, 1} || baseColorTexture || metallic != 0 || roughness != 1 || metallicRoughnessTexture; }
   } pbr;
 
   /// The tangent-space normal map texture information.

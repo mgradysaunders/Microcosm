@@ -141,24 +141,21 @@ static const char *infoToString(Eigen::ComputationInfo info) {
 Matrixd SparseMatrix::solveQR(const Matrixd &matrixB) const {
   Eigen::SparseMatrix matrixA{convertToEigen(*this)};
   Eigen::SparseQR<Eigen::SparseMatrix<double>, Eigen::COLAMDOrdering<int>> decompA{matrixA};
-  if (decompA.info() != Eigen::Success)
-    throw Error(std::runtime_error("Sparse QR decomposition failed! ({})"_format(infoToString(decompA.info()))));
+  if (decompA.info() != Eigen::Success) throw Error(std::runtime_error("Sparse QR decomposition failed! ({})"_format(infoToString(decompA.info()))));
   return convertBackFromEigen(Eigen::MatrixXd{decompA.solve(convertToEigen(matrixB))});
 }
 
 Matrixd SparseMatrix::solveLU(const Matrixd &matrixB) const {
   Eigen::SparseMatrix matrixA{convertToEigen(*this)};
   Eigen::SparseLU decompA{matrixA};
-  if (decompA.info() != Eigen::Success)
-    throw Error(std::runtime_error("Sparse LU decomposition failed! ({})"_format(infoToString(decompA.info()))));
+  if (decompA.info() != Eigen::Success) throw Error(std::runtime_error("Sparse LU decomposition failed! ({})"_format(infoToString(decompA.info()))));
   return convertBackFromEigen(Eigen::MatrixXd{decompA.solve(convertToEigen(matrixB))});
 }
 
 Matrixd SparseMatrix::solveCholesky(const Matrixd &matrixB) const {
   Eigen::SparseMatrix matrixA{convertToEigen(*this)};
   Eigen::SimplicialCholesky decompA{matrixA};
-  if (decompA.info() != Eigen::Success)
-    throw Error(std::runtime_error("Sparse Cholesky decomposition failed! ({})"_format(infoToString(decompA.info()))));
+  if (decompA.info() != Eigen::Success) throw Error(std::runtime_error("Sparse Cholesky decomposition failed! ({})"_format(infoToString(decompA.info()))));
   return convertBackFromEigen(Eigen::MatrixXd{decompA.solve(convertToEigen(matrixB))});
 }
 

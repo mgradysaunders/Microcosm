@@ -43,8 +43,7 @@ public:
 
   DrawElements &operator=(DrawElements &&) = default;
 
-  template <std::invocable<VertexAttributeBinder &> Attributes>
-  [[strong_inline]] DrawElements &configure(GLenum drawMode, Attributes &&attributes) {
+  template <std::invocable<VertexAttributeBinder &> Attributes> [[strong_inline]] DrawElements &configure(GLenum drawMode, Attributes &&attributes) {
     mDrawMode = drawMode;
     mVtxArray.bind();
     mVtxBuffer.bind(GL_ARRAY_BUFFER);
@@ -55,14 +54,12 @@ public:
     return *this;
   }
 
-  template <typename Value>
-  [[strong_inline]] DrawElements &uploadVtx(GLsizei count, const Value *first, GLenum mode = GL_STATIC_DRAW) noexcept {
+  template <typename Value> [[strong_inline]] DrawElements &uploadVtx(GLsizei count, const Value *first, GLenum mode = GL_STATIC_DRAW) noexcept {
     mVtxBuffer.data(count, first, mode);
     return *this;
   }
 
-  template <typename Value>
-  [[strong_inline]] DrawElements &uploadIdx(GLsizei count, const Value *first, GLenum mode = GL_STATIC_DRAW) noexcept {
+  template <typename Value> [[strong_inline]] DrawElements &uploadIdx(GLsizei count, const Value *first, GLenum mode = GL_STATIC_DRAW) noexcept {
     static_assert(std::is_unsigned_v<Value> && (sizeof(Value) == 4 || sizeof(Value) == 2));
     mIdxType = sizeof(Value) == 4 ? GL_UNSIGNED_INT : GL_UNSIGNED_SHORT;
     mIdxTypeSize = sizeof(Value);
@@ -71,15 +68,9 @@ public:
     return *this;
   }
 
-  template <std::ranges::random_access_range Values>
-  [[strong_inline]] DrawElements &uploadVtx(Values &&values, GLenum mode = GL_STATIC_DRAW) noexcept {
-    return uploadVtx(std::ranges::size(values), std::ranges::data(values), mode);
-  }
+  template <std::ranges::random_access_range Values> [[strong_inline]] DrawElements &uploadVtx(Values &&values, GLenum mode = GL_STATIC_DRAW) noexcept { return uploadVtx(std::ranges::size(values), std::ranges::data(values), mode); }
 
-  template <std::ranges::random_access_range Values>
-  [[strong_inline]] DrawElements &uploadIdx(Values &&values, GLenum mode = GL_STATIC_DRAW) noexcept {
-    return uploadIdx(std::ranges::size(values), std::ranges::data(values), mode);
-  }
+  template <std::ranges::random_access_range Values> [[strong_inline]] DrawElements &uploadIdx(Values &&values, GLenum mode = GL_STATIC_DRAW) noexcept { return uploadIdx(std::ranges::size(values), std::ranges::data(values), mode); }
 
   [[strong_inline]] DrawElements &bind() noexcept {
     mVtxArray.bind();

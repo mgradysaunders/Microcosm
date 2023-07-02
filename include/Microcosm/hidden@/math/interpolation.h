@@ -4,9 +4,7 @@
 namespace mi {
 
 /// Linear interpolation.
-[[nodiscard, strong_inline]] constexpr auto lerp(auto t, auto &&valueA, auto &&valueB) noexcept {
-  return (1 - t) * auto_forward(valueA) + t * auto_forward(valueB);
-}
+[[nodiscard, strong_inline]] constexpr auto lerp(auto t, auto &&valueA, auto &&valueB) noexcept { return (1 - t) * auto_forward(valueA) + t * auto_forward(valueB); }
 
 /// Linear interpolation. If called with only 2 arguments, then build a lambda.
 [[nodiscard, strong_inline]] constexpr auto lerp(auto &&valueA, auto &&valueB) noexcept {
@@ -22,8 +20,7 @@ namespace mi {
 
 /// Linearly space fractions from zero (inclusive) to one (exclusive).
 template <std::floating_point Float = double> [[nodiscard, strong_inline]] constexpr auto linspace(int count) noexcept {
-  return std::views::iota(0, count) |
-         std::views::transform([=, factor = Float(1) / Float(count)](int i) constexpr noexcept { return factor * i; });
+  return std::views::iota(0, count) | std::views::transform([=, factor = Float(1) / Float(count)](int i) constexpr noexcept { return factor * i; });
 }
 
 template <typename Value> struct Exclusive {
@@ -35,9 +32,7 @@ template <typename Value> struct Exclusive {
 
 template <typename Value> struct to_float<Exclusive<Value>> : using_type<to_float_t<Value>> {};
 
-template <typename ValueA, typename ValueB> requires(
-  (concepts::arithmetic<ValueA> || concepts::match<ValueA, Exclusive>) &&
-  (concepts::arithmetic<ValueB> || concepts::match<ValueB, Exclusive>))
+template <typename ValueA, typename ValueB> requires((concepts::arithmetic<ValueA> || concepts::match<ValueA, Exclusive>) && (concepts::arithmetic<ValueB> || concepts::match<ValueB, Exclusive>))
 [[nodiscard, strong_inline]] constexpr auto linspace(int count, ValueA valueA, ValueB valueB) noexcept {
   using FloatA = to_float_t<ValueA>;
   using FloatB = to_float_t<ValueB>;
@@ -45,8 +40,7 @@ template <typename ValueA, typename ValueB> requires(
   constexpr int includeA = concepts::match<ValueA, Exclusive> ? 0 : 1;
   constexpr int excludeA = concepts::match<ValueA, Exclusive> ? 1 : 0;
   constexpr int excludeB = concepts::match<ValueB, Exclusive> ? 1 : 0;
-  return std::views::iota(excludeA, excludeA + count) |
-         std::views::transform([=, factor = Float(1) / Float(count - includeA + excludeB)](int i) constexpr noexcept { //
+  return std::views::iota(excludeA, excludeA + count) | std::views::transform([=, factor = Float(1) / Float(count - includeA + excludeB)](int i) constexpr noexcept { //
            return lerp(factor * i, Float(valueA), Float(valueB));
          });
 }
@@ -126,9 +120,7 @@ namespace ease {
 
 [[nodiscard]] constexpr auto ExpSmooth(auto power) noexcept { return Lerp(ExpSmoothStart(power), ExpSmoothStop(power)); }
 
-[[nodiscard]] constexpr auto ExpSmooth(auto powerA, auto powerB) noexcept {
-  return Lerp(ExprSmoothStart(powerA), ExpSmoothStop(powerB));
-}
+[[nodiscard]] constexpr auto ExpSmooth(auto powerA, auto powerB) noexcept { return Lerp(ExprSmoothStart(powerA), ExpSmoothStop(powerB)); }
 
 [[nodiscard]] constexpr auto TrigSmoothStart() noexcept {
   return [](auto t) noexcept { return 1 - cosPi(t / 2); };
@@ -239,15 +231,12 @@ public:
   constexpr void update(Float deltaTime, const Value &targetValue, const Value &targetSpeed) noexcept {
     if (deltaTime > 0) [[likely]] {
       mValue += deltaTime * mSpeed;
-      mSpeed += deltaTime * (targetValue - mValue + mCoeffK1 * (mCoeffR * targetSpeed - mSpeed)) /
-                max(mCoeffK2, Float(1.1) * deltaTime * (Float(0.25) * deltaTime + Float(0.5)));
+      mSpeed += deltaTime * (targetValue - mValue + mCoeffK1 * (mCoeffR * targetSpeed - mSpeed)) / max(mCoeffK2, Float(1.1) * deltaTime * (Float(0.25) * deltaTime + Float(0.5)));
     }
     mTargetValue = targetValue;
   }
 
-  constexpr void update(Float deltaTime, const Value &targetValue) noexcept {
-    update(deltaTime, targetValue, (targetValue - mTargetValue) / deltaTime);
-  }
+  constexpr void update(Float deltaTime, const Value &targetValue) noexcept { update(deltaTime, targetValue, (targetValue - mTargetValue) / deltaTime); }
 
   [[nodiscard]] constexpr operator Value() const noexcept { return mValue; }
 

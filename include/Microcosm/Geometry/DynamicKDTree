@@ -49,14 +49,12 @@ public:
 public:
   DynamicKDTree() noexcept = default;
 
-  template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
-  explicit DynamicKDTree(Iterator from, Sentinel to) {
+  template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel> explicit DynamicKDTree(Iterator from, Sentinel to) {
     while (from != to) insert(*from++);
     rebalance();
   }
 
-  template <std::ranges::input_range Range>
-  explicit DynamicKDTree(Range &&range) : DynamicKDTree(std::ranges::begin(range), std::ranges::end(range)) {}
+  template <std::ranges::input_range Range> explicit DynamicKDTree(Range &&range) : DynamicKDTree(std::ranges::begin(range), std::ranges::end(range)) {}
 
   DynamicKDTree(const DynamicKDTree &) = default;
 
@@ -155,9 +153,7 @@ public:
     float radSqr = radius * radius;
     Point minPoint = center - Point(std::abs(radius));
     Point maxPoint = center + Point(std::abs(radius));
-    visit(Box(minPoint, maxPoint), [&](Int node) {
-      return !(distanceSquare(mNodes[node].point, center) < radSqr) || std::invoke(std::forward<Visitor>(visitor), node);
-    });
+    visit(Box(minPoint, maxPoint), [&](Int node) { return !(distanceSquare(mNodes[node].point, center) < radSqr) || std::invoke(std::forward<Visitor>(visitor), node); });
   }
 
   struct Nearest {

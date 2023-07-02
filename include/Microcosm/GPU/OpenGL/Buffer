@@ -20,13 +20,9 @@ public:
 public:
   void bind(GLenum target) const noexcept { glBindBuffer(target, mHandle); }
 
-  void data(GLsizei count, const auto *values, GLenum mode) noexcept {
-    glNamedBufferData(mHandle, count * sizeof(values[0]), values, mode);
-  }
+  void data(GLsizei count, const auto *values, GLenum mode) noexcept { glNamedBufferData(mHandle, count * sizeof(values[0]), values, mode); }
 
-  void data(std::ranges::random_access_range auto const &values, GLenum mode) noexcept {
-    data(std::ranges::size(values), std::ranges::data(values), mode);
-  }
+  void data(std::ranges::random_access_range auto const &values, GLenum mode) noexcept { data(std::ranges::size(values), std::ranges::data(values), mode); }
 
 protected:
   using Handle<Buffer>::mHandle;

@@ -123,9 +123,7 @@ public:
 
   Face pushFace(uint32_t);
 
-  [[nodiscard]] uint32_t capacityOfFace(Faces::const_iterator face) const {
-    return face + 1 < faces.end() ? (face + 1)->first - face->first : indexCount - face->first;
-  }
+  [[nodiscard]] uint32_t capacityOfFace(Faces::const_iterator face) const { return face + 1 < faces.end() ? (face + 1)->first - face->first : indexCount - face->first; }
 
   void reserveFace(Faces::iterator face, uint32_t count);
 
@@ -139,8 +137,7 @@ public:
 
   [[nodiscard]] auto indexPerFace() const {
     std::vector<uint32_t> f{indexCount};
-    for (auto &face : faces)
-      std::fill(f.begin() + face.first, f.begin() + face.first + face.count, uint32_t(&face - &faces[0]));
+    for (auto &face : faces) std::fill(f.begin() + face.first, f.begin() + face.first + face.count, uint32_t(&face - &faces[0]));
     return f;
   }
 
@@ -330,9 +327,7 @@ public:
   /// \param[in] vectorU      The basis vector for U.
   /// \param[in] vectorV      The basis vector for V.
   ///
-  [[nodiscard]] static Mesh makePlane(
-    uint32_t subdivsU, //
-    uint32_t subdivsV, const Vector3f &vectorU = {1, 0, 0}, const Vector3f &vectorV = {0, 1, 0});
+  [[nodiscard]] static Mesh makePlane(uint32_t subdivsU, uint32_t subdivsV, const Vector3f &vectorU = {1, 0, 0}, const Vector3f &vectorV = {0, 1, 0});
 
   /// Make a planar disk (triangle fan surrounding a central vertex).
   ///
@@ -341,17 +336,13 @@ public:
   /// \param[in] vectorX   The basis vector for the X components.
   /// \param[in] vectorY   The basis vector for the Y components.
   ///
-  [[nodiscard]] static Mesh makePlaneDisk(
-    uint32_t countR, //
-    uint32_t countPhi, const Vector3f &vectorX = {1, 0, 0}, const Vector3f &vectorY = {0, 1, 0});
+  [[nodiscard]] static Mesh makePlaneDisk(uint32_t countR, uint32_t countPhi, const Vector3f &vectorX = {1, 0, 0}, const Vector3f &vectorY = {0, 1, 0});
 
   [[nodiscard]] static Mesh makeSphere(uint32_t subdivsU, uint32_t subdivsV, float radius = 1);
 
   [[nodiscard]] static Mesh makeSphube(uint32_t levels = 4, float radius = 1);
 
-  [[nodiscard]] static Mesh makeCylinder(
-    uint32_t subdivsU, //
-    uint32_t subdivsV, float radius = 1.0f, float minZ = -1.0f, float maxZ = +1.0f);
+  [[nodiscard]] static Mesh makeCylinder(uint32_t subdivsU, uint32_t subdivsV, float radius = 1.0f, float minZ = -1.0f, float maxZ = +1.0f);
 };
 
 } // namespace mi::geometry

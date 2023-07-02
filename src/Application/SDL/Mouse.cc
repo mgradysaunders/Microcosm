@@ -14,17 +14,11 @@ Mouse::State Mouse::getState() noexcept {
 Mouse::State Mouse::getState(State::Mode mode) noexcept {
   State state;
   state.mode = mode;
-  state.mask =
-    mode == State::Mode::Relative
-      ? SDL_GetRelativeMouseState(&state.position[0], &state.position[1])
-      : SDL_GetGlobalMouseState(&state.position[0], &state.position[1]);
+  state.mask = mode == State::Mode::Relative ? SDL_GetRelativeMouseState(&state.position[0], &state.position[1]) : SDL_GetGlobalMouseState(&state.position[0], &state.position[1]);
   return state;
 }
 
-Mouse::State::Mode Mouse::getDefaultMode() noexcept {
-  return SDL_GetRelativeMouseMode() ? State::Mode::Relative
-                                    : State::Mode::Global;
-}
+Mouse::State::Mode Mouse::getDefaultMode() noexcept { return SDL_GetRelativeMouseMode() ? State::Mode::Relative : State::Mode::Global; }
 
 void Mouse::setDefaultMode(State::Mode mode) {
   using enum State::Mode;
@@ -51,9 +45,7 @@ bool Mouse::shown() {
   return code == SDL_ENABLE;
 }
 
-void Mouse::warpTo(const Window& window, Vector2i position) {
-  SDL_WarpMouseInWindow(window, position[0], position[1]);
-}
+void Mouse::warpTo(const Window &window, Vector2i position) { SDL_WarpMouseInWindow(window, position[0], position[1]); }
 
 void Mouse::warpTo(Vector2i position) {
   int code = SDL_WarpMouseGlobal(position[0], position[1]);

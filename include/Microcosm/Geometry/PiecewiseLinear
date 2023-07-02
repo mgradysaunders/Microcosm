@@ -10,20 +10,16 @@ public:
   PiecewiseLinear() = default;
 
   /// Construct directly.
-  template <std::ranges::range Values>
-  explicit PiecewiseLinear(float minCoord, float maxCoord, Values &&values) : minCoord(minCoord), maxCoord(maxCoord) {
+  template <std::ranges::range Values> explicit PiecewiseLinear(float minCoord, float maxCoord, Values &&values) : minCoord(minCoord), maxCoord(maxCoord) {
     mValues.insert(mValues.end(), std::ranges::begin(values), std::ranges::end(values));
     initializeValueInts();
   }
 
   /// Construct by sampling a function.
-  template <std::invocable<float> Callback>
-  explicit PiecewiseLinear(float minCoord, float maxCoord, int count, Callback &&callback)
-    : minCoord(minCoord), maxCoord(maxCoord) {
+  template <std::invocable<float> Callback> explicit PiecewiseLinear(float minCoord, float maxCoord, int count, Callback &&callback) : minCoord(minCoord), maxCoord(maxCoord) {
     if (count >= 1) {
       mValues.reserve(count + 1);
-      for (int index = 0; index <= count; index++)
-        mValues.emplace_back(callback(lerp(index / float(count), minCoord, maxCoord)));
+      for (int index = 0; index <= count; index++) mValues.emplace_back(callback(lerp(index / float(count), minCoord, maxCoord)));
       initializeValueInts();
     }
   }

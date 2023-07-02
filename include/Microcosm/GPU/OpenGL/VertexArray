@@ -38,19 +38,14 @@ template <typename Value, size_t N> struct VertexAttributeTraits<Tensor<Value, T
 struct VertexAttributeBinder {
 
   [[strong_inline]] VertexAttributeBinder &bind( //
-    GLint size,
-    GLenum type,
-    bool normalized = false,
-    GLsizei stride = 0,
-    GLsizei offset = 0) noexcept {
+    GLint size, GLenum type, bool normalized = false, GLsizei stride = 0, GLsizei offset = 0) noexcept {
     glEnableVertexAttribArray(index);
     glVertexAttribPointer(index, size, type, normalized, stride, std::bit_cast<GLvoid *>(GLintptr(offset)));
     index++;
     return *this;
   }
 
-  template <typename Value, typename Class>
-  [[strong_inline]] VertexAttributeBinder &bind(Value Class::*member, bool normalized = false) noexcept {
+  template <typename Value, typename Class> [[strong_inline]] VertexAttributeBinder &bind(Value Class::*member, bool normalized = false) noexcept {
     glEnableVertexAttribArray(index);
     glVertexAttribPointer(
       index,                              //

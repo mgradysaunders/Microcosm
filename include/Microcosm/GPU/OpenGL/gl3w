@@ -2,13 +2,15 @@
 #pragma once
 
 #include "Microcosm/GPU/OpenGL/Export.h"
-#include "Microcosm/math"
 #include "Microcosm/Tensor"
+#include "Microcosm/math"
 #include "gl3w.h"
 
 namespace mi::gl {
 
 MI_GL_API void initOrExit();
+
+MI_GL_API void initDebugPrinting();
 
 template <typename Subclass, typename... Args> struct Handle {
 public:
@@ -165,19 +167,13 @@ private:
 /// the vector from the target location to the source location. The Y-axis is in
 /// the plane spanned by the Z-axis and the given up vector.
 ///
-[[nodiscard]] inline Matrix4f lookAt(Vector3f source, Vector3f target, Vector3f up = {0, 1, 0}) noexcept {
-  return Matrix4f::lookAt(source, target, up);
-}
+[[nodiscard]] inline Matrix4f lookAt(Vector3f source, Vector3f target, Vector3f up = {0, 1, 0}) noexcept { return Matrix4f::lookAt(source, target, up); }
 
 [[nodiscard]] inline Matrix4f perspective(float fov, float aspect, float near = 0.1f, float far = 100.0f) noexcept {
   float focalLength = 1.0f / tan(0.5f * fov);
   float scaleX = focalLength / aspect;
   float scaleY = focalLength;
-  return {
-    {scaleX, 0.0f, 0.0f, 0.0f},
-    {0.0f, scaleY, 0.0f, 0.0f},
-    {0.0f, 0.0f, -(far + near) / (far - near), -2 * far * near / (far - near)},
-    {0.0f, 0.0f, -1.0f, 0.0f}};
+  return {{scaleX, 0.0f, 0.0f, 0.0f}, {0.0f, scaleY, 0.0f, 0.0f}, {0.0f, 0.0f, -(far + near) / (far - near), -2 * far * near / (far - near)}, {0.0f, 0.0f, -1.0f, 0.0f}};
 }
 
 [[nodiscard]] inline Matrix4f infinitePerspective(float fov, float aspect, float near = 0.1f) noexcept {
@@ -186,23 +182,13 @@ private:
   float scaleX = focalLength / aspect;
   float scaleY = focalLength;
   float eps = nextFloat(2 * constants::Eps<float>);
-  return {
-    {scaleX, 0.0f, 0.0f, 0.0f},
-    {0.0f, scaleY, 0.0f, 0.0f},
-    {0.0f, 0.0f, -1.0f + eps, (-2.0f + eps) * near},
-    {0.0f, 0.0f, -1.0f, 0.0f}};
+  return {{scaleX, 0.0f, 0.0f, 0.0f}, {0.0f, scaleY, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f + eps, (-2.0f + eps) * near}, {0.0f, 0.0f, -1.0f, 0.0f}};
 }
 
 /// Wrapper for `glClearColor()` to accept an RGB color, setting alpha to 1 by default.
-template <typename Expr> requires(concepts::tensor_with_shape<Expr, 3>)
-[[strong_inline]] inline void clearColor(Expr &&expr) noexcept {
-  glClearColor(expr[0], expr[1], expr[2], 1.0);
-}
+template <typename Expr> requires(concepts::tensor_with_shape<Expr, 3>) [[strong_inline]] inline void clearColor(Expr &&expr) noexcept { glClearColor(expr[0], expr[1], expr[2], 1.0); }
 
 /// Wrapper for `glClearColor()` to accept an RGBA color.
-template <typename Expr> requires(concepts::tensor_with_shape<Expr, 4>)
-[[strong_inline]] inline void clearColor(Expr &&expr) noexcept {
-  glClearColor(expr[0], expr[1], expr[2], expr[3]);
-}
+template <typename Expr> requires(concepts::tensor_with_shape<Expr, 4>) [[strong_inline]] inline void clearColor(Expr &&expr) noexcept { glClearColor(expr[0], expr[1], expr[2], expr[3]); }
 
 } // namespace mi::gl

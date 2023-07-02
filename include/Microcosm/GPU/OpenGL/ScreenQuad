@@ -10,12 +10,9 @@ struct MI_GL_API ScreenQuad {
 public:
   ScreenQuad();
   ScreenQuad(GLuint fragShader);
-
-  [[strong_inline]] void draw() {
-    mProgram.use();
-    mVertexArray.bind();
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-  }
+  ScreenQuad(const Shader &fragShader) : ScreenQuad(GLuint(fragShader)) {}
+  [[strong_inline]] void bind() noexcept { mProgram.use(), mVertexArray.bind(); }
+  [[strong_inline]] void draw() noexcept { glDrawArrays(GL_TRIANGLES, 0, 3); }
 
 private:
   Program mProgram;

@@ -1,6 +1,7 @@
 /*-*- C++ -*-*/
 #pragma once
 
+#include "Microcosm/Quaternion"
 #include "Microcosm/Tensor"
 
 namespace mi {
@@ -102,6 +103,9 @@ public:
     mPoints[0] = transform.applyAffine(mPoints[0]);
     mPoints[1] = transform.applyAffine(mPoints[1]);
   }
+
+  /// __Only in 3 dimensions!__ Rotate point around line by the given angle.
+  [[nodiscard]] Vector<Float, N> rotatePointAroundLine(Vector<Float, N> point, Float theta) const noexcept requires(N == 3) { return mPoints[0] + rotateByAngleAxis(theta, vector(), point - mPoints[0]); }
 
 private:
   Vector<Float, N> mPoints[2]{};

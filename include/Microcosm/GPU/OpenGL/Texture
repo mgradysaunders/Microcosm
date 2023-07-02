@@ -83,46 +83,26 @@ public:
 
   void maxLod(GLfloat value) noexcept { parameter(GL_TEXTURE_MAX_LOD, value); }
 
-  void storage1D(GLsizei levels, GLenum internalFormat, GLsizei extent) noexcept {
-    glTextureStorage1D(mHandle, levels, internalFormat, extent);
+  void storage1D(GLsizei levels, GLenum internalFormat, GLsizei extent) noexcept { glTextureStorage1D(mHandle, levels, internalFormat, extent); }
+
+  void storage2D(GLsizei levels, GLenum internalFormat, Vector2i extent) noexcept { glTextureStorage2D(mHandle, levels, internalFormat, extent[0], extent[1]); }
+
+  void storage3D(GLsizei levels, GLenum internalFormat, Vector3i extent) noexcept { glTextureStorage3D(mHandle, levels, internalFormat, extent[0], extent[1], extent[2]); }
+
+  template <typename Value> void subImage1D(GLint level, GLint offset, GLint extent, GLenum format, const Value *pixels) noexcept { glTextureSubImage1D(mHandle, level, offset, extent, format, enumFor<Value>(), pixels); }
+
+  template <typename Value> void subImage2D(GLint level, Vector2i offset, Vector2i extent, GLenum format, const Value *pixels) noexcept { glTextureSubImage2D(mHandle, level, offset[0], offset[1], extent[0], extent[1], format, enumFor<Value>(), pixels); }
+
+  template <typename Value> void subImage3D(GLint level, Vector3i offset, Vector3i extent, GLenum format, const Value *pixels) noexcept {
+    glTextureSubImage3D(mHandle, level, offset[0], offset[1], offset[2], extent[0], extent[1], extent[2], format, enumFor<Value>(), pixels);
   }
 
-  void storage2D(GLsizei levels, GLenum internalFormat, Vector2i extent) noexcept {
-    glTextureStorage2D(mHandle, levels, internalFormat, extent[0], extent[1]);
-  }
-
-  void storage3D(GLsizei levels, GLenum internalFormat, Vector3i extent) noexcept {
-    glTextureStorage3D(mHandle, levels, internalFormat, extent[0], extent[1], extent[2]);
-  }
-
-  template <typename Value>
-  void subImage1D(GLint level, GLint offset, GLint extent, GLenum format, const Value *pixels) noexcept {
-    glTextureSubImage1D(mHandle, level, offset, extent, format, enumFor<Value>(), pixels);
-  }
-
-  template <typename Value>
-  void subImage2D(GLint level, Vector2i offset, Vector2i extent, GLenum format, const Value *pixels) noexcept {
-    glTextureSubImage2D(mHandle, level, offset[0], offset[1], extent[0], extent[1], format, enumFor<Value>(), pixels);
-  }
-
-  template <typename Value>
-  void subImage3D(GLint level, Vector3i offset, Vector3i extent, GLenum format, const Value *pixels) noexcept {
-    glTextureSubImage3D(
-      mHandle, level, offset[0], offset[1], offset[2], extent[0], extent[1], extent[2], format, enumFor<Value>(), pixels);
-  }
-
-  void image2DMultisample(
-    GLenum target, GLsizei samples, GLenum internalFormat, Vector2i extent, bool fixedLocations = true) noexcept {
-    // There is apparently no named variant for this one, so default to binding and unbinding.
-    GLuint backup = getInteger(target);
+  void image2DMultisample(GLenum target, GLsizei samples, GLenum internalFormat, Vector2i extent, bool fixedLocations = true) noexcept {
     glBindTexture(target, mHandle);
     glTexImage2DMultisample(target, samples, internalFormat, extent[0], extent[1], fixedLocations);
-    glBindTexture(target, backup);
   }
 
-  void getImage(GLint level, GLenum format, GLenum type, GLsizei sizeInBytes, void *pixels) const noexcept {
-    glGetTextureImage(mHandle, level, format, type, sizeInBytes, pixels);
-  }
+  void getImage(GLint level, GLenum format, GLenum type, GLsizei sizeInBytes, void *pixels) const noexcept { glGetTextureImage(mHandle, level, format, type, sizeInBytes, pixels); }
 
 protected:
   using Handle<Texture, GLenum>::mHandle;

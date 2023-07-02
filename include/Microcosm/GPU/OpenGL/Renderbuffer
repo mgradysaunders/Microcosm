@@ -18,9 +18,7 @@ public:
   static void deallocate(GLuint handle) noexcept { glDeleteRenderbuffers(1, &handle); }
 
 public:
-  void storage(GLenum format, GLsizei width, GLsizei height) noexcept {
-    glNamedRenderbufferStorage(mHandle, format, width, height);
-  }
+  void storage(GLenum format, GLsizei width, GLsizei height) noexcept { glNamedRenderbufferStorage(mHandle, format, width, height); }
 
 protected:
   using Handle<Renderbuffer>::mHandle;

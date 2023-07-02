@@ -43,9 +43,7 @@ public:
   };
 
   void sortKeyframes() {
-    std::sort(keyframes.begin(), keyframes.end(), [](const Keyframe &keyframe0, const Keyframe &keyframe1) {
-      return keyframe0.time < keyframe1.time;
-    });
+    std::sort(keyframes.begin(), keyframes.end(), [](const Keyframe &keyframe0, const Keyframe &keyframe1) { return keyframe0.time < keyframe1.time; });
   }
 
   struct Result {

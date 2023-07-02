@@ -20,17 +20,11 @@ public:
 public:
   void bind(GLenum target = GL_FRAMEBUFFER) const noexcept { glBindFramebuffer(target, mHandle); }
 
-  void attachTexture(GLenum attachment, GLuint texture, GLint level = 0) noexcept {
-    glNamedFramebufferTexture(mHandle, attachment, texture, level);
-  }
+  void attachTexture(GLenum attachment, GLuint texture, GLint level = 0) noexcept { glNamedFramebufferTexture(mHandle, attachment, texture, level); }
 
-  void attachTexture(GLenum attachment, GLuint texture, GLint level, GLint layer) noexcept {
-    glNamedFramebufferTextureLayer(mHandle, attachment, texture, level, layer);
-  }
+  void attachTexture(GLenum attachment, GLuint texture, GLint level, GLint layer) noexcept { glNamedFramebufferTextureLayer(mHandle, attachment, texture, level, layer); }
 
-  void attachRenderbuffer(GLenum attachment, GLenum target, GLuint renderbuffer) noexcept {
-    glNamedFramebufferRenderbuffer(mHandle, attachment, target, renderbuffer);
-  }
+  void attachRenderbuffer(GLenum attachment, GLenum target, GLuint renderbuffer) noexcept { glNamedFramebufferRenderbuffer(mHandle, attachment, target, renderbuffer); }
 
   [[nodiscard]] GLenum status(GLenum target = GL_FRAMEBUFFER) const noexcept { return glCheckNamedFramebufferStatus(mHandle, target); }
 

@@ -48,9 +48,7 @@ public:
     return std::exchange(mUnused[pool], mUnused[pool]->next);
   }
 
-  template <typename Type, typename... Args> [[nodiscard]] Type *allocate(Args &&...args) {
-    return new (allocate(sizeof(Type))) Type(std::forward<Args>(args)...);
-  }
+  template <typename Type, typename... Args> [[nodiscard]] Type *allocate(Args &&...args) { return new (allocate(sizeof(Type))) Type(std::forward<Args>(args)...); }
 
   void deallocate(void *ptr, size_t size) {
     if (size == 0 || ptr == nullptr) return;

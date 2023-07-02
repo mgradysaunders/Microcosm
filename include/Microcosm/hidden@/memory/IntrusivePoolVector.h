@@ -6,8 +6,7 @@
 
 namespace mi {
 
-template <std::integral Int, typename Node, Int Node::*Next = &Node::next>
-struct IntrusivePoolVector : ArrayLike<IntrusivePoolVector<Int, Node, Next>> {
+template <std::integral Int, typename Node, Int Node::*Next = &Node::next> struct IntrusivePoolVector : ArrayLike<IntrusivePoolVector<Int, Node, Next>> {
 public:
   static constexpr Int None{-1};
 

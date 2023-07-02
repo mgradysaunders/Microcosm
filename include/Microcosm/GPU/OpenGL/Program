@@ -67,8 +67,7 @@ template <concepts::primitive Value> [[strong_inline]] inline void uniform(GLint
   }
 }
 
-template <concepts::primitive Value, size_t N>
-[[strong_inline]] inline void uniform(GLint location, const Tensor<Value, TensorShape<N>> &value) noexcept {
+template <concepts::primitive Value, size_t N> [[strong_inline]] inline void uniform(GLint location, const Tensor<Value, TensorShape<N>> &value) noexcept {
   static_assert(concepts::same_as_any<Value, GLint, GLfloat, GLdouble, GLuint>);
   static_assert(N >= 1 && N <= 4);
   if constexpr (N == 1) {
@@ -94,8 +93,7 @@ template <concepts::primitive Value, size_t N>
   }
 }
 
-template <std::floating_point Value, size_t M, size_t N>
-inline void uniform(GLint location, const Tensor<Value, TensorShape<M, N>> &value) noexcept {
+template <std::floating_point Value, size_t M, size_t N> inline void uniform(GLint location, const Tensor<Value, TensorShape<M, N>> &value) noexcept {
   static_assert(concepts::same_as_any<Value, GLfloat, GLdouble>);
   static_assert(M >= 1 && M <= 4);
   static_assert(N >= 1 && N <= 4);

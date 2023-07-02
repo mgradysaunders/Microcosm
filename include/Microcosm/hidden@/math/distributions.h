@@ -11,9 +11,7 @@ public:
     if (mValueB < mValueA) std::swap(mValueA, mValueB);
   }
 
-  [[nodiscard]] double distributionPDF(double value) const noexcept {
-    return mValueA <= value && value < mValueB ? 1 / (mValueB - mValueA) : 0;
-  }
+  [[nodiscard]] double distributionPDF(double value) const noexcept { return mValueA <= value && value < mValueB ? 1 / (mValueB - mValueA) : 0; }
 
   [[nodiscard]] double distributionCDF(double value) const noexcept { return saturate(unlerp(value, mValueA, mValueB)); }
 
@@ -33,17 +31,11 @@ public:
 
   constexpr WithMeanAndWidth(double mean, double width) noexcept : mMean(mean), mWidth(width) {}
 
-  [[nodiscard]] double distributionPDF(double value) const noexcept {
-    return finiteOr(DistributionPDF((value - mMean) / mWidth) / mWidth, 0.0);
-  }
+  [[nodiscard]] double distributionPDF(double value) const noexcept { return finiteOr(DistributionPDF((value - mMean) / mWidth) / mWidth, 0.0); }
 
-  [[nodiscard]] double distributionCDF(double value) const noexcept {
-    return finiteOr(DistributionCDF((value - mMean) / mWidth), value > mMean ? 1.0 : 0.0);
-  }
+  [[nodiscard]] double distributionCDF(double value) const noexcept { return finiteOr(DistributionCDF((value - mMean) / mWidth), value > mMean ? 1.0 : 0.0); }
 
-  [[nodiscard]] double distributionSample(double sampleU) const noexcept {
-    return mMean + mWidth * DistributionSample(saturate(sampleU));
-  }
+  [[nodiscard]] double distributionSample(double sampleU) const noexcept { return mMean + mWidth * DistributionSample(saturate(sampleU)); }
 
   [[nodiscard]] double operator()(auto &gen) const noexcept { return distributionSample(randomize<double>(gen)); }
 
@@ -104,13 +96,9 @@ public:
 
   constexpr Exponential(double lambda) noexcept : mLambda(lambda) {}
 
-  [[nodiscard]] double distributionPDF(double value) const noexcept {
-    return signbit(value) ? 0 : mLambda * exp(-mLambda * min(value, constants::Max<double>));
-  }
+  [[nodiscard]] double distributionPDF(double value) const noexcept { return signbit(value) ? 0 : mLambda * exp(-mLambda * min(value, constants::Max<double>)); }
 
-  [[nodiscard]] double distributionCDF(double value) const noexcept {
-    return signbit(value) ? 0 : 1 - exp(-mLambda * min(value, constants::Max<double>));
-  }
+  [[nodiscard]] double distributionCDF(double value) const noexcept { return signbit(value) ? 0 : 1 - exp(-mLambda * min(value, constants::Max<double>)); }
 
   [[nodiscard]] double distributionSample(double sampleU) const noexcept { return finiteOrZero(-log1p(-sampleU) / mLambda); }
 

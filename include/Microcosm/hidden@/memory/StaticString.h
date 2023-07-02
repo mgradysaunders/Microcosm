@@ -53,8 +53,7 @@ public:
 
   constexpr StaticString(const Char *cstr) : StaticString(std::basic_string_view<Char>(cstr)) {}
 
-  template <size_t OtherBufSize>
-  constexpr StaticString(const StaticString<Char, OtherBufSize> &str) : StaticString(str.view()) {}
+  template <size_t OtherBufSize> constexpr StaticString(const StaticString<Char, OtherBufSize> &str) : StaticString(str.view()) {}
 
   constexpr StaticString &operator=(const StaticString &) = default;
 
@@ -94,9 +93,7 @@ public:
 
   template <typename... Args> operator std::basic_string<Char, Args...>() const { return &mBuf[0]; }
 
-  template <typename... Args> constexpr operator std::basic_string_view<Char, Args...>() const noexcept {
-    return {&mBuf[0], mLen};
-  }
+  template <typename... Args> constexpr operator std::basic_string_view<Char, Args...>() const noexcept { return {&mBuf[0], mLen}; }
 
   constexpr std::basic_string_view<Char> view() const noexcept { return *this; }
 
@@ -104,13 +101,9 @@ public:
 
   constexpr bool operator==(const Char *other) const noexcept { return view() == std::basic_string_view<Char>(other); }
 
-  template <size_t OtherBufSize> constexpr auto operator<=>(const StaticString<Char, OtherBufSize> &other) const noexcept {
-    return view() <=> other.view();
-  }
+  template <size_t OtherBufSize> constexpr auto operator<=>(const StaticString<Char, OtherBufSize> &other) const noexcept { return view() <=> other.view(); }
 
-  template <size_t OtherBufSize> constexpr bool operator==(const StaticString<Char, OtherBufSize> &other) const noexcept {
-    return view() == other.view();
-  }
+  template <size_t OtherBufSize> constexpr bool operator==(const StaticString<Char, OtherBufSize> &other) const noexcept { return view() == other.view(); }
 
   /// \}
 

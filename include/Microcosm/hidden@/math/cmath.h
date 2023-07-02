@@ -18,9 +18,7 @@ namespace mi {
 
 [[gnu::always_inline]] inline auto fmod(auto x, auto y) -> decltype(std::fmod(x, y)) { return std::fmod(x, y); }
 
-[[gnu::always_inline]] inline auto remquo(auto x, auto y, int *q) -> decltype(std::remquo(x, y, q)) {
-  return std::remquo(x, y, q);
-}
+[[gnu::always_inline]] inline auto remquo(auto x, auto y, int *q) -> decltype(std::remquo(x, y, q)) { return std::remquo(x, y, q); }
 
 [[gnu::always_inline]] inline auto remainder(auto x, auto y) -> decltype(std::remainder(x, y)) { return std::remainder(x, y); }
 
@@ -60,9 +58,7 @@ namespace mi {
 
 [[gnu::always_inline]] inline auto nextafter(auto x, auto y) -> decltype(std::nextafter(x, y)) { return std::nextafter(x, y); }
 
-[[gnu::always_inline]] inline auto nexttoward(auto x, long double y) -> decltype(std::nexttoward(x, y)) {
-  return std::nexttoward(x, y);
-}
+[[gnu::always_inline]] inline auto nexttoward(auto x, long double y) -> decltype(std::nexttoward(x, y)) { return std::nexttoward(x, y); }
 
 [[gnu::always_inline]] inline auto copysign(auto x, auto y) -> decltype(std::copysign(x, y)) { return std::copysign(x, y); }
 

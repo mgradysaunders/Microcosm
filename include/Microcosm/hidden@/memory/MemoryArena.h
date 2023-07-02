@@ -89,9 +89,7 @@ public:
   }
 
   /// Allocate given type.
-  template <typename Value> [[nodiscard]] Value *allocate(size_t count = 1) {
-    return static_cast<Value *>(allocate(sizeof(Value) * count));
-  }
+  template <typename Value> [[nodiscard]] Value *allocate(size_t count = 1) { return static_cast<Value *>(allocate(sizeof(Value) * count)); }
 
   /// Clear.
   void clear() {
@@ -156,8 +154,7 @@ public:
 
   template <typename Other> MemoryArenaAllocator(const MemoryArenaAllocator<Other, Alloc> &other) : mArena(other.mArena) {}
 
-  template <typename Other>
-  MemoryArenaAllocator(MemoryArenaAllocator<Other, Alloc> &&other) : mArena(std::move(other.mArena)) {}
+  template <typename Other> MemoryArenaAllocator(MemoryArenaAllocator<Other, Alloc> &&other) : mArena(std::move(other.mArena)) {}
 
   template <typename Other> MemoryArenaAllocator &operator=(const MemoryArenaAllocator<Other, Alloc> &other) {
     if (this != &other) {
@@ -179,13 +176,9 @@ public:
 
   void deallocate(Value *, size_t) {}
 
-  template <typename Other> bool operator==(const MemoryArenaAllocator<Other, Alloc> &other) const {
-    return mArena.get() == other.mArena.get();
-  }
+  template <typename Other> bool operator==(const MemoryArenaAllocator<Other, Alloc> &other) const { return mArena.get() == other.mArena.get(); }
 
-  template <typename Other> bool operator!=(const MemoryArenaAllocator<Other, Alloc> &other) const {
-    return mArena.get() != other.mArena.get();
-  }
+  template <typename Other> bool operator!=(const MemoryArenaAllocator<Other, Alloc> &other) const { return mArena.get() != other.mArena.get(); }
 
 private:
   std::shared_ptr<MemoryArena<Alloc>> mArena;
@@ -197,9 +190,7 @@ private:
 
 template <typename Alloc> inline void *operator new(size_t size, mi::MemoryArena<Alloc> &arena) { return arena.allocate(size); }
 
-template <typename Alloc> inline void *operator new[](size_t size, mi::MemoryArena<Alloc> &arena) {
-  return arena.allocate(size);
-}
+template <typename Alloc> inline void *operator new[](size_t size, mi::MemoryArena<Alloc> &arena) { return arena.allocate(size); }
 
 template <typename Alloc> inline void operator delete(void *, mi::MemoryArena<Alloc> &) noexcept {}
 

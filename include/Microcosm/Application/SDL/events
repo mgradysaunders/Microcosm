@@ -50,8 +50,6 @@ private:
   bool mEventAvailable = false;
 };
 
-[[nodiscard]] inline auto pollEvents() {
-  return IteratorRange<PollEventIterator, PollEventSentinel>(PollEventIterator(), PollEventSentinel());
-}
+[[nodiscard]] inline auto pollEvents() { return IteratorRange<PollEventIterator, PollEventSentinel>(PollEventIterator(), PollEventSentinel()); }
 
 } // namespace mi::SDL

@@ -121,9 +121,7 @@ void Material::PbrMetallicRoughness::jsonConversion(Json::Conversion &conversion
   WithExtensions::jsonConversion(conversion);
 }
 
-void Material::NormalTextureInfo::jsonConversion(Json::Conversion &conversion) {
-  TextureInfo::jsonConversion(conversion.optionalByDefault("scale", scale, 1.0f));
-}
+void Material::NormalTextureInfo::jsonConversion(Json::Conversion &conversion) { TextureInfo::jsonConversion(conversion.optionalByDefault("scale", scale, 1.0f)); }
 
 void Material::OcclusionTextureInfo::jsonConversion(Json::Conversion &conversion) {
   TextureInfo::jsonConversion( //

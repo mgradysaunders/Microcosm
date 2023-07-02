@@ -23,10 +23,7 @@ void main() {
   fragColor = texture(textureSampler, texcoord);
 })";
 
-ScreenQuad::ScreenQuad()
-  : mProgram(
-      Shader(GL_VERTEX_SHADER, vertShaderSrc), //
-      Shader(GL_FRAGMENT_SHADER, fragShaderSrc)) {}
+ScreenQuad::ScreenQuad() : mProgram(Shader(GL_VERTEX_SHADER, vertShaderSrc), Shader(GL_FRAGMENT_SHADER, fragShaderSrc)) {}
 
 ScreenQuad::ScreenQuad(GLuint fragShader) : mProgram(Shader(GL_VERTEX_SHADER, vertShaderSrc), fragShader) {}
 

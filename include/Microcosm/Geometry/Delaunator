@@ -18,9 +18,7 @@ public:
 
     constexpr Edge(Int vertA, Int vertB) noexcept : verts{vertA, vertB} {}
 
-    [[nodiscard]] constexpr auto operator<=>(const Edge &other) const noexcept {
-      return std::minmax(verts[0], verts[1]) <=> std::minmax(other.verts[0], other.verts[1]);
-    }
+    [[nodiscard]] constexpr auto operator<=>(const Edge &other) const noexcept { return std::minmax(verts[0], verts[1]) <=> std::minmax(other.verts[0], other.verts[1]); }
 
     [[nodiscard]] constexpr bool operator==(const Edge &) const noexcept = default;
 
@@ -85,15 +83,13 @@ public:
 public:
   Delaunator() noexcept = default;
 
-  template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel>
-  explicit Delaunator(Iterator from, Sentinel to) {
+  template <std::input_iterator Iterator, std::sentinel_for<Iterator> Sentinel> explicit Delaunator(Iterator from, Sentinel to) {
     verts.reserve(64);
     while (from != to) verts.push_back(*from++);
     build();
   }
 
-  template <std::ranges::input_range Range>
-  explicit Delaunator(Range &&range) : Delaunator(std::ranges::begin(range), std::ranges::end(range)) {}
+  template <std::ranges::input_range Range> explicit Delaunator(Range &&range) : Delaunator(std::ranges::begin(range), std::ranges::end(range)) {}
 
   Delaunator(const Delaunator &) = default;
 

@@ -72,9 +72,7 @@ struct Log {
   };
 
   /// Analogous to `SDL_LogMessage()`.
-  static void message(Priority priority, std::string_view what) {
-    SDL_LogMessage(SDL_LOG_CATEGORY_APPLICATION, SDL_LogPriority(priority), "%.*s", int(what.size()), what.data());
-  }
+  static void message(Priority priority, std::string_view what) { SDL_LogMessage(SDL_LOG_CATEGORY_APPLICATION, SDL_LogPriority(priority), "%.*s", int(what.size()), what.data()); }
 
   /// Analogous to `SDL_LogCritical()`.
   static void critical(std::string_view what) { message(Critical, what); }

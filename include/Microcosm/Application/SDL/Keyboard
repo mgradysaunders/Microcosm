@@ -54,9 +54,7 @@ public:
   struct State {
     [[nodiscard]] bool operator[](size_t pos) const noexcept { return pos < keys.size() ? keys[pos] : false; }
 
-    [[nodiscard]] bool operator[](Scancode code) const {
-      return code != SDL_SCANCODE_UNKNOWN ? operator[](size_t(code)) : false;
-    }
+    [[nodiscard]] bool operator[](Scancode code) const { return code != SDL_SCANCODE_UNKNOWN ? operator[](size_t(code)) : false; }
 
     [[nodiscard]] bool operator[](Keycode code) const { return operator[](SDL_GetScancodeFromKey(code)); }
 
@@ -76,9 +74,7 @@ public:
   [[nodiscard]] static bool hasScreenKeyboard() noexcept { return SDL_HasScreenKeyboardSupport() == SDL_TRUE; }
 
   /// Analogous to `SDL_IsScreenKeyboardShown()`.
-  [[nodiscard]] static bool screenKeyboardShown(SDL_Window *window) noexcept {
-    return SDL_IsScreenKeyboardShown(window) == SDL_TRUE;
-  }
+  [[nodiscard]] static bool screenKeyboardShown(SDL_Window *window) noexcept { return SDL_IsScreenKeyboardShown(window) == SDL_TRUE; }
 };
 
 struct TextInput {

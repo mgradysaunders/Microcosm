@@ -42,8 +42,7 @@ namespace {
 [[nodiscard]] static std::string decodeString(std::string_view source) {
   std::string target;
   if (source.empty()) return target;
-  if (!(source.front() == '"' && source.back() == '"' && source.size() >= 2))
-    throw Error(std::runtime_error("Expected string inside '\"'!"));
+  if (!(source.front() == '"' && source.back() == '"' && source.size() >= 2)) throw Error(std::runtime_error("Expected string inside '\"'!"));
   target.reserve(source.size());
   size_t i = 1, n = source.size() - 1;
   while (i < n) {
@@ -66,8 +65,7 @@ namespace {
     case 'x': {
       char c0 = next();
       char c1 = next();
-      if (!char_class::xdigit(c0) || !char_class::xdigit(c1))
-        throw Error(std::runtime_error("Expected two hexidecimal characters after '\\x'!"));
+      if (!char_class::xdigit(c0) || !char_class::xdigit(c1)) throw Error(std::runtime_error("Expected two hexidecimal characters after '\\x'!"));
       target += char((hexToInt(c0) << 4) | hexToInt(c1));
       break;
     }
@@ -77,8 +75,7 @@ namespace {
         char c1 = next();
         char c2 = next();
         char c3 = next();
-        if (!char_class::xdigit(c0) || !char_class::xdigit(c1) || !char_class::xdigit(c2) || !char_class::xdigit(c3))
-          throw Error(std::runtime_error("Expected four hexidecimal characters after '\\u'!"));
+        if (!char_class::xdigit(c0) || !char_class::xdigit(c1) || !char_class::xdigit(c2) || !char_class::xdigit(c3)) throw Error(std::runtime_error("Expected four hexidecimal characters after '\\u'!"));
         return (uint16_t(hexToInt(c0)) << 12) | (uint16_t(hexToInt(c1)) << 8) | //
                (uint16_t(hexToInt(c2)) << 4) | uint16_t(hexToInt(c3));
       };
@@ -151,8 +148,7 @@ public:
     }
     default:
       try {
-        if (mScanner.peek() == '-' || char_class::digit(mScanner.peek()))
-          return stringTo<double>(mScanner.accept(char_class::digit || char_class::these("+-.eE")));
+        if (mScanner.peek() == '-' || char_class::digit(mScanner.peek())) return stringTo<double>(mScanner.accept(char_class::digit || char_class::these("+-.eE")));
       } catch (const std::exception &error) {
         mScanner.fail(error.what());
       }

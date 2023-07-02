@@ -28,14 +28,7 @@ public:
 
   AudioStream(AudioStream &&other) noexcept : stream(steal(other.stream)) {}
 
-  explicit AudioStream(const Params &srcParams, const Params &dstParams)
-    : stream(SDL_NewAudioStream(
-        srcParams.format,
-        srcParams.channels,
-        srcParams.sampleRate,
-        dstParams.format,
-        dstParams.channels,
-        dstParams.sampleRate)) {
+  explicit AudioStream(const Params &srcParams, const Params &dstParams) : stream(SDL_NewAudioStream(srcParams.format, srcParams.channels, srcParams.sampleRate, dstParams.format, dstParams.channels, dstParams.sampleRate)) {
     if (!stream) throwError();
   }
 

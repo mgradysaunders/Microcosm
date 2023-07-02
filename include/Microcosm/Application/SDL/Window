@@ -81,9 +81,7 @@ public:
 
   [[nodiscard]] auto getGrab() const noexcept { return SDL_GetWindowGrab(window) == SDL_TRUE; }
 
-  template <typename Value> [[nodiscard]] auto getData(const char *key) const noexcept {
-    return static_cast<Value *>(SDL_GetWindowData(window, key));
-  }
+  template <typename Value> [[nodiscard]] auto getData(const char *key) const noexcept { return static_cast<Value *>(SDL_GetWindowData(window, key)); }
 
   void setTitle(const std::string &title) noexcept { SDL_SetWindowTitle(window, title.c_str()); }
 
