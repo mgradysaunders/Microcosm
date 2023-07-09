@@ -927,7 +927,7 @@ void HalfEdgeMesh::parameterizeByConformalEnergy() {
     matrixE = matrixE.dot(matrixE.transpose());
     matrixE /= float(boundary.size());
     matrixB -= matrixE;
-    auto [values, vectors] = matrixB.solveEigsCholesky(SparseMatrix::Order::Largest, 1, matrixL);
+    auto [values, vectors] = matrixB.solveEigsCholesky(SparseMatrix::Sort::Largest, 1, matrixL);
     for (auto vert : island.verts) {
       float texcoordU = vectors(2 * vert->index + 0, 0);
       float texcoordV = vectors(2 * vert->index + 1, 0);

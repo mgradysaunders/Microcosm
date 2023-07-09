@@ -2,11 +2,14 @@
 #include "Microcosm/utility"
 
 #include "Eigen/Sparse"
+#include "Spectra/GenEigsSolver.h"
 #include "Spectra/MatOp/SparseCholesky.h"
+#include "Spectra/MatOp/SparseGenMatProd.h"
 #include "Spectra/MatOp/SparseSymMatProd.h"
+#include "Spectra/SymEigsSolver.h"
 #include "Spectra/SymGEigsSolver.h"
 
-namespace mi {
+namespace mi::geometry {
 
 void SparseMatrix::resize(size_t numRows, size_t numCols) {
   mShape.resize(numRows, numCols);
@@ -118,23 +121,43 @@ SparseMatrix SparseMatrix::dot(const SparseMatrix &other) const {
   return result;
 }
 
-[[nodiscard]] static auto convertBackFromEigen(const Eigen::VectorXd &vector) {
+[[nodiscard]] static auto convertBackFromEigen(const Eigen::VectorXd &vector) noexcept {
   Vectord result{with_shape, vector.size()};
   for (size_t i = 0; i < result.size(); i++) result[i] = double(vector[i]);
   return result;
 }
 
-[[nodiscard]] static auto convertBackFromEigen(const Eigen::MatrixXd &matrix) {
+[[nodiscard]] static auto convertBackFromEigen(const Eigen::VectorXcd &vector) noexcept {
+  Vectorcd result{with_shape, vector.size()};
+  for (size_t i = 0; i < result.size(); i++) result[i] = complex<double>(vector[i]);
+  return result;
+}
+
+[[nodiscard]] static auto convertBackFromEigen(const Eigen::MatrixXd &matrix) noexcept {
   Matrixd result{with_shape, matrix.rows(), matrix.cols()};
   for (size_t i = 0; i < result.rows(); i++)
     for (size_t j = 0; j < result.cols(); j++) result(i, j) = double(matrix(i, j));
   return result;
 }
 
-static const char *infoToString(Eigen::ComputationInfo info) {
+[[nodiscard]] static auto convertBackFromEigen(const Eigen::MatrixXcd &matrix) noexcept {
+  Matrixcd result{with_shape, matrix.rows(), matrix.cols()};
+  for (size_t i = 0; i < result.rows(); i++)
+    for (size_t j = 0; j < result.cols(); j++) result(i, j) = complex<double>(matrix(i, j));
+  return result;
+}
+
+[[nodiscard]] static const char *infoToString(Eigen::ComputationInfo info) noexcept {
   if (info == Eigen::NumericalIssue) return "NumericalIssue";
   if (info == Eigen::NoConvergence) return "NoConvergence";
   if (info == Eigen::InvalidInput) return "InvalidInput";
+  return "Success";
+}
+
+[[nodiscard]] static const char *infoToString(Spectra::CompInfo info) noexcept {
+  if (info == Spectra::CompInfo::NotComputed) return "NotComputed";
+  if (info == Spectra::CompInfo::NotConverging) return "NotConverging";
+  if (info == Spectra::CompInfo::NumericalIssue) return "NumericalIssue";
   return "Success";
 }
 
@@ -159,25 +182,39 @@ Matrixd SparseMatrix::solveCholesky(const Matrixd &matrixB) const {
   return convertBackFromEigen(Eigen::MatrixXd{decompA.solve(convertToEigen(matrixB))});
 }
 
-#if 0
-std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(Order order, size_t count) const {
-}
-#endif
-
-std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(Order order, size_t count, const SparseMatrix &matrixI) const {
-  Eigen::SparseMatrix matrixA{convertToEigen(*this)};
-  Eigen::SparseMatrix matrixB{convertToEigen(matrixI)};
-  Spectra::SparseSymMatProd<double> opA{matrixA};
-  Spectra::SparseCholesky<double> opB{matrixB};
-  Spectra::SymGEigsSolver<decltype(opA), decltype(opB), Spectra::GEigsMode::Cholesky> solver{opA, opB, int(count), 6};
+std::pair<Vectorcd, Matrixcd> SparseMatrix::solveEigs(SortRule rule, size_t count) const {
+  Eigen::SparseMatrix matrix{convertToEigen(*this)};
+  Spectra::SparseGenMatProd<double> matrixOp{matrix};
+  Spectra::GenEigsSolver<decltype(matrixOp)> solver{matrixOp, int(count), clamp(int(count) * 3 / 2, 6, int(rows()))};
   solver.init();
-  solver.compute(order == Order::Largest ? Spectra::SortRule::LargestAlge : Spectra::SortRule::SmallestAlge);
-  if (solver.info() == Spectra::CompInfo::Successful)
-    return {
-      convertBackFromEigen(solver.eigenvalues()), //
-      convertBackFromEigen(solver.eigenvectors())};
-  throw Error(std::runtime_error("Generalized eigenvalue solver failed!"));
+  solver.compute(rule == SortRule::Largest ? Spectra::SortRule::LargestMagn : Spectra::SortRule::SmallestMagn);
+  if (solver.info() == Spectra::CompInfo::Successful) return {convertBackFromEigen(solver.eigenvalues()), convertBackFromEigen(solver.eigenvectors())};
+  throw Error(std::runtime_error("Generalized eigenvalue solver failed! ({})"_format(infoToString(solver.info()))));
   return {};
 }
 
-} // namespace mi
+std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, size_t count) const {
+  Eigen::SparseMatrix matrix{convertToEigen(*this)};
+  Spectra::SparseSymMatProd<double> matrixOp{matrix};
+  Spectra::SymEigsSolver<decltype(matrixOp)> solver{matrixOp, int(count), clamp(int(count) * 3 / 2, 6, int(rows()))};
+  solver.init();
+  solver.compute(rule == SortRule::Largest ? Spectra::SortRule::LargestAlge : Spectra::SortRule::SmallestAlge);
+  if (solver.info() == Spectra::CompInfo::Successful) return {convertBackFromEigen(solver.eigenvalues()), convertBackFromEigen(solver.eigenvectors())};
+  throw Error(std::runtime_error("Generalized eigenvalue solver failed! ({})"_format(infoToString(solver.info()))));
+  return {};
+}
+
+std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, size_t count, const SparseMatrix &matrixI) const {
+  Eigen::SparseMatrix matrixA{convertToEigen(*this)};
+  Eigen::SparseMatrix matrixB{convertToEigen(matrixI)};
+  Spectra::SparseSymMatProd<double> matrixOpA{matrixA};
+  Spectra::SparseCholesky<double> matrixOpB{matrixB};
+  Spectra::SymGEigsSolver<decltype(matrixOpA), decltype(matrixOpB), Spectra::GEigsMode::Cholesky> solver{matrixOpA, matrixOpB, int(count), clamp(int(count) * 3 / 2, 6, int(rows()))};
+  solver.init();
+  solver.compute(rule == SortRule::Largest ? Spectra::SortRule::LargestAlge : Spectra::SortRule::SmallestAlge);
+  if (solver.info() == Spectra::CompInfo::Successful) return {convertBackFromEigen(solver.eigenvalues()), convertBackFromEigen(solver.eigenvectors())};
+  throw Error(std::runtime_error("Generalized eigenvalue solver failed! ({})"_format(infoToString(solver.info()))));
+  return {};
+}
+
+} // namespace mi::geometry

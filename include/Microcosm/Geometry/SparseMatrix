@@ -4,7 +4,7 @@
 #include "Microcosm/Geometry/common"
 #include <map>
 
-namespace mi {
+namespace mi::geometry {
 
 struct MI_GEOMETRY_API SparseMatrix {
 public:
@@ -86,11 +86,13 @@ public:
 
   [[nodiscard]] Matrixd solveCholesky(const Matrixd &matrixB) const;
 
-  enum class Order { Largest, Smallest };
+  enum class SortRule { Largest, Smallest };
 
-  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(Order order, size_t count) const;
+  [[nodiscard]] std::pair<Vectorcd, Matrixcd> solveEigs(SortRule rule, size_t count) const;
 
-  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(Order order, size_t count, const SparseMatrix &matrixI) const;
+  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(SortRule rule, size_t count) const;
+
+  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(SortRule rule, size_t count, const SparseMatrix &matrixI) const;
 
 private:
   TensorShape<Dynamic, Dynamic> mShape;
@@ -98,4 +100,4 @@ private:
   std::map<IndexVector<2>, double> mValues;
 };
 
-} // namespace mi
+} // namespace mi::geometry
