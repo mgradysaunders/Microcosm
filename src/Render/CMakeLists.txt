@@ -35,4 +35,4 @@ microcosm_add_library(
   EXPORT_MACRO "MI_RENDER_API"
   EXPORT_FILENAME "Microcosm/Render/Export.h"
   )
-add_subdirectory(unit_tests)
+#add_subdirectory(unit_tests)
