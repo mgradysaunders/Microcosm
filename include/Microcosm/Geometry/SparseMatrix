@@ -88,11 +88,11 @@ public:
 
   enum class SortRule { Largest, Smallest };
 
-  [[nodiscard]] std::pair<Vectorcd, Matrixcd> solveEigs(SortRule rule, size_t count) const;
+  [[nodiscard]] std::pair<Vectorcd, Matrixcd> solveEigs(SortRule rule, int count) const;
 
-  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(SortRule rule, size_t count) const;
+  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(SortRule rule, int count) const;
 
-  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(SortRule rule, size_t count, const SparseMatrix &matrixI) const;
+  [[nodiscard]] std::pair<Vectord, Matrixd> solveEigsCholesky(SortRule rule, int count, const SparseMatrix &matrixI) const;
 
 private:
   TensorShape<Dynamic, Dynamic> mShape;

@@ -182,10 +182,11 @@ Matrixd SparseMatrix::solveCholesky(const Matrixd &matrixB) const {
   return convertBackFromEigen(Eigen::MatrixXd{decompA.solve(convertToEigen(matrixB))});
 }
 
-std::pair<Vectorcd, Matrixcd> SparseMatrix::solveEigs(SortRule rule, size_t count) const {
+std::pair<Vectorcd, Matrixcd> SparseMatrix::solveEigs(SortRule rule, int count) const {
+  count = clamp(count, 1, int(rows()) - 2);
   Eigen::SparseMatrix matrix{convertToEigen(*this)};
   Spectra::SparseGenMatProd<double> matrixOp{matrix};
-  Spectra::GenEigsSolver<decltype(matrixOp)> solver{matrixOp, int(count), clamp(int(count) * 3 / 2, 6, int(rows()))};
+  Spectra::GenEigsSolver<decltype(matrixOp)> solver{matrixOp, count, clamp(int(count) * 3 / 2, 6, int(rows()))};
   solver.init();
   solver.compute(rule == SortRule::Largest ? Spectra::SortRule::LargestMagn : Spectra::SortRule::SmallestMagn);
   if (solver.info() == Spectra::CompInfo::Successful) return {convertBackFromEigen(solver.eigenvalues()), convertBackFromEigen(solver.eigenvectors())};
@@ -193,10 +194,11 @@ std::pair<Vectorcd, Matrixcd> SparseMatrix::solveEigs(SortRule rule, size_t coun
   return {};
 }
 
-std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, size_t count) const {
+std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, int count) const {
+  count = clamp(count, 1, int(rows()) - 2);
   Eigen::SparseMatrix matrix{convertToEigen(*this)};
   Spectra::SparseSymMatProd<double> matrixOp{matrix};
-  Spectra::SymEigsSolver<decltype(matrixOp)> solver{matrixOp, int(count), clamp(int(count) * 3 / 2, 6, int(rows()))};
+  Spectra::SymEigsSolver<decltype(matrixOp)> solver{matrixOp, count, clamp(count * 3 / 2, 6, int(rows()))};
   solver.init();
   solver.compute(rule == SortRule::Largest ? Spectra::SortRule::LargestAlge : Spectra::SortRule::SmallestAlge);
   if (solver.info() == Spectra::CompInfo::Successful) return {convertBackFromEigen(solver.eigenvalues()), convertBackFromEigen(solver.eigenvectors())};
@@ -204,12 +206,13 @@ std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, size_
   return {};
 }
 
-std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, size_t count, const SparseMatrix &matrixI) const {
+std::pair<Vectord, Matrixd> SparseMatrix::solveEigsCholesky(SortRule rule, int count, const SparseMatrix &matrixI) const {
+  count = clamp(count, 1, int(rows()) - 2);
   Eigen::SparseMatrix matrixA{convertToEigen(*this)};
   Eigen::SparseMatrix matrixB{convertToEigen(matrixI)};
   Spectra::SparseSymMatProd<double> matrixOpA{matrixA};
   Spectra::SparseCholesky<double> matrixOpB{matrixB};
-  Spectra::SymGEigsSolver<decltype(matrixOpA), decltype(matrixOpB), Spectra::GEigsMode::Cholesky> solver{matrixOpA, matrixOpB, int(count), clamp(int(count) * 3 / 2, 6, int(rows()))};
+  Spectra::SymGEigsSolver<decltype(matrixOpA), decltype(matrixOpB), Spectra::GEigsMode::Cholesky> solver{matrixOpA, matrixOpB, count, clamp(count * 3 / 2, 6, int(rows()))};
   solver.init();
   solver.compute(rule == SortRule::Largest ? Spectra::SortRule::LargestAlge : Spectra::SortRule::SmallestAlge);
   if (solver.info() == Spectra::CompInfo::Successful) return {convertBackFromEigen(solver.eigenvalues()), convertBackFromEigen(solver.eigenvectors())};
