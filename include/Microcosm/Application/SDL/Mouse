@@ -4,7 +4,7 @@
 #include "Microcosm/Application/SDL/Window"
 #include "Microcosm/Application/SDL/common"
 
-#include <SDL2/SDL_mouse.h>
+#include <SDL3/SDL_mouse.h>
 
 namespace mi::SDL {
 
@@ -31,7 +31,7 @@ public:
     [[nodiscard]] constexpr bool buttonX2() const noexcept { return mask & SDL_BUTTON_X2MASK; }
 
     /// The position of the cursor.
-    Vector2i position;
+    Vector2f position;
   };
 
   /// Analogous to `SDL_GetMouseState()`.

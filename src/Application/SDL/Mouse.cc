@@ -1,6 +1,6 @@
 #include "Microcosm/Application/SDL/Mouse"
 
-#include <SDL2/SDL.h>
+#include <SDL3/SDL.h>
 
 namespace mi::SDL {
 
@@ -32,18 +32,14 @@ void Mouse::capture(bool flag) {
 }
 
 void Mouse::show() {
-  if (SDL_ShowCursor(SDL_ENABLE) < 0) throwError();
+  if (SDL_ShowCursor() < 0) throwError();
 }
 
 void Mouse::hide() {
-  if (SDL_ShowCursor(SDL_DISABLE) < 0) throwError();
+  if (SDL_HideCursor() < 0) throwError();
 }
 
-bool Mouse::shown() {
-  int code = SDL_ShowCursor(SDL_QUERY);
-  if (code < 0) throwError();
-  return code == SDL_ENABLE;
-}
+bool Mouse::shown() { return SDL_CursorVisible() == SDL_TRUE; }
 
 void Mouse::warpTo(const Window &window, Vector2i position) { SDL_WarpMouseInWindow(window, position[0], position[1]); }
 

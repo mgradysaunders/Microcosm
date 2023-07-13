@@ -1,9 +1,9 @@
-#include "Microcosm/Geometry/PiecewiseLinear"
+#include "Microcosm/Geometry/PiecewiseLinearCurve"
 #include "Microcosm/utility"
 
 namespace mi::geometry {
 
-float PiecewiseLinear::value(float coord) const noexcept {
+float PiecewiseLinearCurve::value(float coord) const noexcept {
   if (isnan(coord)) return coord;
   if (size() == 0) return 0;
   if (size() == 1) return mValues.front();
@@ -26,7 +26,7 @@ float PiecewiseLinear::value(float coord) const noexcept {
   return lerp(fac, mValues[index0], mValues[index1]);
 }
 
-float PiecewiseLinear::integral(float coord) const noexcept {
+float PiecewiseLinearCurve::integral(float coord) const noexcept {
   if (isnan(coord)) return coord;
   if (size() == 0) return 0;
   if (size() == 1) return (coord - minCoord) * mValues.front();
@@ -60,7 +60,7 @@ float PiecewiseLinear::integral(float coord) const noexcept {
   return lerp(0.5f * fac, value0, value1) * fac * spacing() + mValueInts[index0];
 }
 
-float PiecewiseLinear::minimum(float coordA, float coordB) const noexcept {
+float PiecewiseLinearCurve::minimum(float coordA, float coordB) const noexcept {
   if (!(coordA < coordB)) std::swap(coordA, coordB);
   if (coordA == coordB) return value(coordA);
   if (size() == 0) return 0;
@@ -91,7 +91,7 @@ float PiecewiseLinear::minimum(float coordA, float coordB) const noexcept {
   return result;
 }
 
-float PiecewiseLinear::maximum(float coordA, float coordB) const noexcept {
+float PiecewiseLinearCurve::maximum(float coordA, float coordB) const noexcept {
   if (!(coordA < coordB)) std::swap(coordA, coordB);
   if (coordA == coordB) return value(coordA);
   if (size() == 0) return 0;
@@ -122,7 +122,7 @@ float PiecewiseLinear::maximum(float coordA, float coordB) const noexcept {
   return result;
 }
 
-float PiecewiseLinear::integralInverse(float valueInt) const noexcept {
+float PiecewiseLinearCurve::integralInverse(float valueInt) const noexcept {
   // TODO Handle valueInt if repeating or mirroring
   if (size() < 2) return 0;
   int index = 0;

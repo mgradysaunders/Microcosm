@@ -2,10 +2,12 @@
 #pragma once
 
 #include "Microcosm/Geometry/FileOBJ"
-#include "Microcosm/Geometry/FilePLY"
 #include "Microcosm/Geometry/common"
 #include "Microcosm/Quaternion"
 #include "Microcosm/utility"
+
+struct aiScene;
+struct aiMesh;
 
 namespace mi::geometry {
 
@@ -15,11 +17,7 @@ public:
 
   Mesh(const FileOBJ &file);
 
-  Mesh(const FilePLY &file);
-
-  explicit operator FileOBJ() const;
-
-  explicit operator FilePLY() const;
+  [[nodiscard]] explicit operator FileOBJ() const;
 
   struct Face {
     /// The offset of the first vertex.
@@ -84,10 +82,10 @@ public:
       auto newV = reservedVectorSTL<Value>(v.size());
       auto mapF = reservedVectorSTL<uint32_t>(v.size());
       for (size_t i = 0; i < v.size(); i++) {
-        if (isUsed[i]) {
-          mapF.push_back(newV.size()), newV.push_back(v[i]);
-        } else {
+        if (!isUsed[i]) {
           mapF.push_back(uint32_t(-1));
+        } else {
+          mapF.push_back(newV.size()), newV.push_back(v[i]);
         }
       }
       for (auto &i : f) i = mapF[i];
@@ -121,14 +119,6 @@ public:
     faces.reserve(numFaces);
   }
 
-  Face pushFace(uint32_t);
-
-  [[nodiscard]] uint32_t capacityOfFace(Faces::const_iterator face) const { return face + 1 < faces.end() ? (face + 1)->first - face->first : indexCount - face->first; }
-
-  void reserveFace(Faces::iterator face, uint32_t count);
-
-  void resizeFace(Faces::iterator face, uint32_t count) { reserveFace(face, count), face->count = count; }
-
   [[nodiscard]] const auto &indexPerPosition() const { return positions.f; }
 
   [[nodiscard]] const auto &indexPerTexcoord() const { return texcoords.f; }
@@ -141,45 +131,57 @@ public:
     return f;
   }
 
+  /// Append another mesh.
   void append(const Mesh &other);
 
+  /// Reverse the winding of the given face.
   void reverse(Face face) {
     positions.reverse(face);
     texcoords.reverse(face);
     normals.reverse(face);
   }
 
+  /// Reverse the winding of all faces.
   void reverse() {
     for (auto &face : faces) reverse(face);
   }
 
+  /// Triangulate all faces in place.
   void triangulate();
 
+  /// Consolidate the mesh representation. This removes degenerate faces and discards unused vertex data.
   void consolidate();
 
+  /// Either validate the mesh representation, or throw a runtime error with a decent description of what is
+  /// invalid. Mostly for sanity checks and debugging.
   void validate() const;
 
   /// Calculate the bound box of the given face.
-  [[nodiscard]] BoundBox3f boundBox(Face face) const { return BoundBox3f(positions.eachValue(face)); }
+  [[nodiscard]] BoundBox3f boundBox(Face face) const noexcept { return BoundBox3f(positions.eachValue(face)); }
 
   /// Calculate the bound box of all faces.
-  [[nodiscard]] BoundBox3f boundBox() const { return BoundBox3f(positions); }
+  [[nodiscard]] BoundBox3f boundBox() const noexcept { return BoundBox3f(positions); }
 
   /// Calculate the vector area of the given face.
-  [[nodiscard]] Vector3f vectorArea(Face face) const;
+  [[nodiscard]] Vector3f vectorArea(Face face) const noexcept {
+    Vector3f vectorAreaSum = {};
+    Vector3f origin = positions(face, 0);
+    for (uint32_t i = 1; i + 1 < face.count; i++) vectorAreaSum += cross(positions(face, i) - origin, positions(face, i + 1) - origin);
+    return 0.5f * vectorAreaSum;
+  }
 
   /// Calculate the area of the given face.
-  [[nodiscard]] float area(Face face) const { return length(vectorArea(face)); }
+  [[nodiscard]] float area(Face face) const noexcept { return length(vectorArea(face)); }
 
   /// Calculate the area of all faces.
-  [[nodiscard]] float area() const {
+  [[nodiscard]] float area() const noexcept {
     double areaSum = 0;
     for (auto &face : faces) areaSum += double(area(face));
     return areaSum;
   }
 
   /// Calculate the one-side projected area of all faces.
-  [[nodiscard]] float oneSideProjectedArea(Vector3f axis) const {
+  [[nodiscard]] float oneSideProjectedArea(Vector3f axis) const noexcept {
     axis = normalize(axis);
     double areaSum = 0;
     for (auto &face : faces) areaSum += double(max(dot(axis, vectorArea(face)), 0));
@@ -187,7 +189,7 @@ public:
   }
 
   /// Calculate the two-side projected area of all faces.
-  [[nodiscard]] float twoSideProjectedArea(Vector3f axis) const {
+  [[nodiscard]] float twoSideProjectedArea(Vector3f axis) const noexcept {
     axis = normalize(axis);
     double areaSum = 0;
     for (auto &face : faces) areaSum += double(abs(dot(axis, vectorArea(face))));
@@ -201,7 +203,17 @@ public:
   /// region. If it does not, there are no guarantees about the validity or
   /// interpretation of the result.
   ///
-  [[nodiscard]] float volume() const;
+  [[nodiscard]] float volume() const noexcept {
+    double volumeSum = 0;
+    for (const Face &face : faces) volumeSum += dot(vectorArea(face), -positions(face, 0));
+    volumeSum /= 3.0;
+    // There is some conflict-of-convention here. Note that the
+    // math definition of the normal vector points the opposite direction
+    // than we usually expect in graphics (inside instead of outside). We
+    // take the negative here so that CCW-orientation corresponds to positive
+    // interior volume.
+    return volumeSum * -1;
+  }
 
   struct MI_GEOMETRY_API MassData {
   public:
@@ -215,15 +227,15 @@ public:
     ///
     [[nodiscard]] std::pair<Matrix3f, Vector3f> principalInertia() const;
 
-    void rotate(const Matrix3f &amount);
+    void rotate(const Matrix3f &amount) noexcept { inertia = dot(amount, inertia, transpose(amount)); }
 
-    void rotate(float theta, const Vector3f &axis) { rotate(Quaternionf::rotate(theta, axis)); }
+    void rotate(float theta, const Vector3f &axis) noexcept { rotate(Quaternionf::rotate(theta, axis)); }
 
-    void rotateX(float theta) { rotate(theta, Vector3f::unitX()); }
+    void rotateX(float theta) noexcept { rotate(theta, Vector3f::unitX()); }
 
-    void rotateY(float theta) { rotate(theta, Vector3f::unitY()); }
+    void rotateY(float theta) noexcept { rotate(theta, Vector3f::unitY()); }
 
-    void rotateZ(float theta) { rotate(theta, Vector3f::unitZ()); }
+    void rotateZ(float theta) noexcept { rotate(theta, Vector3f::unitZ()); }
 
   public:
     /// The mass.
@@ -242,44 +254,90 @@ public:
   /// The implementation implicitly assumes the mesh encloses a well-defined
   /// region. If it does not, there are no guarantees about the validity or
   /// interpretation of the result.
-  ///
   [[nodiscard]] MassData massData(float density = 1) const;
 
+  /// Calculate normals either per position (by default) or per face.
   void calculateNormals(bool perPosition = true);
 
-  void normalizeNormals() {
+  /// Normalize normals.
+  void normalizeNormals() noexcept {
     for (auto &normal : normals) normal = normalize(normal);
   }
 
+  /// Subdivide once with the Catmull-Clark subdivision scheme. This requires that the mesh is
+  /// manifold, meaning that the
   void subdivide();
 
+  /// Subdivide repeatedly as if by calling subdivide() consecutively. Note: The mesh resolution tends
+  /// to grow very quickly and use up more and more memory with every level of subdivision, so typically
+  /// the number of levels given to this function should be small, say less than 5.
   void subdivide(int levels) {
     while (levels-- > 0) subdivide();
   }
 
+  /// Affine transform with dual quaternion.
+  void transform(const DualQuaternionf &amount) noexcept {
+    for (auto &each : positions) {
+      each = amount.applyAffine(each);
+    }
+    for (auto &each : normals) {
+      each = amount.applyNormal(each);
+    }
+  }
+
+  /// Linear transform (rotation) with quaternion.
+  void transform(const Quaternionf &amount) noexcept {
+    for (auto &each : positions) {
+      each = amount.applyAffine(each);
+    }
+    for (auto &each : normals) {
+      each = amount.applyNormal(each);
+    }
+  }
+
+  /// Linear transform with 3x3 matrix.
+  void transform(const Matrix3f &matrix) noexcept {
+    Matrix3f matrixInv = inverse(matrix);
+    for (auto &each : positions) {
+      each = dot(matrix, each);
+    }
+    for (auto &each : normals) {
+      each = dot(each, matrixInv); // Normals multiply to the left of the inverse matrix.
+    }
+  }
+
+  /// Affine transform with 4x4 matrix.
+  void transform(const Matrix4f &matrix) noexcept;
+
+  /// Translate.
+  void translate(const Vector3f &amount) noexcept {
+    for (auto &position : positions) position += amount;
+  }
+
+  /// Rotate by the given angle in radians around the given axis.
+  void rotate(float theta, const Vector3f &axis) noexcept { transform(Quaternionf::rotate(theta, axis)); }
+
+  /// Rotate by the given angle in radians around the X axis.
+  void rotateX(float theta) noexcept { rotate(theta, Vector3f::unitX()); }
+
+  /// Rotate by the given angle in radians around the Y axis.
+  void rotateY(float theta) noexcept { rotate(theta, Vector3f::unitY()); }
+
+  /// Rotate by the given angle in radians around the Z axis.
+  void rotateZ(float theta) noexcept { rotate(theta, Vector3f::unitZ()); }
+
+  /// Scale non-uniformly.
+  void scale(const Vector3f &amount) noexcept {
+    for (auto &each : positions) each *= amount;
+    for (auto &each : normals) each /= amount;
+  }
+
+  /// Scale uniformly.
+  void scale(float amount) noexcept {
+    for (auto &each : positions) each *= amount;
+  }
+
   void displace(float amount, const std::function<float(Vector3f, Vector2f)> &func);
-
-  void transform(const DualQuaternionf &amount);
-
-  void transform(const Quaternionf &amount);
-
-  void transform(const Matrix3f &matrix);
-
-  void transform(const Matrix4f &matrix);
-
-  void translate(const Vector3f &amount);
-
-  void rotate(float theta, const Vector3f &axis) { transform(Quaternionf::rotate(theta, axis)); }
-
-  void rotateX(float theta) { rotate(theta, Vector3f::unitX()); }
-
-  void rotateY(float theta) { rotate(theta, Vector3f::unitY()); }
-
-  void rotateZ(float theta) { rotate(theta, Vector3f::unitZ()); }
-
-  void scale(const Vector3f &amount);
-
-  void scale(float amount);
 
 public:
   Faces faces;
@@ -293,15 +351,22 @@ public:
   uint32_t indexCount = 0;
 
 public:
+  /// Load with ASSIMP, assuming Microcosm was built with ASSIMP. If not, throws a runtime error.
+  [[nodiscard]] static Mesh loadWithAssimp(const std::string &filename);
+
+  /// Load with ASSIMP, assuming Microcosm was built with ASSIMP. If not, throws a runtime error.
+  [[nodiscard]] static Mesh loadWithAssimp(const aiScene *scene);
+
+  /// Load with ASSIMP, assuming Microcosm was built with ASSIMP. If not, throws a runtime error.
+  [[nodiscard]] static Mesh loadWithAssimp(const aiMesh *mesh);
+
+  /// Make a cube. This is essentially a hardcoded copy of the default cube in Blender
+  /// with six quadrilateral faces and a basic texture coordinate layout.
   [[nodiscard]] static Mesh makeCube();
 
   struct Surface {
     struct Params final : ArrayLike<Params> {
-      Params() {
-        params.reserve(16);
-        params.push_back(0.0f);
-        params.push_back(1.0f);
-      }
+      Params() { params.reserve(16), params.push_back(0.0f), params.push_back(1.0f); }
       MI_ARRAY_LIKE_DATA(params.data())
       MI_ARRAY_LIKE_SIZE(params.size())
       void set(std::vector<float> s) { params = std::move(s); }
@@ -341,8 +406,6 @@ public:
   [[nodiscard]] static Mesh makeSphere(uint32_t subdivsU, uint32_t subdivsV, float radius = 1);
 
   [[nodiscard]] static Mesh makeSphube(uint32_t levels = 4, float radius = 1);
-
-  [[nodiscard]] static Mesh makeCylinder(uint32_t subdivsU, uint32_t subdivsV, float radius = 1.0f, float minZ = -1.0f, float maxZ = +1.0f);
 };
 
 } // namespace mi::geometry

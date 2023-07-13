@@ -4,9 +4,9 @@
 #include "Microcosm/Application/SDL/Window"
 #include "Microcosm/Application/SDL/common"
 
-#include <SDL2/SDL_keyboard.h>
-#include <SDL2/SDL_keycode.h>
-#include <SDL2/SDL_scancode.h>
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_scancode.h>
 #include <span>
 
 namespace mi::SDL {
@@ -73,8 +73,8 @@ public:
   /// Analogous to `SDL_HasScreenKeyboardSupport()`.
   [[nodiscard]] static bool hasScreenKeyboard() noexcept { return SDL_HasScreenKeyboardSupport() == SDL_TRUE; }
 
-  /// Analogous to `SDL_IsScreenKeyboardShown()`.
-  [[nodiscard]] static bool screenKeyboardShown(SDL_Window *window) noexcept { return SDL_IsScreenKeyboardShown(window) == SDL_TRUE; }
+  /// Analogous to `SDL_ScreenKeyboardShown()`.
+  [[nodiscard]] static bool screenKeyboardShown(SDL_Window *window) noexcept { return SDL_ScreenKeyboardShown(window) == SDL_TRUE; }
 };
 
 struct TextInput {
@@ -86,11 +86,11 @@ struct TextInput {
   /// Analogous to `SDL_StopTextInput()`.
   static void stop() noexcept { SDL_StopTextInput(); }
 
-  /// Analogous to `SDL_IsTextInputActive()`.
-  [[nodiscard]] static bool active() noexcept { return SDL_IsTextInputActive() == SDL_TRUE; }
+  /// Analogous to `SDL_TextInputActive()`.
+  [[nodiscard]] static bool active() noexcept { return SDL_TextInputActive() == SDL_TRUE; }
 
-  /// Analogous to `SDL_IsTextInputShown()`.
-  [[nodiscard]] static bool shown() noexcept { return SDL_IsTextInputShown() == SDL_TRUE; }
+  /// Analogous to `SDL_TextInputShown()`.
+  [[nodiscard]] static bool shown() noexcept { return SDL_TextInputShown() == SDL_TRUE; }
 
   /// Analogous to `SDL_SetTextInputRect()`.
   static void setInputRect(Vector2i from, Vector2i to) noexcept {

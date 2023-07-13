@@ -1,6 +1,13 @@
 #include "Microcosm/Geometry/Mesh"
 #include "Microcosm/memory"
+#include <iostream>
 #include <set>
+
+#if MI_BUILT_WITH_ASSIMP
+#include "assimp/Importer.hpp"
+#include "assimp/postprocess.h"
+#include "assimp/scene.h"
+#endif
 
 namespace mi::geometry {
 
@@ -13,11 +20,6 @@ Mesh::Mesh(const FileOBJ &file) {
   }
 }
 
-#if 0
-Mesh::Mesh(const FilePLY& file) {
-}
-#endif
-
 Mesh::operator FileOBJ() const {
   FileOBJ file;
   file.positions.v = positions.v, file.positions.f = positions.f;
@@ -29,45 +31,14 @@ Mesh::operator FileOBJ() const {
   return file;
 }
 
-#if 0
-Mesh::operator FilePLY() const {
-  FilePLY file;
-  return file;
-}
-#endif
-
-Mesh::Face Mesh::pushFace(uint32_t count) {
-  Face face = faces.emplace_back(Face{indexCount, count});
-  indexCount += count;
-  if (positions.f.size() != indexCount) positions.f.resize(indexCount);
-  if (texcoords.f.size() != indexCount) texcoords.f.resize(indexCount);
-  if (normals.f.size() != indexCount) normals.f.resize(indexCount);
-  return face;
-}
-
-void Mesh::reserveFace(Faces::iterator face, uint32_t count) {
-  if (uint32_t capacity = capacityOfFace(face); capacity < count) {
-    uint32_t insert_pos = face->first + capacity;
-    uint32_t difference = count - capacity;
-    positions.f.insert(positions.f.begin() + insert_pos, difference, 0);
-    texcoords.f.insert(texcoords.f.begin() + insert_pos, difference, 0);
-    normals.f.insert(normals.f.begin() + insert_pos, difference, 0);
-    while (++face < faces.end()) face->first += difference;
-    indexCount += difference;
-  }
-}
-
 void Mesh::append(const Mesh &other) {
   for (auto [first, count, metadata] : other.faces) faces.push_back({first + indexCount, count, metadata});
   size_t positionOffset = positions.v.size();
   size_t texcoordOffset = texcoords.v.size();
   size_t normalOffset = normals.v.size();
-  positions.v.insert(positions.v.end(), other.positions.v.begin(), other.positions.v.end());
-  texcoords.v.insert(texcoords.v.end(), other.texcoords.v.begin(), other.texcoords.v.end());
-  normals.v.insert(normals.v.end(), other.normals.v.begin(), other.normals.v.end());
-  positions.f.reserve(indexCount + other.indexCount);
-  texcoords.f.reserve(indexCount + other.indexCount);
-  normals.f.reserve(indexCount + other.indexCount);
+  positions.v.insert(positions.v.end(), other.positions.v.begin(), other.positions.v.end()), positions.f.reserve(indexCount + other.indexCount);
+  texcoords.v.insert(texcoords.v.end(), other.texcoords.v.begin(), other.texcoords.v.end()), texcoords.f.reserve(indexCount + other.indexCount);
+  normals.v.insert(normals.v.end(), other.normals.v.begin(), other.normals.v.end()), normals.f.reserve(indexCount + other.indexCount);
   for (auto i : other.positions.f) positions.f.push_back(i + positionOffset);
   for (auto i : other.texcoords.f) texcoords.f.push_back(i + texcoordOffset);
   for (auto i : other.normals.f) normals.f.push_back(i + normalOffset);
@@ -77,12 +48,9 @@ void Mesh::append(const Mesh &other) {
 void Mesh::triangulate() {
   Mesh mesh;
   mesh.faces.reserve(faces.size());
-  mesh.positions.v = std::move(positions.v);
-  mesh.texcoords.v = std::move(texcoords.v);
-  mesh.normals.v = std::move(normals.v);
-  mesh.positions.f.reserve(3 * faces.size());
-  mesh.texcoords.f.reserve(3 * faces.size());
-  mesh.normals.f.reserve(3 * faces.size());
+  mesh.positions.v = std::move(positions.v), mesh.positions.f.reserve(3 * faces.size());
+  mesh.texcoords.v = std::move(texcoords.v), mesh.texcoords.f.reserve(3 * faces.size());
+  mesh.normals.v = std::move(normals.v), mesh.normals.f.reserve(3 * faces.size());
   for (const auto &face : faces) {
     if (face.count <= 2) continue;
     for (uint32_t local = 1; local + 1 < face.count; local++) {
@@ -108,12 +76,7 @@ void Mesh::consolidate() {
   for (const auto &face : faces) {
     if (face.count <= 2) continue; // Remove bad faces.
     mesh.faces.push_back({mesh.indexCount, face.count});
-    auto push = [&](const auto &from, auto &to) {
-      to.insert(
-        to.end(),                  //
-        from.begin() + face.first, //
-        from.begin() + face.first + face.count);
-    };
+    auto push = [&](const auto &from, auto &to) { to.insert(to.end(), from.begin() + face.first, from.begin() + face.first + face.count); };
     push(positions.f, mesh.positions.f);
     push(texcoords.f, mesh.texcoords.f);
     push(normals.f, mesh.normals.f);
@@ -136,8 +99,7 @@ void Mesh::validate() const {
   errorIfNaN(texcoords);
   errorIfNaN(normals);
   auto errorIfInvalidIndexing = [&](auto &prop) {
-    if (!prop.f.empty() && prop.f.size() != indexCount)
-      errors.insert("Invalid indexing in {} ({} indexes, expected {} indexes)."_format(prop.name(), prop.f.size(), indexCount));
+    if (!prop.f.empty() && prop.f.size() != indexCount) errors.insert("Invalid indexing in {} ({} indexes, expected {} indexes)."_format(prop.name(), prop.f.size(), indexCount));
     int counter = 0;
     for (uint32_t i : prop.f) counter += i >= prop.v.size();
     if (counter > 0) {
@@ -169,40 +131,13 @@ void Mesh::validate() const {
   }
 }
 
-Vector3f Mesh::vectorArea(Face face) const {
-  Vector3f vectorAreaSum = {};
-  Vector3f origin = positions(face, 0);
-  for (uint32_t local = 1; local + 1 < face.count; local++)
-    vectorAreaSum += cross(positions(face, local + 0) - origin, positions(face, local + 1) - origin);
-  return 0.5f * vectorAreaSum;
-}
-
-float Mesh::volume() const {
-  double volumeSum = 0;
-  for (const Face &face : faces) volumeSum += dot(vectorArea(face), -positions(face, 0));
-  volumeSum /= 3.0;
-  // There is some conflict-of-convention here. Note that the
-  // math definition of the normal vector points the opposite direction
-  // than we usually expect in graphics (inside instead of outside). We
-  // take the negative here so that CCW-orientation corresponds to positive
-  // interior volume.
-  return volumeSum * -1;
-}
-
 std::pair<Matrix3f, Vector3f> Mesh::MassData::principalInertia() const {
-  DecompSVD<
-    float, TensorShape<3, 3>,
-    /*EnableU=*/true,
-    /*EnableV=*/false>
-    decomp{inertia};
+  DecompSVD<float, TensorShape<3, 3>, /*EnableU=*/true, /*EnableV=*/false> decomp{inertia};
   return {
     Matrix3f(decomp.matrixU()), //
     Vector3f(decomp.vectorS())};
 }
 
-void Mesh::MassData::rotate(const Matrix3f &amount) { inertia = dot(amount, inertia, transpose(amount)); }
-
-// TODO Explain this.
 Mesh::MassData Mesh::massData(float density) const {
   double densityOverSix{density / 6.0};
   double mass{0};
@@ -255,20 +190,18 @@ void Mesh::calculateNormals(bool perPosition) {
   normalizeNormals();
 }
 
-// TODO Explain this, and probably rewrite to be cleaner/more obvious.
-template <typename Value, auto Name>
-[[nodiscard]] static Mesh::Property<Value, Name> subdivideProperty(const auto &faces, const Mesh::Property<Value, Name> &prop) {
+template <typename Value, auto Name> [[nodiscard]] static Mesh::Property<Value, Name> subdivideProperty(const auto &faces, const Mesh::Property<Value, Name> &prop) {
   if (prop.v.empty() || prop.f.empty()) return prop;
   struct VertSums {
     Value faceSum{};
     Value edgeSum{};
     Value edgeHoleSum{};
-    uint32_t faceValence{0};
-    uint32_t edgeValence{0};
-    uint32_t edgeHoleValence{0};
+    uint32_t faceValence{};
+    uint32_t edgeValence{};
+    uint32_t edgeHoleValence{};
   };
   struct Edge {
-    uint32_t newVert{0};
+    uint32_t newVert{};
     StaticStack<uint32_t, 2> faces{};
     Value center{};
   };
@@ -289,29 +222,23 @@ template <typename Value, auto Name>
     }
   }
   for (auto &[key, edge] : edges) {
-    edge.center = 0.5f * (prop.v[key.first] + prop.v[key.second]);
-    vertSums[key.first].edgeSum += edge.center;
-    vertSums[key.first].edgeValence++;
-    vertSums[key.second].edgeSum += edge.center;
-    vertSums[key.second].edgeValence++;
+    auto &keyA = key.first;
+    auto &keyB = key.second;
+    edge.center = (prop.v[keyA] + prop.v[keyB]) / 2;
+    vertSums[keyA].edgeSum += edge.center, vertSums[keyA].edgeValence++;
+    vertSums[keyB].edgeSum += edge.center, vertSums[keyB].edgeValence++;
     if (!edge.faces.full()) {
-      vertSums[key.first].edgeHoleSum += edge.center;
-      vertSums[key.first].edgeHoleValence++;
-      vertSums[key.second].edgeHoleSum += edge.center;
-      vertSums[key.second].edgeHoleValence++;
+      vertSums[keyA].edgeHoleSum += edge.center, vertSums[keyA].edgeHoleValence++;
+      vertSums[keyB].edgeHoleSum += edge.center, vertSums[keyB].edgeHoleValence++;
     }
   }
   Mesh::Property<Value, Name> newProp;
   newProp.v = prop.v;
   for (uint32_t i = 0; i < prop.v.size(); i++) {
     auto &sums = vertSums[i];
-    if (sums.edgeHoleValence == 0) {
-      Value edgeAverage = sums.edgeSum / sums.edgeValence;
-      Value faceAverage = sums.faceSum / sums.faceValence;
-      float n = 1.0f / sums.faceValence;
-      newProp.v[i] *= 1.0f - 3.0f * n;
-      newProp.v[i] += 1.0f * n * faceAverage;
-      newProp.v[i] += 2.0f * n * edgeAverage;
+    if (sums.edgeHoleValence == 0) [[likely]] {
+      newProp.v[i] *= (1.0f - 3.0f / sums.faceValence);
+      newProp.v[i] += (sums.faceSum / sums.faceValence + 2.0f * sums.edgeSum / sums.edgeValence) / sums.faceValence;
     } else {
       newProp.v[i] += sums.edgeHoleSum;
       newProp.v[i] /= sums.edgeHoleValence + 1;
@@ -319,11 +246,9 @@ template <typename Value, auto Name>
   }
   for (auto &[key, edge] : edges) {
     edge.newVert = newProp.v.size();
-    if (edge.faces.full()) {
-      const auto &faceCenter0 = faceCenters[edge.faces[0]];
-      const auto &faceCenter1 = faceCenters[edge.faces[1]];
-      newProp.v.push_back(0.5f * (edge.center + 0.5f * (faceCenter0 + faceCenter1)));
-    } else
+    if (edge.faces.full())
+      newProp.v.push_back(0.5f * (edge.center + 0.5f * (faceCenters[edge.faces[0]] + faceCenters[edge.faces[1]])));
+    else
       newProp.v.push_back(edge.center);
   }
   newProp.v.insert(newProp.v.end(), faceCenters.begin(), faceCenters.end());
@@ -361,11 +286,9 @@ void Mesh::subdivide() {
 void Mesh::displace(float amount, const std::function<float(Vector3f, Vector2f)> &func) {
   std::vector<std::pair<Vector3f, int>> offsets(positions.v.size());
   for (const Face &face : faces) {
-    for (uint32_t local = 0; local < face.count; local++) {
-      auto &offset = offsets[positions.f[face.first + local]];
-      const auto &position = positions(face, local);
-      const auto &texcoord = texcoords(face, local);
-      offset.first += func(position, texcoord) * normals(face, local);
+    for (uint32_t i = 0; i < face.count; i++) {
+      auto &offset = offsets[positions.f[face.first + i]];
+      offset.first += func(positions(face, i), texcoords(face, i)) * normals(face, i);
       offset.second++;
     }
   }
@@ -373,46 +296,78 @@ void Mesh::displace(float amount, const std::function<float(Vector3f, Vector2f)>
   calculateNormals();
 }
 
-void Mesh::transform(const DualQuaternionf &amount) {
-  for (Vector3f &position : positions) position = amount.applyAffine(position);
-  for (Vector3f &normal : normals) normal = amount.applyNormal(normal);
+#if MI_BUILT_WITH_ASSIMP
+
+Mesh Mesh::loadWithAssimp(const std::string &filename) {
+  Assimp::Importer importer;
+  if (auto scene = importer.ReadFile(filename, aiProcess_JoinIdenticalVertices | aiProcess_PreTransformVertices | aiProcess_SortByPType | aiProcess_GenUVCoords)) {
+    return loadWithAssimp(scene);
+  } else {
+    throw Error(std::runtime_error("Can't open {}"_format(show(filename))));
+  }
 }
 
-void Mesh::transform(const Quaternionf &amount) {
-  for (Vector3f &position : positions) position = amount.applyAffine(position);
-  for (Vector3f &normal : normals) normal = amount.applyNormal(normal);
+Mesh Mesh::loadWithAssimp(const aiScene *scene) {
+  Mesh result;
+  for (size_t i = 0; i < scene->mNumMeshes; i++) result.append(loadWithAssimp(scene->mMeshes[i]));
+  return result;
 }
 
-void Mesh::transform(const Matrix3f &matrix) {
-  Matrix3f invtee = inverse(transpose(matrix));
-  for (Vector3f &position : positions) position = dot(matrix, position);
-  for (Vector3f &normal : normals) normal = dot(invtee, normal);
+Mesh Mesh::loadWithAssimp(const aiMesh *mesh) {
+  Mesh result;
+  result.positions.v.reserve(mesh->mNumVertices);
+  result.positions.f.reserve(mesh->mNumFaces * 3);
+  result.faces.reserve(mesh->mNumFaces);
+  for (auto &each : IteratorRange(mesh->mVertices, mesh->mNumVertices)) {
+    result.positions.v.emplace_back(each.x, each.y, each.z);
+  }
+  uint32_t firstOffset = 0;
+  for (auto &each : IteratorRange(mesh->mFaces, mesh->mNumFaces)) {
+    result.positions.f.insert(result.positions.f.end(), each.mIndices, each.mIndices + each.mNumIndices);
+    result.faces.emplace_back(Face{firstOffset, each.mNumIndices, {int16_t(mesh->mMaterialIndex), -1}});
+    firstOffset += each.mNumIndices;
+  }
+  result.indexCount = firstOffset;
+  if (mesh->mTextureCoords[0]) {
+    result.texcoords.f = result.positions.f;
+    result.texcoords.v.reserve(mesh->mNumVertices);
+    for (auto &each : IteratorRange(mesh->mTextureCoords[0], mesh->mNumVertices)) {
+      result.texcoords.v.emplace_back(each.x, each.y);
+    }
+  } else {
+    result.texcoords.f.resize(result.positions.f.size());
+    result.texcoords.v.push_back(Vector2f());
+  }
+  if (mesh->mNormals) {
+    result.normals.f = result.positions.f;
+    result.normals.v.reserve(mesh->mNumVertices);
+    for (auto &each : IteratorRange(mesh->mNormals, mesh->mNumVertices)) {
+      result.normals.v.emplace_back(each.x, each.y, each.z);
+    }
+  } else {
+    result.calculateNormals();
+  }
+  return result;
 }
 
-void Mesh::translate(const Vector3f &amount) {
-  for (Vector3f &position : positions) position += amount;
-}
+#else
 
-void Mesh::scale(const Vector3f &amount) {
-  for (Vector3f &position : positions) position *= amount;
-  for (Vector3f &normal : normals) normal /= amount;
-}
+Mesh Mesh::loadWithAssimp(const std::string &filename) { throw Error(std::runtime_error("Mesh::loadWithAssimp() unimplemented: not built with assimp!")); }
 
-void Mesh::scale(float amount) {
-  for (Vector3f &position : positions) position *= amount;
-}
+Mesh Mesh::loadWithAssimp(const aiScene *scene) { throw Error(std::runtime_error("Mesh::loadWithAssimp() unimplemented: not built with assimp!")); }
+
+Mesh Mesh::loadWithAssimp(const aiMesh *mesh) { throw Error(std::runtime_error("Mesh::loadWithAssimp() unimplemented: not built with assimp!")); }
+
+#endif // #if MI_BUILT_WITH_ASSIMP
 
 Mesh Mesh::makeCube() {
   Mesh mesh;
   mesh.faces = {{0, 4}, {4, 4}, {8, 4}, {12, 4}, {16, 4}, {20, 4}};
   mesh.indexCount = 24;
-  mesh.positions.v = {{+1.0f, +1.0f, -1.0f}, {+1.0f, -1.0f, -1.0f}, {+1.0f, +1.0f, +1.0f}, {+1.0f, -1.0f, +1.0f},
-                      {-1.0f, +1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f}, {-1.0f, +1.0f, +1.0f}, {-1.0f, -1.0f, +1.0f}};
-  mesh.texcoords.v = {{0.625f, 0.500f}, {0.875f, 0.500f}, {0.875f, 0.750f}, {0.625f, 0.750f}, {0.375f, 0.750f},
-                      {0.625f, 1.000f}, {0.375f, 1.000f}, {0.375f, 0.000f}, {0.625f, 0.000f}, {0.625f, 0.250f},
-                      {0.375f, 0.250f}, {0.125f, 0.500f}, {0.375f, 0.500f}, {0.125f, 0.750f}};
-  mesh.normals.v = {{0.0f, +1.0f, 0.0f}, {0.0f, 0.0f, +1.0f}, {-1.0f, 0.0f, 0.0f},
-                    {0.0f, -1.0f, 0.0f}, {+1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}};
+  mesh.positions.v = {{+1.0f, +1.0f, -1.0f}, {+1.0f, -1.0f, -1.0f}, {+1.0f, +1.0f, +1.0f}, {+1.0f, -1.0f, +1.0f}, {-1.0f, +1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f}, {-1.0f, +1.0f, +1.0f}, {-1.0f, -1.0f, +1.0f}};
+  mesh.texcoords.v = {{0.625f, 0.500f}, {0.875f, 0.500f}, {0.875f, 0.750f}, {0.625f, 0.750f}, {0.375f, 0.750f}, {0.625f, 1.000f}, {0.375f, 1.000f},
+                      {0.375f, 0.000f}, {0.625f, 0.000f}, {0.625f, 0.250f}, {0.375f, 0.250f}, {0.125f, 0.500f}, {0.375f, 0.500f}, {0.125f, 0.750f}};
+  mesh.normals.v = {{0.0f, +1.0f, 0.0f}, {0.0f, 0.0f, +1.0f}, {-1.0f, 0.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {+1.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}};
   mesh.positions.f = {0, 4, 6, 2, 3, 2, 6, 7, 7, 6, 4, 5, 5, 1, 3, 7, 1, 0, 2, 3, 5, 4, 0, 1};
   mesh.texcoords.f = {0, 1, 2, 3, 4, 3, 5, 6, 7, 8, 9, 10, 11, 12, 4, 13, 12, 0, 3, 4, 10, 9, 0, 12};
   mesh.normals.f = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5};
@@ -460,9 +415,7 @@ Mesh Mesh::makePlane(uint32_t subdivsU, uint32_t subdivsV, const Vector3f &vecto
   Mesh mesh = makeSurface(surface);
   mesh.normals.v.resize(1);
   mesh.normals.v[0] = normalize(cross(vectorU, vectorV));
-  std::fill(
-    mesh.normals.f.begin(), //
-    mesh.normals.f.end(), 0);
+  std::fill(mesh.normals.f.begin(), mesh.normals.f.end(), 0);
   return mesh;
 }
 
@@ -518,10 +471,7 @@ Mesh Mesh::makeSphere(uint32_t subdivsU, uint32_t subdivsV, float radius) {
   surface.func = [=](float paramU, float paramV) {
     paramU *= 360.0_degreesf;
     paramV *= 180.0_degreesf;
-    return Vector3f(
-      radius * sin(paramV) * cos(paramU), //
-      radius * sin(paramV) * sin(paramU), //
-      radius * cos(paramV));
+    return Vector3f(radius * sin(paramV) * cos(paramU), radius * sin(paramV) * sin(paramU), radius * cos(paramV));
   };
   surface.paramsU.set(0, 1, subdivsU);
   surface.paramsV.set(0, 1, subdivsV);

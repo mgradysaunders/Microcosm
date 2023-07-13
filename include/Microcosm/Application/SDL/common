@@ -4,9 +4,9 @@
 #include "Microcosm/Application/SDL/Export.h"
 #include "Microcosm/utility"
 
-#include <SDL2/SDL_clipboard.h>
-#include <SDL2/SDL_log.h>
-#include <SDL2/SDL_timer.h>
+#include <SDL3/SDL_clipboard.h>
+#include <SDL3/SDL_log.h>
+#include <SDL3/SDL_timer.h>
 
 namespace mi::SDL {
 

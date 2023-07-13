@@ -9,8 +9,9 @@ endif()
 
 # Everything else is QUIET for now, though this may not be perfect behavior. We should probably account for which components 
 # were enabled at build time and propagate that here somehow.
-find_package(SDL2 QUIET)
+find_package(SDL3 QUIET)
 find_package(Vulkan QUIET)
+find_package(assimp QUIET)
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
   pkg_check_modules(

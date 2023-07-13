@@ -33,21 +33,13 @@ void FileOBJ::read(std::istream &stream) {
       continue; // Skip comments
     if (line.starts_with("v ")) {
       auto values = SplitString(line.substr(2), char_class::space, /*skipEmpty=*/true);
-      positions.v.emplace_back(
-        stringTo<float>(values.at(0)), //
-        stringTo<float>(values.at(1)), //
-        stringTo<float>(values.at(2)));
+      positions.v.emplace_back(stringTo<float>(values.at(0)), stringTo<float>(values.at(1)), stringTo<float>(values.at(2)));
     } else if (line.starts_with("vt ")) {
       auto values = SplitString(line.substr(3), char_class::space, /*skipEmpty=*/true);
-      texcoords.v.emplace_back(
-        stringTo<float>(values.at(0)), //
-        stringTo<float>(values.at(1)));
+      texcoords.v.emplace_back(stringTo<float>(values.at(0)), stringTo<float>(values.at(1)));
     } else if (line.starts_with("vn ")) {
       auto values = SplitString(line.substr(3), char_class::space, /*skipEmpty=*/true);
-      normals.v.emplace_back(
-        stringTo<float>(values.at(0)), //
-        stringTo<float>(values.at(1)), //
-        stringTo<float>(values.at(2)));
+      normals.v.emplace_back(stringTo<float>(values.at(0)), stringTo<float>(values.at(1)), stringTo<float>(values.at(2)));
     } else if (line.starts_with("f ")) {
       Face &face = faces.emplace_back();
       face.first = positions.f.size();
@@ -171,46 +163,5 @@ void FileOBJ::write(std::ostream &stream) const {
     }
   }
 }
-
-#if 0
-void FileOBJ::triangulate() {
-  uint32_t offset = 0;
-  std::vector<uint8_t> newFaceSizes;
-  std::vector<uint32_t> newPositions;
-  std::vector<uint32_t> newTexcoords;
-  std::vector<uint32_t> newNormals;
-  newFaceSizes.reserve(faceSizes.size());
-  newPositions.reserve(positions.f.size());
-  newTexcoords.reserve(texcoords.f.size());
-  newNormals.reserve(normals.f.size());
-  for (uint8_t face_size : faceSizes) {
-    for (uint8_t local = 1; local + 1 < face_size; local++) {
-      newPositions.push_back(positions.f[offset]);
-      newPositions.push_back(positions.f[offset + local]);
-      newPositions.push_back(positions.f[offset + local + 1]);
-      if (normals) {
-        newNormals.push_back(normals.f[offset]);
-        newNormals.push_back(normals.f[offset + local]);
-        newNormals.push_back(normals.f[offset + local + 1]);
-      }
-      if (texcoords) {
-        newTexcoords.push_back(texcoords.f[offset]);
-        newTexcoords.push_back(texcoords.f[offset + local]);
-        newTexcoords.push_back(texcoords.f[offset + local + 1]);
-      }
-      newFaceSizes.push_back(3);
-    }
-    offset += face_size;
-  }
-  std::swap(faceSizes, newFaceSizes);
-  std::swap(positions.f, newPositions);
-  std::swap(texcoords.f, newTexcoords);
-  std::swap(normals.f, newNormals);
-}
-
-void FileOBJ::normalizeNormals() {
-  for (auto &v : normals.v) v = normalize(v);
-}
-#endif
 
 } // namespace mi::geometry

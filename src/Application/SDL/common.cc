@@ -1,8 +1,8 @@
 #include "Microcosm/Application/SDL/common"
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_revision.h>
-#include <SDL2/SDL_version.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_revision.h>
+#include <SDL3/SDL_version.h>
 #include <filesystem>
 #include <iostream>
 
