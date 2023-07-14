@@ -1,11 +1,17 @@
 #include "Microcosm/Render/More/Shape/TriangleMesh"
 #include "Microcosm/Render/More/Shape/Triangle"
 
+#if MI_BUILT_WITH_ASSIMP
+#include "assimp/Importer.hpp"
+#include "assimp/postprocess.h"
+#include "assimp/scene.h"
+#endif
+
 namespace mi::render {
 
 void TriangleMesh::clear() noexcept { *this = TriangleMesh(); }
 
-void TriangleMesh::build() {
+void TriangleMesh::initialize() {
   if (positions.rows() == 0) {
     triangleBVH = {};
     return;
@@ -43,7 +49,7 @@ void TriangleMesh::build() {
   if (materials) reorderPerFace(*materials);
 }
 
-void TriangleMesh::build(const geometry::Mesh &mesh) {
+void TriangleMesh::initialize(const geometry::Mesh &mesh) {
   clear();
   size_t i{0};
   size_t n{0};
@@ -72,21 +78,66 @@ void TriangleMesh::build(const geometry::Mesh &mesh) {
       ++i;
     }
   }
-  build();
+  initialize();
 }
+
+#if MI_BUILT_WITH_ASSIMP
+
+void TriangleMesh::initializeWithAssimp(const std::string &filename) {
+  clear();
+  Assimp::Importer importer;
+  if (auto scene = importer.ReadFile(filename, aiProcess_CalcTangentSpace | aiProcess_JoinIdenticalVertices | aiProcess_PreTransformVertices | aiProcess_SortByPType | aiProcess_GenUVCoords | aiProcess_GenSmoothNormals | aiProcess_Triangulate)) {
+    size_t totalTris = 0;
+    for (const auto &mesh : IteratorRange(scene->mMeshes, scene->mNumMeshes)) totalTris += mesh->mNumFaces;
+    positions = Matrix<float, Dynamic, 3>{with_shape, totalTris * 3};
+    texcoords = Matrix<float, Dynamic, 2>{with_shape, totalTris * 3};
+    normals = Matrix<float, Dynamic, 3>{with_shape, totalTris * 3};
+    tangents = Matrix<float, Dynamic, 3>{with_shape, totalTris * 3};
+    materials = Vector<int16_t, Dynamic>{with_shape, totalTris};
+    size_t offset = 0;
+    size_t offsetTri = 0;
+    for (const auto &mesh : IteratorRange(scene->mMeshes, scene->mNumMeshes)) {
+      for (const auto &face : IteratorRange(mesh->mFaces, mesh->mNumFaces)) {
+        for (size_t i = 0; i < 3; i++, offset++) {
+          const auto &position = mesh->mVertices[face.mIndices[i]];
+          const auto &texcoord = mesh->mTextureCoords[0][face.mIndices[i]];
+          const auto &normal = mesh->mNormals[face.mIndices[i]];
+          const auto &tangent = mesh->mTangents[face.mIndices[i]];
+          positions(offset, 0) = position.x;
+          positions(offset, 1) = position.y;
+          positions(offset, 2) = position.z;
+          (*texcoords)(offset, 0) = texcoord.x;
+          (*texcoords)(offset, 1) = texcoord.y;
+          (*normals)(offset, 0) = normal.x;
+          (*normals)(offset, 1) = normal.y;
+          (*normals)(offset, 2) = normal.z;
+          (*tangents)(offset, 0) = tangent.x;
+          (*tangents)(offset, 1) = tangent.y;
+          (*tangents)(offset, 2) = tangent.z;
+        }
+        (*materials)[offsetTri++] = mesh->mMaterialIndex;
+      }
+    }
+    initialize();
+  } else {
+    throw Error(std::runtime_error("Can't open {}"_format(show(filename))));
+  }
+}
+
+#else
+
+void TriangleMesh::initializeWithAssimp(const std::string &filename) { throw Error(std::runtime_error("TriangleMesh::initializeWithAssimp() unimplemented: not built with assimp!")); }
+
+#endif // #if MI_BUILT_WITH_ASSIMP
 
 void TriangleMesh::validate() {
   auto validateSameSizeAsPositions = [&](auto &values, const char *name) {
-    if (values && values->rows() != positions.rows())
-      throw Error(std::runtime_error(
-        "Triangle mesh validation failed! ({} positions, but {} {})"_format(positions.rows(), values->rows(), name)));
+    if (values && values->rows() != positions.rows()) throw Error(std::runtime_error("Triangle mesh validation failed! ({} positions, but {} {})"_format(positions.rows(), values->rows(), name)));
   };
   validateSameSizeAsPositions(texcoords, "texcoords");
   validateSameSizeAsPositions(normals, "normals");
   validateSameSizeAsPositions(tangents, "tangents");
-  if (materials && materials->size() != numTris())
-    throw Error(std::runtime_error(
-      "Triangle mesh validation failed! ({} triangles, but {} materials)"_format(numTris(), materials->size())));
+  if (materials && materials->size() != numTris()) throw Error(std::runtime_error("Triangle mesh validation failed! ({} triangles, but {} materials)"_format(numTris(), materials->size())));
 }
 
 std::optional<double> TriangleMesh::intersect(Ray3d ray, Manifold &manifold) const noexcept {

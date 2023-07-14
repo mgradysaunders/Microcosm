@@ -301,16 +301,14 @@ void Mesh::displace(float amount, const std::function<float(Vector3f, Vector2f)>
 Mesh Mesh::loadWithAssimp(const std::string &filename) {
   Assimp::Importer importer;
   if (auto scene = importer.ReadFile(filename, aiProcess_JoinIdenticalVertices | aiProcess_PreTransformVertices | aiProcess_SortByPType | aiProcess_GenUVCoords)) {
-    return loadWithAssimp(scene);
+    Mesh result;
+    for (const auto &mesh : IteratorRange(scene->mMeshes, scene->mNumMeshes)) {
+      result.append(loadWithAssimp(mesh));
+    }
+    return result;
   } else {
     throw Error(std::runtime_error("Can't open {}"_format(show(filename))));
   }
-}
-
-Mesh Mesh::loadWithAssimp(const aiScene *scene) {
-  Mesh result;
-  for (size_t i = 0; i < scene->mNumMeshes; i++) result.append(loadWithAssimp(scene->mMeshes[i]));
-  return result;
 }
 
 Mesh Mesh::loadWithAssimp(const aiMesh *mesh) {
@@ -353,8 +351,6 @@ Mesh Mesh::loadWithAssimp(const aiMesh *mesh) {
 #else
 
 Mesh Mesh::loadWithAssimp(const std::string &filename) { throw Error(std::runtime_error("Mesh::loadWithAssimp() unimplemented: not built with assimp!")); }
-
-Mesh Mesh::loadWithAssimp(const aiScene *scene) { throw Error(std::runtime_error("Mesh::loadWithAssimp() unimplemented: not built with assimp!")); }
 
 Mesh Mesh::loadWithAssimp(const aiMesh *mesh) { throw Error(std::runtime_error("Mesh::loadWithAssimp() unimplemented: not built with assimp!")); }
 

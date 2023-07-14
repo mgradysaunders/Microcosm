@@ -35,4 +35,8 @@ microcosm_add_library(
   EXPORT_MACRO "MI_RENDER_API"
   EXPORT_FILENAME "Microcosm/Render/Export.h"
   )
+if(assimp_FOUND)
+  target_link_libraries(Render PUBLIC assimp::assimp)
+  target_compile_definitions(Render PUBLIC -DMI_BUILT_WITH_ASSIMP=1)
+endif()
 #add_subdirectory(unit_tests)

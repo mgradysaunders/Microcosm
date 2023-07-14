@@ -6,7 +6,6 @@
 #include "Microcosm/Quaternion"
 #include "Microcosm/utility"
 
-struct aiScene;
 struct aiMesh;
 
 namespace mi::geometry {
@@ -353,9 +352,6 @@ public:
 public:
   /// Load with ASSIMP, assuming Microcosm was built with ASSIMP. If not, throws a runtime error.
   [[nodiscard]] static Mesh loadWithAssimp(const std::string &filename);
-
-  /// Load with ASSIMP, assuming Microcosm was built with ASSIMP. If not, throws a runtime error.
-  [[nodiscard]] static Mesh loadWithAssimp(const aiScene *scene);
 
   /// Load with ASSIMP, assuming Microcosm was built with ASSIMP. If not, throws a runtime error.
   [[nodiscard]] static Mesh loadWithAssimp(const aiMesh *mesh);

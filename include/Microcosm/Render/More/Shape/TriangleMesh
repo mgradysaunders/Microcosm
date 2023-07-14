@@ -13,15 +13,17 @@ public:
 
   TriangleMesh() noexcept = default;
 
-  TriangleMesh(const geometry::Mesh &mesh) { build(mesh); }
+  TriangleMesh(const geometry::Mesh &mesh) { initialize(mesh); }
 
   [[nodiscard]] size_t numTris() const noexcept { return positions.rows() / 3; }
 
   void clear() noexcept;
 
-  void build();
+  void initialize();
 
-  void build(const geometry::Mesh &mesh);
+  void initialize(const geometry::Mesh &mesh);
+
+  void initializeWithAssimp(const std::string &filename);
 
   void validate();
 
