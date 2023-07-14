@@ -1,6 +1,5 @@
 #include "Microcosm/Geometry/Mesh"
 #include "Microcosm/memory"
-#include <iostream>
 #include <set>
 
 #if MI_BUILT_WITH_ASSIMP
